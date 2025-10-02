@@ -168,6 +168,32 @@ const Home = () => {
     return () => clearInterval(timer);
   }, [endpointItems.length]);
 
+  // 监听主题变化，向 iframe 发送消息
+  useEffect(() => {
+    if (homePageContent.startsWith('https://')) {
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          msgType: 'theme',
+          data: { themeMode: actualTheme }
+        }, '*');
+      }
+    }
+  }, [actualTheme, homePageContent]);
+
+  // 监听语言变化，向 iframe 发送消息
+  useEffect(() => {
+    if (homePageContent.startsWith('https://')) {
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          msgType: 'language',
+          data: { lang: i18n.language }
+        }, '*');
+      }
+    }
+  }, [i18n.language, homePageContent]);
+
   return (
     <div className='w-full overflow-x-hidden'>
       <NoticeModal
