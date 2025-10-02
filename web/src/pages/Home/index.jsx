@@ -93,15 +93,35 @@ const Home = () => {
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);
 
-      // 如果内容是 URL，则发送主题模式
+      // 如果内容是 URL，则在下一个渲染周期设置 iframe 的 onload
       if (data.startsWith('https://')) {
-        const iframe = document.querySelector('iframe');
-        if (iframe) {
-          iframe.onload = () => {
-            iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
-            iframe.contentWindow.postMessage({ lang: i18n.language }, '*');
-          };
-        }
+        setTimeout(() => {
+          const iframe = document.querySelector('iframe');
+          if (iframe) {
+            iframe.onload = () => {
+              // 发送主题和语言信息
+              iframe.contentWindow.postMessage({
+                msgType: 'theme',
+                data: { themeMode: actualTheme }
+              }, '*');
+              iframe.contentWindow.postMessage({
+                msgType: 'language',
+                data: { lang: i18n.language }
+              }, '*');
+            };
+            // 如果 iframe 已经加载完成，立即发送消息
+            if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+              iframe.contentWindow.postMessage({
+                msgType: 'theme',
+                data: { themeMode: actualTheme }
+              }, '*');
+              iframe.contentWindow.postMessage({
+                msgType: 'language',
+                data: { lang: i18n.language }
+              }, '*');
+            }
+          }
+        }, 0);
       }
     } else {
       showError(message);
@@ -348,6 +368,17 @@ const Home = () => {
             <iframe
               src={homePageContent}
               className='w-full h-screen border-none'
+              onLoad={(e) => {
+                // iframe 加载完成后发送主题和语言信息
+                e.target.contentWindow.postMessage({
+                  msgType: 'theme',
+                  data: { themeMode: actualTheme }
+                }, '*');
+                e.target.contentWindow.postMessage({
+                  msgType: 'language',
+                  data: { lang: i18n.language }
+                }, '*');
+              }}
             />
           ) : (
             <div
