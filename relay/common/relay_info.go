@@ -105,7 +105,8 @@ type RelayInfo struct {
 	UserQuota              int
 	RelayFormat            types.RelayFormat
 	SendResponseCount      int
-	FinalPreConsumedQuota  int // 最终预消耗的配额
+	FinalPreConsumedQuota  int  // 最终预消耗的配额
+	IsClaudeBetaQuery      bool // /v1/messages?beta=true
 
 	PriceData types.PriceData
 
@@ -278,6 +279,9 @@ func GenRelayInfoClaude(c *gin.Context, request dto.Request) *RelayInfo {
 	info.ShouldIncludeUsage = false
 	info.ClaudeConvertInfo = &ClaudeConvertInfo{
 		LastMessagesType: LastMessageTypeNone,
+	}
+	if c.Query("beta") == "true" {
+		info.IsClaudeBetaQuery = true
 	}
 	return info
 }
@@ -496,10 +500,12 @@ func (t TaskSubmitReq) HasImage() bool {
 }
 
 type TaskInfo struct {
-	Code     int    `json:"code"`
-	TaskID   string `json:"task_id"`
-	Status   string `json:"status"`
-	Reason   string `json:"reason,omitempty"`
-	Url      string `json:"url,omitempty"`
-	Progress string `json:"progress,omitempty"`
+	Code             int    `json:"code"`
+	TaskID           string `json:"task_id"`
+	Status           string `json:"status"`
+	Reason           string `json:"reason,omitempty"`
+	Url              string `json:"url,omitempty"`
+	Progress         string `json:"progress,omitempty"`
+	CompletionTokens int    `json:"completion_tokens,omitempty"` // 用于按倍率计费
+	TotalTokens      int    `json:"total_tokens,omitempty"`      // 用于按倍率计费
 }
