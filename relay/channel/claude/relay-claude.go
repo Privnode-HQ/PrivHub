@@ -609,6 +609,14 @@ func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeRespons
 			claudeInfo.Usage.CompletionTokens = claudeResponse.Usage.OutputTokens
 			claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
 
+			// 更新缓存相关字段（如果 message_delta 中有提供）
+			if claudeResponse.Usage.CacheReadInputTokens > 0 {
+				claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Usage.CacheReadInputTokens
+			}
+			if claudeResponse.Usage.CacheCreationInputTokens > 0 {
+				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Usage.CacheCreationInputTokens
+			}
+
 			// 判断是否完整
 			claudeInfo.Done = true
 		} else if claudeResponse.Type == "content_block_start" {
