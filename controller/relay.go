@@ -115,11 +115,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	meta := request.GetTokenCountMeta()
 
-	if meta != nil {
-		if err := service.EnforceChatModeration(c, group, relayInfo.RelayMode, relayFormat, meta.CombineText); err != nil {
-			newAPIError = err
-			return
-		}
+	if err := service.EnforceChatModeration(c, relayInfo.RelayMode, relayFormat, request, meta); err != nil {
+		newAPIError = err
+		return
 	}
 
 	if setting.ShouldCheckPromptSensitive() {
