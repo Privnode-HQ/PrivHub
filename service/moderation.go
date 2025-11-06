@@ -36,13 +36,19 @@ const (
 
 var moderationChannelID atomic.Int64
 
-type mistralModerationInput struct {
-	Content string `json:"content"`
+type mistralModerationContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type mistralModerationMessage struct {
+	Role    string                     `json:"role"`
+	Content []mistralModerationContent `json:"content"`
 }
 
 type mistralModerationRequest struct {
-	Input []mistralModerationInput `json:"input"`
-	Model string                   `json:"model"`
+	Input []mistralModerationMessage `json:"input"`
+	Model string                     `json:"model"`
 }
 
 type mistralModerationResponse struct {
@@ -178,8 +184,21 @@ func firstChannelKey(channel *model.Channel) string {
 }
 
 func callMistralModeration(ctx context.Context, apiKey, content string) (*mistralModerationResponse, error) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		trimmed = content
+	}
+	message := mistralModerationMessage{
+		Role: "user",
+		Content: []mistralModerationContent{
+			{
+				Type: "text",
+				Text: truncateModerationText(trimmed),
+			},
+		},
+	}
 	body, err := json.Marshal(mistralModerationRequest{
-		Input: []mistralModerationInput{{Content: content}},
+		Input: []mistralModerationMessage{message},
 		Model: mistralModerationModel,
 	})
 	if err != nil {
@@ -238,6 +257,19 @@ func extractTriggeredCategories(resp *mistralModerationResponse) []string {
 		}
 	}
 	return triggered
+}
+
+const moderationMaxTextLen = 8000
+
+func truncateModerationText(text string) string {
+	if len(text) <= moderationMaxTextLen {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= moderationMaxTextLen {
+		return string(runes)
+	}
+	return string(runes[:moderationMaxTextLen])
 }
 
 func collectModerationDetails(c *gin.Context, request dto.Request, meta *types.TokenCountMeta) moderationDetails {
