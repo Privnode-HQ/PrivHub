@@ -100,6 +100,8 @@ func InitEnv() {
 	GlobalWebRateLimitDuration = int64(GetEnvOrDefault("GLOBAL_WEB_RATE_LIMIT_DURATION", 180))
 
 	initConstantEnv()
+
+	SetModerationEnabledGroups(os.Getenv("MODERATION_ENABLED_GROUPS"))
 }
 
 func initConstantEnv() {

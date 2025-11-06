@@ -346,6 +346,18 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return channel, nil
 }
 
+func GetFirstChannelByName(name string) (*Channel, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, errors.New("channel name is empty")
+	}
+	channel := &Channel{}
+	err := DB.Where("name = ?", name).Order("id ASC").First(channel).Error
+	if err != nil {
+		return nil, err
+	}
+	return channel, nil
+}
+
 func BatchInsertChannels(channels []Channel) error {
 	if len(channels) == 0 {
 		return nil
