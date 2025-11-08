@@ -62,6 +62,13 @@ const TopUp = () => {
     statusState?.status?.enable_stripe_topup || false,
   );
   const [statusLoading, setStatusLoading] = useState(true);
+  const [turnstileEnabled, setTurnstileEnabled] = useState(
+    statusState?.status?.turnstile_check || false,
+  );
+  const [turnstileSiteKey, setTurnstileSiteKey] = useState(
+    statusState?.status?.turnstile_site_key || '',
+  );
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   // Creem 相关状态
   const [creemProducts, setCreemProducts] = useState([]);
@@ -102,9 +109,16 @@ const TopUp = () => {
       showInfo(t('请输入兑换码！'));
       return;
     }
+    if (turnstileEnabled && turnstileToken === '') {
+      showInfo(t('请稍后几秒重试，Turnstile 正在检查用户环境！'));
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const res = await API.post('/api/user/topup', {
+      const turnstileQuery = turnstileEnabled
+        ? `?turnstile=${turnstileToken}`
+        : '';
+      const res = await API.post(`/api/user/topup${turnstileQuery}`, {
         key: redemptionCode,
       });
       const { success, message, data } = res.data;
@@ -489,6 +503,11 @@ const TopUp = () => {
       // setTopUpCount(minTopUpValue);
       setTopUpLink(statusState.status.top_up_link || '');
       setPriceRatio(statusState.status.price || 1);
+      setTurnstileEnabled(statusState.status.turnstile_check || false);
+      setTurnstileSiteKey(statusState.status.turnstile_site_key || '');
+      if (!statusState.status.turnstile_check) {
+        setTurnstileToken('');
+      }
 
       setStatusLoading(false);
     }
@@ -702,6 +721,9 @@ const TopUp = () => {
               statusLoading={statusLoading}
               topupInfo={topupInfo}
               onOpenHistory={handleOpenHistory}
+              turnstileEnabled={turnstileEnabled}
+              turnstileSiteKey={turnstileSiteKey}
+              setTurnstileToken={setTurnstileToken}
             />
           </div>
 
