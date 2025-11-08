@@ -43,6 +43,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
+import Turnstile from 'react-turnstile';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
 
@@ -83,6 +84,9 @@ const RechargeCard = ({
   statusLoading,
   topupInfo,
   onOpenHistory,
+  turnstileEnabled,
+  turnstileSiteKey,
+  setTurnstileToken,
 }) => {
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
@@ -574,6 +578,16 @@ const RechargeCard = ({
                 )
               }
             />
+            {turnstileEnabled && (
+              <div className='mt-4 flex justify-center'>
+                <Turnstile
+                  sitekey={turnstileSiteKey}
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken('')}
+                  onError={() => setTurnstileToken('')}
+                />
+              </div>
+            )}
           </Form>
         </Card>
       </Space>
