@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const affRebateMinMoney = 5.0
+const affRebateMinMoney = 30.0
 
 var affRebateTiers = []struct {
 	maxPurchase int
