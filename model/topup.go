@@ -61,6 +61,7 @@ func Recharge(referenceId string, customerId string) (err error) {
 	}
 
 	var quota float64
+	var rebateResult *AffRebateResult
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -91,6 +92,12 @@ func Recharge(referenceId string, customerId string) (err error) {
 			return err
 		}
 
+		var rebateErr error
+		rebateResult, rebateErr = ApplyAffRebateTx(tx, topUp.UserId, topUp.Id, int64(quota), topUp.Money)
+		if rebateErr != nil {
+			return rebateErr
+		}
+
 		return nil
 	})
 
@@ -99,6 +106,9 @@ func Recharge(referenceId string, customerId string) (err error) {
 	}
 
 	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
+	if rebateResult != nil {
+		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
+	}
 
 	return nil
 }
@@ -248,6 +258,7 @@ func ManualCompleteTopUp(tradeNo string) error {
 	var userId int
 	var quotaToAdd int
 	var payMoney float64
+	var rebateResult *AffRebateResult
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -292,6 +303,12 @@ func ManualCompleteTopUp(tradeNo string) error {
 			return err
 		}
 
+		var rebateErr error
+		rebateResult, rebateErr = ApplyAffRebateTx(tx, topUp.UserId, topUp.Id, int64(quotaToAdd), topUp.Money)
+		if rebateErr != nil {
+			return rebateErr
+		}
+
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		return nil
@@ -303,6 +320,9 @@ func ManualCompleteTopUp(tradeNo string) error {
 
 	// 事务外记录日志，避免阻塞
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney))
+	if rebateResult != nil {
+		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
+	}
 	return nil
 }
 func RechargeCreem(referenceId string, customerEmail string, customerName string) (err error) {
@@ -311,6 +331,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	var quota int64
+	var rebateResult *AffRebateResult
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -363,6 +384,14 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
+		if quota > 0 {
+			var rebateErr error
+			rebateResult, rebateErr = ApplyAffRebateTx(tx, topUp.UserId, topUp.Id, quota, topUp.Money)
+			if rebateErr != nil {
+				return rebateErr
+			}
+		}
+
 		return nil
 	})
 
@@ -371,6 +400,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money))
+	if rebateResult != nil {
+		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
+	}
 
 	return nil
 }
