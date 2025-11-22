@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
 )
 
 func GetTopUpInfo(c *gin.Context) {
@@ -262,30 +263,62 @@ func EpayNotify(c *gin.Context) {
 		log.Println(verifyInfo)
 		LockOrder(verifyInfo.ServiceTradeNo)
 		defer UnlockOrder(verifyInfo.ServiceTradeNo)
-		topUp := model.GetTopUpByTradeNo(verifyInfo.ServiceTradeNo)
-		if topUp == nil {
-			log.Printf("易支付回调未找到订单: %v", verifyInfo)
-			return
-		}
-		if topUp.Status == "pending" {
-			topUp.Status = "success"
-			err := topUp.Update()
-			if err != nil {
-				log.Printf("易支付回调更新订单失败: %v", topUp)
-				return
+
+		var (
+			processed    bool
+			quotaToAdd   int
+			payMoney     float64
+			userId       int
+			rebateResult *model.AffRebateResult
+		)
+
+		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			topUp := &model.TopUp{}
+			if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("trade_no = ?", verifyInfo.ServiceTradeNo).First(topUp).Error; err != nil {
+				return err
 			}
-			//user, _ := model.GetUserById(topUp.UserId, false)
-			//user.Quota += topUp.Amount * 500000
+			if topUp.Status != common.TopUpStatusPending {
+				return nil
+			}
+
 			dAmount := decimal.NewFromInt(int64(topUp.Amount))
 			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
-			err = model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true)
-			if err != nil {
-				log.Printf("易支付回调更新用户失败: %v", topUp)
-				return
+			quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+
+			topUp.Status = common.TopUpStatusSuccess
+			topUp.CompleteTime = common.GetTimestamp()
+			if err := tx.Save(topUp).Error; err != nil {
+				return err
 			}
-			log.Printf("易支付回调更新用户成功 %v", topUp)
-			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+
+			if err := tx.Model(&model.User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+				return err
+			}
+
+			var rebateErr error
+			rebateResult, rebateErr = model.ApplyAffRebateTx(tx, topUp.UserId, topUp.Id, int64(quotaToAdd), topUp.Money)
+			if rebateErr != nil {
+				return rebateErr
+			}
+
+			processed = true
+			userId = topUp.UserId
+			payMoney = topUp.Money
+			return nil
+		})
+		if err != nil {
+			log.Printf("易支付回调处理订单失败 tradeNo=%s: %v", verifyInfo.ServiceTradeNo, err)
+			return
+		}
+		if !processed {
+			log.Printf("易支付回调重复通知或订单非待支付: %v", verifyInfo)
+			return
+		}
+
+		log.Printf("易支付回调更新用户成功 tradeNo=%s", verifyInfo.ServiceTradeNo)
+		model.RecordLog(userId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(int64(quotaToAdd)), payMoney))
+		if rebateResult != nil {
+			model.RecordLog(rebateResult.InviterId, model.LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
 		}
 	} else {
 		log.Printf("易支付异常回调: %v", verifyInfo)

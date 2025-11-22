@@ -181,9 +181,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 								// 需要补扣费
 								logger.LogInfo(ctx, fmt.Sprintf("视频任务 %s 预扣费后补扣费：%s（实际消耗：%s，预扣费：%s，tokens：%d）",
 									task.TaskID,
-									logger.LogQuota(quotaDelta),
-									logger.LogQuota(actualQuota),
-									logger.LogQuota(preConsumedQuota),
+									logger.LogQuota(int64(quotaDelta)),
+									logger.LogQuota(int64(actualQuota)),
+									logger.LogQuota(int64(preConsumedQuota)),
 									taskResult.TotalTokens,
 								))
 								if err := model.DecreaseUserQuota(task.UserId, quotaDelta); err != nil {
@@ -196,7 +196,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 									// 记录消费日志
 									logContent := fmt.Sprintf("视频任务成功补扣费，模型倍率 %.2f，分组倍率 %.2f，tokens %d，预扣费 %s，实际扣费 %s，补扣费 %s",
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
-										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(quotaDelta))
+										logger.LogQuota(int64(preConsumedQuota)), logger.LogQuota(int64(actualQuota)), logger.LogQuota(int64(quotaDelta)))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 								}
 							} else if quotaDelta < 0 {
@@ -204,9 +204,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 								refundQuota := -quotaDelta
 								logger.LogInfo(ctx, fmt.Sprintf("视频任务 %s 预扣费后返还：%s（实际消耗：%s，预扣费：%s，tokens：%d）",
 									task.TaskID,
-									logger.LogQuota(refundQuota),
-									logger.LogQuota(actualQuota),
-									logger.LogQuota(preConsumedQuota),
+									logger.LogQuota(int64(refundQuota)),
+									logger.LogQuota(int64(actualQuota)),
+									logger.LogQuota(int64(preConsumedQuota)),
 									taskResult.TotalTokens,
 								))
 								if err := model.IncreaseUserQuota(task.UserId, refundQuota, false); err != nil {
@@ -217,13 +217,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 									// 记录退款日志
 									logContent := fmt.Sprintf("视频任务成功退还多扣费用，模型倍率 %.2f，分组倍率 %.2f，tokens %d，预扣费 %s，实际扣费 %s，退还 %s",
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
-										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(refundQuota))
+										logger.LogQuota(int64(preConsumedQuota)), logger.LogQuota(int64(actualQuota)), logger.LogQuota(int64(refundQuota)))
 									model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 								}
 							} else {
 								// quotaDelta == 0, 预扣费刚好准确
 								logger.LogInfo(ctx, fmt.Sprintf("视频任务 %s 预扣费准确（%s，tokens：%d）",
-									task.TaskID, logger.LogQuota(actualQuota), taskResult.TotalTokens))
+									task.TaskID, logger.LogQuota(int64(actualQuota)), taskResult.TotalTokens))
 							}
 						}
 					}
@@ -263,7 +263,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		if err := model.IncreaseUserQuota(task.UserId, quota, false); err != nil {
 			logger.LogWarn(ctx, "Failed to increase user quota: "+err.Error())
 		}
-		logContent := fmt.Sprintf("Video async task failed %s, refund %s", task.TaskID, logger.LogQuota(quota))
+		logContent := fmt.Sprintf("Video async task failed %s, refund %s", task.TaskID, logger.LogQuota(int64(quota)))
 		model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
 	}
 
