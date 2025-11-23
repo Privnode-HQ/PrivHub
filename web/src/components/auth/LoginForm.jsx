@@ -124,6 +124,40 @@ const LoginForm = () => {
     }
   }, []);
 
+  // 访问 /login 时尝试登出并清除 cookie
+  useEffect(() => {
+    const performLogout = async () => {
+      // 检查 session cookie 是否存在
+      const sessionCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('session='));
+
+      // 如果 session 为空则跳过，防止无限刷新
+      if (!sessionCookie) {
+        return;
+      }
+
+      try {
+        // 尝试调用登出 API
+        await API.get('/api/user/logout');
+      } catch (error) {
+        // 忽略错误，继续清除本地状态
+      }
+
+      // 清除用户状态
+      userDispatch({ type: 'logout' });
+      localStorage.removeItem('user');
+
+      // 清除 session cookie
+      document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+      // 刷新页面
+      window.location.reload();
+    };
+
+    performLogout();
+  }, [userDispatch]);
+
   const onWeChatLoginClicked = () => {
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
       showInfo(t('请先阅读并同意用户协议和隐私政策'));
