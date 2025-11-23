@@ -81,6 +81,14 @@ const Home = () => {
   const [endpointIndex, setEndpointIndex] = useState(0);
   const isChinese = i18n.language.startsWith('zh');
 
+  // 如果域名是 pro.privnode.com，则跳转到 privnode.com
+  useEffect(() => {
+    if (window.location.hostname === 'pro.privnode.com') {
+      const searchParams = window.location.search;
+      window.location.href = `https://privnode.com/${searchParams}`;
+    }
+  }, []);
+
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
     const res = await API.get('/api/home_page_content');
