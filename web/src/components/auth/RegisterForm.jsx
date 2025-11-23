@@ -128,6 +128,14 @@ const RegisterForm = () => {
     return () => clearInterval(countdownInterval); // Clean up on unmount
   }, [disableButton, countdown]);
 
+  // 如果域名是 pro.privnode.com，则跳转到 privnode.com
+  useEffect(() => {
+    if (window.location.hostname === 'pro.privnode.com') {
+      const searchParams = window.location.search;
+      window.location.href = `https://privnode.com/register${searchParams}`;
+    }
+  }, []);
+
   const onWeChatLoginClicked = () => {
     setWechatLoading(true);
     setShowWeChatLoginModal(true);

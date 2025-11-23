@@ -127,6 +127,12 @@ const LoginForm = () => {
   // 访问 /login 时尝试登出并清除 cookie
   useEffect(() => {
     const performLogout = async () => {
+      // 如果域名是 pro.privnode.com，则跳转到 privnode.com
+      if (window.location.hostname === 'pro.privnode.com') {
+        window.location.href = 'https://privnode.com/login';
+        return;
+      }
+
       // 检查 session cookie 是否存在
       const sessionCookie = document.cookie
         .split('; ')
