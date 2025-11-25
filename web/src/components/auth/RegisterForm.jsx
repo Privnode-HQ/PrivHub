@@ -128,6 +128,14 @@ const RegisterForm = () => {
     return () => clearInterval(countdownInterval); // Clean up on unmount
   }, [disableButton, countdown]);
 
+  useEffect(() => {
+    return () => {
+      if (githubTimeoutRef.current) {
+        clearTimeout(githubTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // 如果域名是 pro.privnode.com，则跳转到 privnode.com
   useEffect(() => {
     if (window.location.hostname === 'pro.privnode.com') {
