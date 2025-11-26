@@ -83,6 +83,7 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (newApiErr *types.NewAPIError) {
 	newApiErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+	hideErrorDetails := shouldHideUpstreamErrorDetail(resp.StatusCode)
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -93,21 +94,35 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 
 	err = common.Unmarshal(responseBody, &errResponse)
 	if err != nil {
-		if showBodyWhenFail {
+		if showBodyWhenFail && !hideErrorDetails {
 			newApiErr.Err = fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody))
 		} else {
 			if common.DebugEnabled {
 				logger.LogInfo(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody)))
 			}
-			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
+			message := fmt.Sprintf("bad response status code %d", resp.StatusCode)
+			if hideErrorDetails {
+				message = sanitizedUpstreamErrorMessage(resp.StatusCode)
+			}
+			newApiErr.Err = fmt.Errorf(message)
 		}
 		return
 	}
 	if errResponse.Error.Message != "" {
 		// General format error (OpenAI, Anthropic, Gemini, etc.)
+		if hideErrorDetails {
+			errResponse.Error.Message = sanitizedUpstreamErrorMessage(resp.StatusCode)
+		}
 		newApiErr = types.WithOpenAIError(errResponse.Error, resp.StatusCode)
 	} else {
-		newApiErr = types.NewOpenAIError(errors.New(errResponse.ToMessage()), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+		message := errResponse.ToMessage()
+		if message == "" {
+			message = fmt.Sprintf("bad response status code %d", resp.StatusCode)
+		}
+		if hideErrorDetails {
+			message = sanitizedUpstreamErrorMessage(resp.StatusCode)
+		}
+		newApiErr = types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 	}
 	return
 }
@@ -154,4 +169,21 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 	}
 
 	return taskError
+}
+
+func shouldHideUpstreamErrorDetail(statusCode int) bool {
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound:
+		return true
+	default:
+		return false
+	}
+}
+
+func sanitizedUpstreamErrorMessage(statusCode int) string {
+	statusText := http.StatusText(statusCode)
+	if statusText == "" {
+		return fmt.Sprintf("upstream request failed (%d)", statusCode)
+	}
+	return fmt.Sprintf("%s (%d)", statusText, statusCode)
 }
