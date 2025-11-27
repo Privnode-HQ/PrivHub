@@ -173,7 +173,7 @@ func TaskErrorWrapper(err error, code string, statusCode int) *dto.TaskError {
 
 func shouldHideUpstreamErrorDetail(statusCode int) bool {
 	switch statusCode {
-	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound:
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden, http.StatusNotFound, http.StatusInternalServerError, http.StatusBadGateway:
 		return true
 	default:
 		return false
