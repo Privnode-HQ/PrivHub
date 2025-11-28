@@ -136,8 +136,13 @@ const LoginForm = () => {
     }
   }, []);
 
-  // 访问 /login 时尝试登出并清除 cookie
+  // 访问 /login?expired=1 时尝试登出并清除 cookie
   useEffect(() => {
+    // 仅在 expired 参数存在时执行登出流程
+    if (!searchParams.get('expired')) {
+      return;
+    }
+
     const performLogout = async () => {
       // 如果域名是 pro.privnode.com，则跳转到 privnode.com
       if (window.location.hostname === 'pro.privnode.com') {
@@ -174,7 +179,7 @@ const LoginForm = () => {
     };
 
     performLogout();
-  }, [userDispatch]);
+  }, [searchParams, userDispatch]);
 
   const onWeChatLoginClicked = () => {
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
