@@ -29,29 +29,19 @@ import (
 )
 
 const (
-	mistralModerationURL   = "https://api.mistral.ai/v1/chat/moderations"
-	mistralModerationModel = "mistral-moderation-latest"
-	moderationChannelName  = "moderation-key"
+	openAIModerationURL   = "https://api.oaipro.com/v1/moderations"
+	openAIModerationModel = "omni-moderation-latest"
+	moderationChannelName = "moderation-key"
 )
 
 var moderationChannelID atomic.Int64
 
-type mistralModerationContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+type openAIModerationRequest struct {
+	Input string `json:"input"`
+	Model string `json:"model"`
 }
 
-type mistralModerationMessage struct {
-	Role    string                     `json:"role"`
-	Content []mistralModerationContent `json:"content"`
-}
-
-type mistralModerationRequest struct {
-	Input []mistralModerationMessage `json:"input"`
-	Model string                     `json:"model"`
-}
-
-type mistralModerationResponse struct {
+type openAIModerationResponse struct {
 	Results []struct {
 		Categories map[string]bool `json:"categories"`
 	} `json:"results"`
@@ -70,7 +60,7 @@ type moderationDetails struct {
 	RequestID       string
 }
 
-// EnforceChatModeration sends the combined user prompt through Mistral's moderation API
+// EnforceChatModeration sends the combined user prompt through OpenAI's moderation API
 // when the requester belongs to one of the configured groups and the endpoint is chat related.
 func EnforceChatModeration(c *gin.Context, relayMode int, relayFormat types.RelayFormat, request dto.Request, meta *types.TokenCountMeta) *types.NewAPIError {
 	details := collectModerationDetails(c, request, meta)
@@ -98,10 +88,10 @@ func EnforceChatModeration(c *gin.Context, relayMode int, relayFormat types.Rela
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
-	resp, err := callMistralModeration(reqCtx, apiKey, details.CombinedText)
+	resp, err := callOpenAIModeration(reqCtx, apiKey, details.CombinedText)
 	if err != nil {
 		logCtx := buildLogContext(details.RequestID)
-		logger.LogError(logCtx, fmt.Sprintf("mistral moderation request failed: %v", err))
+		logger.LogError(logCtx, fmt.Sprintf("openai moderation request failed: %v", err))
 		return types.NewErrorWithStatusCode(
 			err,
 			types.ErrorCodePromptBlocked,
@@ -186,29 +176,20 @@ func firstChannelKey(channel *model.Channel) string {
 	return strings.TrimSpace(channel.Key)
 }
 
-func callMistralModeration(ctx context.Context, apiKey, content string) (*mistralModerationResponse, error) {
+func callOpenAIModeration(ctx context.Context, apiKey, content string) (*openAIModerationResponse, error) {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
 		trimmed = content
 	}
-	message := mistralModerationMessage{
-		Role: "user",
-		Content: []mistralModerationContent{
-			{
-				Type: "text",
-				Text: truncateModerationText(trimmed),
-			},
-		},
-	}
-	body, err := json.Marshal(mistralModerationRequest{
-		Input: []mistralModerationMessage{message},
-		Model: mistralModerationModel,
+	body, err := json.Marshal(openAIModerationRequest{
+		Input: truncateModerationText(trimmed),
+		Model: openAIModerationModel,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, mistralModerationURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openAIModerationURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -235,17 +216,17 @@ func callMistralModeration(ctx context.Context, apiKey, content string) (*mistra
 		if len(bodySnippet) > 512 {
 			bodySnippet = bodySnippet[:512]
 		}
-		return nil, fmt.Errorf("mistral moderation failed with status %d: %s", resp.StatusCode, bodySnippet)
+		return nil, fmt.Errorf("openai moderation failed with status %d: %s", resp.StatusCode, bodySnippet)
 	}
 
-	var moderationResp mistralModerationResponse
+	var moderationResp openAIModerationResponse
 	if err := json.Unmarshal(respBody, &moderationResp); err != nil {
 		return nil, err
 	}
 	return &moderationResp, nil
 }
 
-func extractTriggeredCategories(resp *mistralModerationResponse) []string {
+func extractTriggeredCategories(resp *openAIModerationResponse) []string {
 	if resp == nil || len(resp.Results) == 0 {
 		return nil
 	}
