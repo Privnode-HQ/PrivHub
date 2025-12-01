@@ -22,6 +22,11 @@ func MidjourneyErrorWrapper(code int, desc string) *dto.MidjourneyResponse {
 	}
 }
 
+const (
+	restrictedErrorKeyword  = "已限制约"
+	restrictedErrorTemplate = "bad responese code %d"
+)
+
 func MidjourneyErrorWithStatusCodeWrapper(code int, desc string, statusCode int) *dto.MidjourneyResponseWithStatusCode {
 	return &dto.MidjourneyResponseWithStatusCode{
 		StatusCode: statusCode,
@@ -113,6 +118,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		if hideErrorDetails {
 			errResponse.Error.Message = sanitizedUpstreamErrorMessage(resp.StatusCode)
 		}
+		errResponse.Error.Message = maskRestrictedLLMErrorMessage(errResponse.Error.Message, resp.StatusCode)
 		newApiErr = types.WithOpenAIError(errResponse.Error, resp.StatusCode)
 	} else {
 		message := errResponse.ToMessage()
@@ -122,6 +128,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		if hideErrorDetails {
 			message = sanitizedUpstreamErrorMessage(resp.StatusCode)
 		}
+		message = maskRestrictedLLMErrorMessage(message, resp.StatusCode)
 		newApiErr = types.NewOpenAIError(errors.New(message), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 	}
 	return
@@ -186,4 +193,14 @@ func sanitizedUpstreamErrorMessage(statusCode int) string {
 		return fmt.Sprintf("upstream request failed (%d)", statusCode)
 	}
 	return fmt.Sprintf("%s (%d)", statusText, statusCode)
+}
+
+func maskRestrictedLLMErrorMessage(message string, statusCode int) string {
+	if message == "" {
+		return message
+	}
+	if strings.Contains(message, restrictedErrorKeyword) {
+		return fmt.Sprintf(restrictedErrorTemplate, statusCode)
+	}
+	return message
 }
