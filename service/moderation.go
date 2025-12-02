@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,12 +30,14 @@ import (
 )
 
 const (
-	openAIModerationURL       = "https://api.oaipro.com/v1/moderations"
-	openAIModerationModel     = "omni-moderation-latest"
-	moderationChannelName     = "moderation-key"
-	edenModerationURL         = "https://api.edenai.run/v2/text/moderation/"
-	edenModerationProvider    = "openai"
-	edenModerationChannelName = "moderation-key--eden"
+	openAIModerationURL         = "https://api.oaipro.com/v1/moderations"
+	openAIModerationModel       = "omni-moderation-latest"
+	moderationChannelName       = "moderation-key"
+	edenModerationURL           = "https://api.edenai.run/v2/text/moderation/"
+	edenModerationProvider      = "openai"
+	edenModerationChannelName   = "moderation-key--eden"
+	edenLikelihoodFlagThreshold = 4.0
+	edenScoreFlagThreshold      = 0.5
 )
 
 var (
@@ -56,6 +59,16 @@ type edenModerationRequest struct {
 	Providers            string `json:"providers"`
 	Language             string `json:"language"`
 	Text                 string `json:"text"`
+}
+
+type edenProviderResponse struct {
+	Items []edenModerationItem `json:"items"`
+}
+
+type edenModerationItem struct {
+	Label           string          `json:"label"`
+	Likelihood      json.RawMessage `json:"likelihood"`
+	LikelihoodScore float64         `json:"likelihood_score"`
 }
 
 type openAIModerationResponse struct {
@@ -344,69 +357,91 @@ func findEdenTriggeredCategories(payload []byte) ([]string, error) {
 	if len(payload) == 0 {
 		return nil, errors.New("eden moderation response is empty")
 	}
-	var decoded any
-	if err := json.Unmarshal(payload, &decoded); err != nil {
+	var providers map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &providers); err != nil {
 		return nil, err
 	}
-	categories := searchForEdenCategories(decoded)
-	if categories == nil {
-		return nil, errors.New("eden moderation response missing categories")
-	}
-	triggered := make([]string, 0)
-	for category, flagged := range categories {
-		if flagged {
-			triggered = append(triggered, category)
+	triggeredSet := make(map[string]struct{})
+	for _, raw := range providers {
+		items, err := parseEdenProviderItems(raw)
+		if err != nil {
+			continue
 		}
+		for idx := range items {
+			if isEdenItemFlagged(&items[idx]) {
+				label := strings.TrimSpace(items[idx].Label)
+				if label != "" {
+					triggeredSet[label] = struct{}{}
+				}
+			}
+		}
+	}
+	if len(triggeredSet) == 0 {
+		return nil, nil
+	}
+	triggered := make([]string, 0, len(triggeredSet))
+	for label := range triggeredSet {
+		triggered = append(triggered, label)
 	}
 	return triggered, nil
 }
 
-func searchForEdenCategories(node any) map[string]bool {
-	switch value := node.(type) {
-	case map[string]any:
-		if categories := convertEdenCategoriesMap(value["categories"]); categories != nil {
-			return categories
-		}
-		for _, nested := range value {
-			if categories := searchForEdenCategories(nested); categories != nil {
-				return categories
-			}
-		}
-	case []any:
-		for _, item := range value {
-			if categories := searchForEdenCategories(item); categories != nil {
-				return categories
-			}
-		}
+func parseEdenProviderItems(raw json.RawMessage) ([]edenModerationItem, error) {
+	if len(raw) == 0 {
+		return nil, errors.New("eden provider payload is empty")
 	}
-	return nil
+	var provider edenProviderResponse
+	if err := json.Unmarshal(raw, &provider); err != nil {
+		return nil, err
+	}
+	return provider.Items, nil
 }
 
-func convertEdenCategoriesMap(value any) map[string]bool {
-	switch typed := value.(type) {
-	case map[string]bool:
-		if len(typed) == 0 {
-			return nil
-		}
-		return typed
-	case map[string]any:
-		result := make(map[string]bool, len(typed))
-		found := false
-		for key, raw := range typed {
-			flagged, ok := raw.(bool)
-			if !ok {
-				continue
-			}
-			result[key] = flagged
-			found = true
-		}
-		if !found {
-			return nil
-		}
-		return result
-	default:
-		return nil
+func isEdenItemFlagged(item *edenModerationItem) bool {
+	if item == nil {
+		return false
 	}
+	likelihood := parseEdenLikelihood(item.Likelihood)
+	if likelihood >= edenLikelihoodFlagThreshold {
+		return true
+	}
+	if item.LikelihoodScore >= edenScoreFlagThreshold {
+		return true
+	}
+	return false
+}
+
+func parseEdenLikelihood(raw json.RawMessage) float64 {
+	if len(raw) == 0 {
+		return 0
+	}
+	var numeric float64
+	if err := json.Unmarshal(raw, &numeric); err == nil {
+		return numeric
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return 0
+		}
+		if value, err := strconv.ParseFloat(text, 64); err == nil {
+			return value
+		}
+		switch strings.ToUpper(text) {
+		case "VERY_UNLIKELY":
+			return 1
+		case "UNLIKELY":
+			return 2
+		case "POSSIBLE", "POSSIBLY":
+			return 3
+		case "LIKELY":
+			return 4
+		case "VERY_LIKELY":
+			return 5
+		}
+	}
+	return 0
 }
 
 func extractTriggeredCategories(resp *openAIModerationResponse) []string {
