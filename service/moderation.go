@@ -29,16 +29,33 @@ import (
 )
 
 const (
-	openAIModerationURL   = "https://api.oaipro.com/v1/moderations"
-	openAIModerationModel = "omni-moderation-latest"
-	moderationChannelName = "moderation-key"
+	openAIModerationURL       = "https://api.oaipro.com/v1/moderations"
+	openAIModerationModel     = "omni-moderation-latest"
+	moderationChannelName     = "moderation-key"
+	edenModerationURL         = "https://api.edenai.run/v2/text/moderation/"
+	edenModerationProvider    = "openai"
+	edenModerationChannelName = "moderation-key--eden"
 )
 
-var moderationChannelID atomic.Int64
+var (
+	moderationChannelID     atomic.Int64
+	edenModerationChannelID atomic.Int64
+)
+
+var errEdenModerationUnavailable = errors.New("eden moderation channel unavailable")
 
 type openAIModerationRequest struct {
 	Input string `json:"input"`
 	Model string `json:"model"`
+}
+
+type edenModerationRequest struct {
+	ResponseAsDict       bool   `json:"response_as_dict"`
+	AttributesAsList     bool   `json:"attributes_as_list"`
+	ShowOriginalResponse bool   `json:"show_original_response"`
+	Providers            string `json:"providers"`
+	Language             string `json:"language"`
+	Text                 string `json:"text"`
 }
 
 type openAIModerationResponse struct {
@@ -68,39 +85,45 @@ func EnforceChatModeration(c *gin.Context, relayMode int, relayFormat types.Rela
 		return nil
 	}
 
-	apiKey, err := getModerationAPIKey()
-	if err != nil {
-		logCtx := buildLogContext(details.RequestID)
-		logger.LogError(logCtx, fmt.Sprintf("failed to load moderation key: %v", err))
-		statusCode := http.StatusInternalServerError
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			statusCode = http.StatusServiceUnavailable
-		}
-		return types.NewErrorWithStatusCode(
-			err,
-			types.ErrorCodePromptBlocked,
-			statusCode,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-
+	logCtx := buildLogContext(details.RequestID)
 	reqCtx := c.Request.Context()
 	if reqCtx == nil {
 		reqCtx = context.Background()
 	}
-	resp, err := callOpenAIModeration(reqCtx, apiKey, details.CombinedText)
-	if err != nil {
-		logCtx := buildLogContext(details.RequestID)
-		logger.LogError(logCtx, fmt.Sprintf("openai moderation request failed: %v", err))
-		return types.NewErrorWithStatusCode(
-			err,
-			types.ErrorCodePromptBlocked,
-			http.StatusBadGateway,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
 
-	blockedCategories := extractTriggeredCategories(resp)
+	blockedCategories, edenErr := tryEdenModeration(reqCtx, details.CombinedText)
+	if edenErr != nil {
+		if !errors.Is(edenErr, errEdenModerationUnavailable) {
+			logger.LogWarn(logCtx, fmt.Sprintf("eden moderation request failed: %v", edenErr))
+		}
+		apiKey, err := getModerationAPIKey()
+		if err != nil {
+			logger.LogError(logCtx, fmt.Sprintf("failed to load moderation key: %v", err))
+			statusCode := http.StatusInternalServerError
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				statusCode = http.StatusServiceUnavailable
+			}
+			return types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodePromptBlocked,
+				statusCode,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+
+		resp, err := callOpenAIModeration(reqCtx, apiKey, details.CombinedText)
+		if err != nil {
+			logger.LogError(logCtx, fmt.Sprintf("openai moderation request failed: %v", err))
+			return types.NewErrorWithStatusCode(
+				err,
+				types.ErrorCodePromptBlocked,
+				http.StatusBadGateway,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+
+		blockedCategories = extractTriggeredCategories(resp)
+	}
 	if len(blockedCategories) == 0 {
 		return nil
 	}
@@ -142,6 +165,20 @@ func shouldRunModeration(details *moderationDetails, relayMode int, relayFormat 
 	return false
 }
 
+func tryEdenModeration(ctx context.Context, content string) ([]string, error) {
+	apiKey, err := getEdenModerationAPIKey()
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errEdenModerationUnavailable
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		return nil, errEdenModerationUnavailable
+	}
+	return callEdenModeration(ctx, apiKey, content)
+}
+
 func getModerationAPIKey() (string, error) {
 	if id := moderationChannelID.Load(); id > 0 {
 		if channel, err := model.CacheGetChannel(int(id)); err == nil {
@@ -174,6 +211,29 @@ func firstChannelKey(channel *model.Channel) string {
 		return strings.TrimSpace(keys[0])
 	}
 	return strings.TrimSpace(channel.Key)
+}
+
+func getEdenModerationAPIKey() (string, error) {
+	if id := edenModerationChannelID.Load(); id > 0 {
+		if channel, err := model.CacheGetChannel(int(id)); err == nil {
+			if key := firstChannelKey(channel); key != "" {
+				return key, nil
+			}
+			return "", errors.New("moderation channel key is empty")
+		} else {
+			edenModerationChannelID.Store(0)
+		}
+	}
+
+	channel, err := model.GetFirstChannelByName(edenModerationChannelName)
+	if err != nil {
+		return "", err
+	}
+	edenModerationChannelID.Store(int64(channel.Id))
+	if key := firstChannelKey(channel); key != "" {
+		return key, nil
+	}
+	return "", errors.New("moderation channel key is empty")
 }
 
 func callOpenAIModeration(ctx context.Context, apiKey, content string) (*openAIModerationResponse, error) {
@@ -224,6 +284,129 @@ func callOpenAIModeration(ctx context.Context, apiKey, content string) (*openAIM
 		return nil, err
 	}
 	return &moderationResp, nil
+}
+
+func callEdenModeration(ctx context.Context, apiKey, content string) ([]string, error) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		trimmed = content
+	}
+	body, err := json.Marshal(edenModerationRequest{
+		ResponseAsDict:       true,
+		AttributesAsList:     false,
+		ShowOriginalResponse: false,
+		Providers:            edenModerationProvider,
+		Language:             "auto-detect",
+		Text:                 truncateModerationText(trimmed),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, edenModerationURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := GetHttpClient()
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		bodySnippet := string(respBody)
+		if len(bodySnippet) > 512 {
+			bodySnippet = bodySnippet[:512]
+		}
+		return nil, fmt.Errorf("eden moderation failed with status %d: %s", resp.StatusCode, bodySnippet)
+	}
+
+	triggered, err := findEdenTriggeredCategories(respBody)
+	if err != nil {
+		return nil, err
+	}
+	return triggered, nil
+}
+
+func findEdenTriggeredCategories(payload []byte) ([]string, error) {
+	if len(payload) == 0 {
+		return nil, errors.New("eden moderation response is empty")
+	}
+	var decoded any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return nil, err
+	}
+	categories := searchForEdenCategories(decoded)
+	if categories == nil {
+		return nil, errors.New("eden moderation response missing categories")
+	}
+	triggered := make([]string, 0)
+	for category, flagged := range categories {
+		if flagged {
+			triggered = append(triggered, category)
+		}
+	}
+	return triggered, nil
+}
+
+func searchForEdenCategories(node any) map[string]bool {
+	switch value := node.(type) {
+	case map[string]any:
+		if categories := convertEdenCategoriesMap(value["categories"]); categories != nil {
+			return categories
+		}
+		for _, nested := range value {
+			if categories := searchForEdenCategories(nested); categories != nil {
+				return categories
+			}
+		}
+	case []any:
+		for _, item := range value {
+			if categories := searchForEdenCategories(item); categories != nil {
+				return categories
+			}
+		}
+	}
+	return nil
+}
+
+func convertEdenCategoriesMap(value any) map[string]bool {
+	switch typed := value.(type) {
+	case map[string]bool:
+		if len(typed) == 0 {
+			return nil
+		}
+		return typed
+	case map[string]any:
+		result := make(map[string]bool, len(typed))
+		found := false
+		for key, raw := range typed {
+			flagged, ok := raw.(bool)
+			if !ok {
+				continue
+			}
+			result[key] = flagged
+			found = true
+		}
+		if !found {
+			return nil
+		}
+		return result
+	default:
+		return nil
+	}
 }
 
 func extractTriggeredCategories(resp *openAIModerationResponse) []string {
