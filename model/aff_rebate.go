@@ -13,12 +13,12 @@ var affRebateTiers = []struct {
 	maxPurchase int
 	rate        float64
 }{
-	{maxPurchase: 1, rate: 0.10},
-	{maxPurchase: 11, rate: 0.03},
-	{maxPurchase: 21, rate: 0.02},
+	{maxPurchase: 1, rate: 0.05},
+	{maxPurchase: 11, rate: 0.02},
+	{maxPurchase: 21, rate: 0.01},
 }
 
-const affDefaultRebateRate = 0.02
+const affDefaultRebateRate = 0.01
 
 func getAffRebateRate(purchaseCount int) float64 {
 	for _, tier := range affRebateTiers {
