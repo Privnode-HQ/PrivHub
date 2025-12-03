@@ -18,6 +18,8 @@ var group2model2channels map[string]map[string][]int // enabled channel
 var channelsIDM map[int]*Channel                     // all channels include disabled
 var channelSyncLock sync.RWMutex
 
+var ErrAllCandidateChannelsFiltered = errors.New("all candidate channels filtered")
+
 func InitChannelCache() {
 	if !common.MemoryCacheEnabled {
 		return
@@ -93,25 +95,32 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
-func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel, error) {
+func GetRandomSatisfiedChannel(group string, model string, retry int, excluded map[int]struct{}) (*Channel, error) {
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry)
+		return GetChannel(group, model, retry, excluded)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
 	// First, try to find channels with the exact model name.
-	channels := group2model2channels[group][model]
+	channels, allFiltered := filterChannelsByExclude(group2model2channels[group][model], excluded)
 
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = group2model2channels[group][normalizedModel]
+		var filteredNormalized bool
+		channels, filteredNormalized = filterChannelsByExclude(group2model2channels[group][normalizedModel], excluded)
+		if filteredNormalized {
+			allFiltered = true
+		}
 	}
 
 	if len(channels) == 0 {
+		if allFiltered {
+			return nil, ErrAllCandidateChannelsFiltered
+		}
 		return nil, nil
 	}
 
@@ -262,4 +271,23 @@ func CacheUpdateChannel(channel *Channel) {
 	println("before:", channelsIDM[channel.Id].ChannelInfo.MultiKeyPollingIndex)
 	channelsIDM[channel.Id] = channel
 	println("after :", channelsIDM[channel.Id].ChannelInfo.MultiKeyPollingIndex)
+}
+
+func filterChannelsByExclude(channelIDs []int, excluded map[int]struct{}) ([]int, bool) {
+	if len(channelIDs) == 0 || len(excluded) == 0 {
+		return channelIDs, false
+	}
+	filtered := make([]int, 0, len(channelIDs))
+	filteredOut := false
+	for _, id := range channelIDs {
+		if _, skip := excluded[id]; skip {
+			filteredOut = true
+			continue
+		}
+		filtered = append(filtered, id)
+	}
+	if len(filtered) == 0 && filteredOut {
+		return filtered, true
+	}
+	return filtered, false
 }

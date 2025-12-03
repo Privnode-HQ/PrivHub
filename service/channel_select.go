@@ -59,20 +59,27 @@ func CacheGetRandomSatisfiedChannel(c *gin.Context, group string, modelName stri
 
 func selectChannelWithTemporarySkip(c *gin.Context, group string, modelName string, retry int) (*model.Channel, error) {
 	attempts := 0
+	var excluded map[int]struct{}
 	for {
-		channel, err := model.GetRandomSatisfiedChannel(group, modelName, retry)
-		if err != nil || channel == nil {
+		channel, err := model.GetRandomSatisfiedChannel(group, modelName, retry, excluded)
+		if err != nil {
+			if errors.Is(err, model.ErrAllCandidateChannelsFiltered) {
+				return nil, fmt.Errorf("%w: group=%s, model=%s", errAllCandidateChannelsTemporarilyDisabled, group, modelName)
+			}
 			return channel, err
 		}
-		if !IsChannelTemporarilyDisabled(channel.Id) {
-			return channel, nil
+		if channel == nil {
+			return nil, nil
 		}
 		expireAt, reason, ok := GetTemporaryDisabledChannelInfo(channel.Id)
-		if ok {
-			logger.LogWarn(c, fmt.Sprintf("channel #%d is temporarily disabled until %s: %s", channel.Id, expireAt.Format(time.RFC3339), reason))
-		} else {
-			logger.LogWarn(c, fmt.Sprintf("channel #%d is temporarily disabled, skip", channel.Id))
+		if !ok {
+			return channel, nil
 		}
+		if excluded == nil {
+			excluded = make(map[int]struct{})
+		}
+		excluded[channel.Id] = struct{}{}
+		logger.LogWarn(c, fmt.Sprintf("channel #%d is temporarily disabled until %s: %s", channel.Id, expireAt.Format(time.RFC3339), reason))
 		attempts++
 		if attempts >= maxTemporaryDisableSelectionAttempts {
 			return nil, fmt.Errorf("%w: group=%s, model=%s", errAllCandidateChannelsTemporarilyDisabled, group, modelName)
