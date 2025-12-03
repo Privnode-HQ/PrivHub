@@ -213,6 +213,7 @@ var upgrader = websocket.Upgrader{
 
 const forceRetryTempDisabledKey = "force_retry_temp_disabled_channel"
 const autoOneChannelKeyword = "auto-1"
+const autoOneLoadKeyword = "负载"
 
 func addUsedChannel(c *gin.Context, channelId int) {
 	useChannel := c.GetStringSlice("use_channel")
@@ -297,7 +298,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, err.Error()))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
-	if strings.Contains(strings.ToLower(channelError.ChannelName), autoOneChannelKeyword) {
+	if strings.Contains(strings.ToLower(channelError.ChannelName), autoOneChannelKeyword) && containsAutoOneLoadKeyword(err) {
 		reason := fmt.Sprintf("auto-1 channel temporarily disabled due to error: %s", err.Error())
 		expireAt := service.TemporarilyDisableChannel(channelError.ChannelId, 5*time.Minute, reason)
 		logger.LogWarn(c, fmt.Sprintf("channel #%d (%s) matched auto-1 policy, temporarily disabled until %s", channelError.ChannelId, channelError.ChannelName, expireAt.Format(time.RFC3339)))
@@ -354,6 +355,13 @@ func shouldForceRetryTemporarilyDisabledChannel(c *gin.Context, retryTimes int) 
 	}
 	c.Set(forceRetryTempDisabledKey, false)
 	return true
+}
+
+func containsAutoOneLoadKeyword(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), autoOneLoadKeyword)
 }
 
 func RelayMidjourney(c *gin.Context) {
