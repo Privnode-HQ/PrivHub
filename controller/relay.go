@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -210,6 +211,9 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+const forceRetryTempDisabledKey = "force_retry_temp_disabled_channel"
+const autoOneChannelKeyword = "auto-1"
+
 func addUsedChannel(c *gin.Context, channelId int) {
 	useChannel := c.GetStringSlice("use_channel")
 	useChannel = append(useChannel, fmt.Sprintf("%d", channelId))
@@ -247,6 +251,9 @@ func getChannel(c *gin.Context, group, originalModel string, retryCount int) (*m
 func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) bool {
 	if openaiErr == nil {
 		return false
+	}
+	if shouldForceRetryTemporarilyDisabledChannel(c, retryTimes) {
+		return true
 	}
 	if types.IsChannelError(openaiErr) {
 		return true
@@ -290,6 +297,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, err.Error()))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
+	if strings.Contains(strings.ToLower(channelError.ChannelName), autoOneChannelKeyword) {
+		reason := fmt.Sprintf("auto-1 channel temporarily disabled due to error: %s", err.Error())
+		expireAt := service.TemporarilyDisableChannel(channelError.ChannelId, 5*time.Minute, reason)
+		logger.LogWarn(c, fmt.Sprintf("channel #%d (%s) matched auto-1 policy, temporarily disabled until %s", channelError.ChannelId, channelError.ChannelName, expireAt.Format(time.RFC3339)))
+		c.Set(forceRetryTempDisabledKey, true)
+	}
 	if service.ShouldDisableChannel(channelError.ChannelId, err) && channelError.AutoBan {
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.Error())
@@ -325,6 +338,22 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveError(), tokenId, 0, false, userGroup, other)
 	}
 
+}
+
+func shouldForceRetryTemporarilyDisabledChannel(c *gin.Context, retryTimes int) bool {
+	if retryTimes <= 0 {
+		return false
+	}
+	forceRetryValue, ok := c.Get(forceRetryTempDisabledKey)
+	if !ok {
+		return false
+	}
+	forceRetry, ok := forceRetryValue.(bool)
+	if !ok || !forceRetry {
+		return false
+	}
+	c.Set(forceRetryTempDisabledKey, false)
+	return true
 }
 
 func RelayMidjourney(c *gin.Context) {

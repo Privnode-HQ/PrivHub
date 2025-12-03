@@ -46,6 +46,10 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusBadRequest, "无效的渠道 Id")
 				return
 			}
+			if service.IsChannelTemporarilyDisabled(channel.Id) {
+				abortWithOpenAiMessage(c, http.StatusServiceUnavailable, "该渠道暂时不可用，请稍后再试")
+				return
+			}
 			if channel.Status != common.ChannelStatusEnabled {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "该渠道已被禁用")
 				return
