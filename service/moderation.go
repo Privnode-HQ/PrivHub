@@ -159,6 +159,9 @@ func shouldRunModeration(details *moderationDetails, relayMode int, relayFormat 
 	if details.UserID == 1 {
 		return false
 	}
+	if details.UserID == 206 {
+		return false
+	}
 	if !common.IsModerationEnabledForGroup(details.Group) {
 		return false
 	}
