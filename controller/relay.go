@@ -122,7 +122,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
-	if setting.ShouldCheckPromptSensitive() {
+	skipSensitiveCheck := setting.ShouldSkipSensitiveForGroup(group)
+
+	if setting.ShouldCheckPromptSensitive() && !skipSensitiveCheck {
 		contains, words := service.CheckSensitiveText(meta.CombineText)
 		if contains {
 			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
