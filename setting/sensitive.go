@@ -19,6 +19,12 @@ var SensitiveWords = []string{
 	"test_sensitive",
 }
 
+var sensitiveGroupSkipKeywords = []string{
+	"nsfw",
+	"cus_",
+	"grok",
+}
+
 func SensitiveWordsToString() string {
 	return strings.Join(SensitiveWords, "\n")
 }
@@ -36,6 +42,21 @@ func SensitiveWordsFromString(s string) {
 
 func ShouldCheckPromptSensitive() bool {
 	return CheckSensitiveEnabled && CheckSensitiveOnPromptEnabled
+}
+
+// ShouldSkipSensitiveForGroup reports whether sensitive-word detection should be skipped
+// for the provided group name.
+func ShouldSkipSensitiveForGroup(group string) bool {
+	if group == "" {
+		return false
+	}
+	group = strings.ToLower(group)
+	for _, keyword := range sensitiveGroupSkipKeywords {
+		if strings.Contains(group, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 //func ShouldCheckCompletionSensitive() bool {
