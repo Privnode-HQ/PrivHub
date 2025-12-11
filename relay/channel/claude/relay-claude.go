@@ -578,12 +578,75 @@ func ResponseClaude2OpenAI(reqMode int, claudeResponse *dto.ClaudeResponse) *dto
 }
 
 type ClaudeResponseInfo struct {
-	ResponseId   string
-	Created      int64
-	Model        string
-	ResponseText strings.Builder
-	Usage        *dto.Usage
-	Done         bool
+	ResponseId                  string
+	Created                     int64
+	Model                       string
+	ResponseText                strings.Builder
+	Usage                       *dto.Usage
+	Done                        bool
+	CacheCreationBillingSkipped bool
+}
+
+func (info *ClaudeResponseInfo) markCacheCreationBillingSkipped(usage *dto.ClaudeUsage) {
+	if info == nil || usage == nil {
+		return
+	}
+	if usage.ShouldTreatCacheCreationAsHit() {
+		info.CacheCreationBillingSkipped = true
+	}
+}
+
+func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) {
+	if info == nil || claudeInfo == nil || claudeInfo.Usage == nil {
+		return
+	}
+	if !claudeInfo.CacheCreationBillingSkipped {
+		return
+	}
+	if !isMessagesEndpoint(info.RequestURLPath) {
+		return
+	}
+	transferCacheCreationTokensToHits(claudeInfo.Usage)
+}
+
+func transferCacheCreationTokensToHits(usage *dto.Usage) {
+	if usage == nil {
+		return
+	}
+	tokensToTransfer := usage.PromptTokensDetails.CachedCreationTokens
+	if tokensToTransfer == 0 {
+		tokensToTransfer = usage.ClaudeCacheCreation5mTokens + usage.ClaudeCacheCreation1hTokens
+	}
+	if tokensToTransfer == 0 {
+		return
+	}
+	usage.PromptTokensDetails.CachedTokens += tokensToTransfer
+	usage.PromptTokensDetails.CachedCreationTokens = 0
+	usage.ClaudeCacheCreation5mTokens = 0
+	usage.ClaudeCacheCreation1hTokens = 0
+}
+
+func isMessagesEndpoint(requestPath string) bool {
+	if requestPath == "" {
+		return false
+	}
+	trimmed := requestPath
+	if idx := strings.Index(trimmed, "://"); idx != -1 {
+		trimmed = trimmed[idx+3:]
+		if slashIdx := strings.Index(trimmed, "/"); slashIdx != -1 {
+			trimmed = trimmed[slashIdx:]
+		} else {
+			trimmed = "/"
+		}
+	}
+	if idx := strings.Index(trimmed, "?"); idx != -1 {
+		trimmed = trimmed[:idx]
+	}
+	trimmed = strings.TrimSuffix(trimmed, "/")
+	if trimmed == "" {
+		trimmed = "/"
+	}
+	return strings.HasSuffix(trimmed, "/v1/messages")
 }
 
 func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeResponse, oaiResponse *dto.ChatCompletionsStreamResponse, claudeInfo *ClaudeResponseInfo) bool {
@@ -591,6 +654,9 @@ func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeRespons
 		claudeInfo.ResponseText.WriteString(claudeResponse.Completion)
 	} else {
 		if claudeResponse.Type == "message_start" {
+			if claudeResponse.Message != nil {
+				claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Message.Usage)
+			}
 			claudeInfo.ResponseId = claudeResponse.Message.Id
 			claudeInfo.Model = claudeResponse.Message.Model
 
@@ -609,6 +675,7 @@ func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeRespons
 				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Thinking)
 			}
 		} else if claudeResponse.Type == "message_delta" {
+			claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Usage)
 			// 最终的usage获取
 			if claudeResponse.Usage.InputTokens > 0 {
 				// 不叠加，只取最新的
@@ -694,6 +761,8 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 		}
 	}
 
+	applyCacheCreationBillingSkipped(info, claudeInfo)
+
 	if info.RelayFormat == types.RelayFormatClaude {
 		//
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
@@ -755,6 +824,8 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Usage.GetCacheCreation5mTokens()
 		claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.GetCacheCreation1hTokens()
 	}
+	claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Usage)
+	applyCacheCreationBillingSkipped(info, claudeInfo)
 	var responseData []byte
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
