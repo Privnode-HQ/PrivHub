@@ -137,3 +137,28 @@ func TestIsUsableSubscriptionItem_RequiresEnoughForAmount(t *testing.T) {
 		t.Fatalf("expected usable when amount fits")
 	}
 }
+
+func TestParseSubscriptionData_AllowsStringTimestampsAndQuotas(t *testing.T) {
+	raw := `[
+		{
+			"status": "deployed",
+			"5h_limit": {"total": "10", "available": "9", "reset_at": "1700000000"},
+			"7d_limit": {"total": 20, "available": 19, "reset_at": 1700000000},
+			"duration": {"start_at": 1700000000, "end_at": "1700003600", "auto_renew_enabled": true}
+		}
+	]`
+
+	items, err := parseSubscriptionData(raw)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Duration.EndAt != 1700003600 {
+		t.Fatalf("expected EndAt=1700003600, got %d", items[0].Duration.EndAt)
+	}
+	if items[0].Limit5H.Total != 10 || items[0].Limit5H.Available != 9 || items[0].Limit5H.ResetAt != 1700000000 {
+		t.Fatalf("unexpected 5h_limit: %+v", items[0].Limit5H)
+	}
+}
