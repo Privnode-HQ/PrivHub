@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -35,48 +36,68 @@ type SubscriptionItem struct {
 	Status         string               `json:"status"`
 }
 
-const (
-	subscriptionSelectionPrefixSubscriptionID = "sub:"
-	subscriptionSelectionPrefixPlanID         = "plan:"
-	subscriptionSelectionPrefixIndex          = "idx:"
-)
+const subscriptionSelectionPrefixFingerprint = "fp:"
+
+func subscriptionItemFingerprint(item SubscriptionItem) string {
+	stable := fmt.Sprintf(
+		"plan_name=%s|plan_id=%s|subscription_id=%s|owner=%d|start=%d|end=%d",
+		item.PlanName,
+		item.PlanID,
+		item.SubscriptionID,
+		item.Owner,
+		item.Duration.StartAt,
+		item.Duration.EndAt,
+	)
+	return common.Sha1([]byte(stable))
+}
 
 func encodeSubscriptionSelectionToken(item SubscriptionItem, index int) string {
-	if item.SubscriptionID != "" {
-		return subscriptionSelectionPrefixSubscriptionID + item.SubscriptionID
+	fp := subscriptionItemFingerprint(item)
+	return fmt.Sprintf("%s%s|i:%d", subscriptionSelectionPrefixFingerprint, fp, index)
+}
+
+func parseSelectionToken(token string) (fingerprint string, hintIndex *int, ok bool) {
+	if !strings.HasPrefix(token, subscriptionSelectionPrefixFingerprint) {
+		return "", nil, false
 	}
-	if item.PlanID != "" {
-		return subscriptionSelectionPrefixPlanID + item.PlanID
+	payload := strings.TrimPrefix(token, subscriptionSelectionPrefixFingerprint)
+	parts := strings.Split(payload, "|")
+	if len(parts) == 0 || parts[0] == "" {
+		return "", nil, false
 	}
-	return fmt.Sprintf("%s%d", subscriptionSelectionPrefixIndex, index)
+	fingerprint = parts[0]
+	for _, p := range parts[1:] {
+		if !strings.HasPrefix(p, "i:") {
+			continue
+		}
+		v := strings.TrimPrefix(p, "i:")
+		idx, err := strconv.Atoi(v)
+		if err != nil {
+			continue
+		}
+		hintIndex = &idx
+		break
+	}
+	return fingerprint, hintIndex, true
 }
 
 func findSubscriptionItemIndexByToken(items []SubscriptionItem, token string) (int, bool) {
-	if strings.HasPrefix(token, subscriptionSelectionPrefixSubscriptionID) {
-		target := strings.TrimPrefix(token, subscriptionSelectionPrefixSubscriptionID)
-		for i := range items {
-			if items[i].SubscriptionID == target {
-				return i, true
-			}
-		}
+	fp, hintIdx, ok := parseSelectionToken(token)
+	if !ok {
 		return -1, false
 	}
-	if strings.HasPrefix(token, subscriptionSelectionPrefixPlanID) {
-		target := strings.TrimPrefix(token, subscriptionSelectionPrefixPlanID)
-		for i := range items {
-			if items[i].PlanID == target {
-				return i, true
+	if hintIdx != nil {
+		idx := *hintIdx
+		if idx >= 0 && idx < len(items) {
+			if subscriptionItemFingerprint(items[idx]) == fp {
+				return idx, true
 			}
 		}
-		return -1, false
 	}
-	if strings.HasPrefix(token, subscriptionSelectionPrefixIndex) {
-		idxStr := strings.TrimPrefix(token, subscriptionSelectionPrefixIndex)
-		idx := common.String2Int(idxStr)
-		if idx < 0 || idx >= len(items) {
-			return -1, false
+	for i := range items {
+		if subscriptionItemFingerprint(items[i]) == fp {
+			return i, true
 		}
-		return idx, true
 	}
 	return -1, false
 }
@@ -132,12 +153,17 @@ func durationContains(duration SubscriptionDuration, nowSec int64) bool {
 	return true
 }
 
-func isUsableSubscriptionItem(item SubscriptionItem, nowSec int64) bool {
+func isUsableSubscriptionItem(item SubscriptionItem, nowSec int64, amount int64) bool {
 	if item.Status != "deployed" {
 		return false
 	}
 	if item.Limit5H.Available <= 0 || item.Limit7D.Available <= 0 {
 		return false
+	}
+	if amount > 0 {
+		if item.Limit5H.Available < amount || item.Limit7D.Available < amount {
+			return false
+		}
 	}
 	if !durationContains(item.Duration, nowSec) {
 		return false
@@ -206,12 +232,17 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 }
 
 func consumeSubscriptionQuotaFromFirstUsableItem(items []SubscriptionItem, nowSec int64, amount int64) ([]SubscriptionItem, string, bool) {
+	if amount < 0 {
+		return items, "", false
+	}
 	for i := range items {
-		if !isUsableSubscriptionItem(items[i], nowSec) {
+		if !isUsableSubscriptionItem(items[i], nowSec, amount) {
 			continue
 		}
-		items[i].Limit5H.Available -= amount
-		items[i].Limit7D.Available -= amount
+		if amount > 0 {
+			items[i].Limit5H.Available -= amount
+			items[i].Limit7D.Available -= amount
+		}
 		return items, encodeSubscriptionSelectionToken(items[i], i), true
 	}
 	return items, "", false
@@ -222,6 +253,9 @@ func consumeSubscriptionQuotaFromFirstUsableItem(items []SubscriptionItem, nowSe
 func PreConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) (string, error) {
 	if userID <= 0 {
 		return "", fmt.Errorf("invalid userID: %d", userID)
+	}
+	if amount < 0 {
+		return "", fmt.Errorf("invalid amount: %d", amount)
 	}
 	var selectionToken string
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -252,11 +286,12 @@ func PreConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) (st
 		if err != nil {
 			return err
 		}
-
-		if err := tx.Model(&User{}).
-			Where("id = ?", userID).
-			Update("subscription_data", raw).Error; err != nil {
-			return err
+		if changed || amount > 0 {
+			if err := tx.Model(&User{}).
+				Where("id = ?", userID).
+				Update("subscription_data", raw).Error; err != nil {
+				return err
+			}
 		}
 		_ = changed
 		return nil
@@ -297,9 +332,24 @@ func AdjustUserSubscriptionQuotaBySelectionToken(userID int, selectionToken stri
 		if !ok {
 			return fmt.Errorf("subscription item not found for token: %s", selectionToken)
 		}
-
-		items[idx].Limit5H.Available -= delta
-		items[idx].Limit7D.Available -= delta
+		item := items[idx]
+		new5h := item.Limit5H.Available - delta
+		new7d := item.Limit7D.Available - delta
+		if delta > 0 {
+			if new5h < 0 || new7d < 0 {
+				return ErrSubscriptionQuotaExhausted
+			}
+		}
+		if delta < 0 {
+			if new5h > item.Limit5H.Total {
+				new5h = item.Limit5H.Total
+			}
+			if new7d > item.Limit7D.Total {
+				new7d = item.Limit7D.Total
+			}
+		}
+		items[idx].Limit5H.Available = new5h
+		items[idx].Limit7D.Available = new7d
 
 		raw, err := marshalSubscriptionData(items)
 		if err != nil {
@@ -317,36 +367,47 @@ func AdjustUserSubscriptionQuotaBySelectionToken(userID int, selectionToken stri
 // - resets 5h/7d available quota to total when now > reset_at
 // It only updates users.subscription_data.
 func ResetSubscriptionQuotaForAllUsers(nowSec int64) error {
-	var users []User
-	if err := DB.
-		Model(&User{}).
-		Select("id", "subscription_data").
+	var userIDs []int
+	if err := DB.Model(&User{}).
 		Where(commonGroupCol+" = ?", "subscription").
-		Find(&users).Error; err != nil {
+		Pluck("id", &userIDs).Error; err != nil {
 		return err
 	}
 
-	for _, user := range users {
-		items, err := parseSubscriptionData(user.SubscriptionData)
-		if err != nil {
-			common.SysLog(fmt.Sprintf("failed to parse subscription_data for user %d: %v", user.Id, err))
-			continue
-		}
-		updated, changed := resetAndPruneSubscriptionData(items, nowSec)
-		if !changed {
-			continue
-		}
-		raw, err := marshalSubscriptionData(updated)
-		if err != nil {
-			common.SysLog(fmt.Sprintf("failed to marshal subscription_data for user %d: %v", user.Id, err))
-			continue
-		}
-		err = DB.Model(&User{}).
-			Where("id = ?", user.Id).
-			Update("subscription_data", raw).Error
-		if err != nil {
-			common.SysLog(fmt.Sprintf("failed to update subscription_data for user %d: %v", user.Id, err))
-		}
+	for _, userID := range userIDs {
+		_ = DB.Transaction(func(tx *gorm.DB) error {
+			var user User
+			err := tx.
+				Clauses(clause.Locking{Strength: "UPDATE"}).
+				Select("id", "subscription_data").
+				Where("id = ?", userID).
+				First(&user).Error
+			if err != nil {
+				common.SysLog(fmt.Sprintf("failed to load subscription_data for user %d: %v", userID, err))
+				return nil
+			}
+			items, err := parseSubscriptionData(user.SubscriptionData)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("failed to parse subscription_data for user %d: %v", userID, err))
+				return nil
+			}
+			updated, changed := resetAndPruneSubscriptionData(items, nowSec)
+			if !changed {
+				return nil
+			}
+			raw, err := marshalSubscriptionData(updated)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("failed to marshal subscription_data for user %d: %v", userID, err))
+				return nil
+			}
+			if err := tx.Model(&User{}).
+				Where("id = ?", userID).
+				Update("subscription_data", raw).Error; err != nil {
+				common.SysLog(fmt.Sprintf("failed to update subscription_data for user %d: %v", userID, err))
+				return nil
+			}
+			return nil
+		})
 	}
 	return nil
 }
