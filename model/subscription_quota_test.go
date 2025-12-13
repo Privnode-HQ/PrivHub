@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestConsumeSubscriptionQuotaFromFirstUsableItem_SelectsFirstMatchOnly(t *testing.T) {
 	now := int64(1_700_000_000)
@@ -41,15 +44,18 @@ func TestConsumeSubscriptionQuotaFromFirstUsableItem_SelectsFirstMatchOnly(t *te
 		},
 	}
 
-	updated, _, ok := consumeSubscriptionQuotaFromFirstUsableItem(items, now, 100)
+	updated, token, ok := consumeSubscriptionQuotaFromFirstUsableItem(items, now, 2)
 	if !ok {
 		t.Fatalf("expected ok=true")
+	}
+	if !strings.HasPrefix(token, "fp:") {
+		t.Fatalf("expected fingerprint token, got %q", token)
 	}
 	if updated[0].Limit5H.Available != 1 || updated[0].Limit7D.Available != 0 {
 		t.Fatalf("unexpected change in first item: %+v", updated[0])
 	}
-	if updated[1].Limit5H.Available != -98 || updated[1].Limit7D.Available != -98 {
-		t.Fatalf("expected second item decremented by 100, got %+v", updated[1])
+	if updated[1].Limit5H.Available != 0 || updated[1].Limit7D.Available != 0 {
+		t.Fatalf("expected second item decremented by 2, got %+v", updated[1])
 	}
 }
 
@@ -110,5 +116,24 @@ func TestResetAndPruneSubscriptionData_PruneNonDeployedAndReset(t *testing.T) {
 	}
 	if updated[1].Limit7D.ResetAt != now+7*24*60*60 {
 		t.Fatalf("expected 7d reset_at=%d, got %d", now+7*24*60*60, updated[1].Limit7D.ResetAt)
+	}
+}
+
+func TestIsUsableSubscriptionItem_RequiresEnoughForAmount(t *testing.T) {
+	now := int64(1_700_000_000)
+	item := SubscriptionItem{
+		Status:  "deployed",
+		Limit5H: SubscriptionLimit{Total: 10, Available: 2},
+		Limit7D: SubscriptionLimit{Total: 10, Available: 2},
+		Duration: SubscriptionDuration{
+			StartAt: now - 10,
+			EndAt:   now + 10,
+		},
+	}
+	if isUsableSubscriptionItem(item, now, 3) {
+		t.Fatalf("expected unusable when amount exceeds available")
+	}
+	if !isUsableSubscriptionItem(item, now, 2) {
+		t.Fatalf("expected usable when amount fits")
 	}
 }
