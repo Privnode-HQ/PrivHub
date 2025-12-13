@@ -1,6 +1,8 @@
 package model
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -19,10 +21,116 @@ type SubscriptionLimit struct {
 	ResetAt   int64 `json:"reset_at"`
 }
 
+func unmarshalFlexibleInt64(raw json.RawMessage) (int64, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return 0, nil
+	}
+
+	// Fast-path: proper JSON number.
+	var asInt int64
+	if err := json.Unmarshal(raw, &asInt); err == nil {
+		return asInt, nil
+	}
+
+	// Accept string-encoded numbers.
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		asString = strings.TrimSpace(asString)
+		if asString == "" {
+			return 0, nil
+		}
+		if v, err := strconv.ParseInt(asString, 10, 64); err == nil {
+			return v, nil
+		}
+		if v, err := strconv.ParseFloat(asString, 64); err == nil {
+			return int64(v), nil
+		}
+		return 0, fmt.Errorf("invalid int64 string %q", asString)
+	}
+
+	// Fallback: decode with UseNumber to preserve integer values.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var asNumber json.Number
+	if err := decoder.Decode(&asNumber); err == nil {
+		if v, err := asNumber.Int64(); err == nil {
+			return v, nil
+		}
+		if v, err := asNumber.Float64(); err == nil {
+			return int64(v), nil
+		}
+	}
+
+	return 0, fmt.Errorf("invalid int64 json value: %s", string(raw))
+}
+
+func (l *SubscriptionLimit) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+
+	type rawLimit struct {
+		Total     json.RawMessage `json:"total"`
+		Available json.RawMessage `json:"available"`
+		ResetAt   json.RawMessage `json:"reset_at"`
+	}
+	var raw rawLimit
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	total, err := unmarshalFlexibleInt64(raw.Total)
+	if err != nil {
+		return fmt.Errorf("invalid total: %w", err)
+	}
+	available, err := unmarshalFlexibleInt64(raw.Available)
+	if err != nil {
+		return fmt.Errorf("invalid available: %w", err)
+	}
+	resetAt, err := unmarshalFlexibleInt64(raw.ResetAt)
+	if err != nil {
+		return fmt.Errorf("invalid reset_at: %w", err)
+	}
+	l.Total = total
+	l.Available = available
+	l.ResetAt = resetAt
+	return nil
+}
+
 type SubscriptionDuration struct {
 	StartAt          int64 `json:"start_at"`
 	EndAt            int64 `json:"end_at"`
 	AutoRenewEnabled bool  `json:"auto_renew_enabled"`
+}
+
+func (d *SubscriptionDuration) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		return nil
+	}
+
+	type rawDuration struct {
+		StartAt          json.RawMessage `json:"start_at"`
+		EndAt            json.RawMessage `json:"end_at"`
+		AutoRenewEnabled bool            `json:"auto_renew_enabled"`
+	}
+	var raw rawDuration
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	startAt, err := unmarshalFlexibleInt64(raw.StartAt)
+	if err != nil {
+		return fmt.Errorf("invalid start_at: %w", err)
+	}
+	endAt, err := unmarshalFlexibleInt64(raw.EndAt)
+	if err != nil {
+		return fmt.Errorf("invalid end_at: %w", err)
+	}
+	d.StartAt = startAt
+	d.EndAt = endAt
+	d.AutoRenewEnabled = raw.AutoRenewEnabled
+	return nil
 }
 
 type SubscriptionItem struct {
