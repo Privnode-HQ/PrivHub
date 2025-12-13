@@ -74,6 +74,8 @@ const PersonalSetting = () => {
   const [passkeyRegisterLoading, setPasskeyRegisterLoading] = useState(false);
   const [passkeyDeleteLoading, setPasskeyDeleteLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
+  const [backToPayAsYouGoLoading, setBackToPayAsYouGoLoading] =
+    useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
     warningType: 'email',
     warningThreshold: 100000,
@@ -440,6 +442,29 @@ const PersonalSetting = () => {
     }
   };
 
+  const backToPayAsYouGo = async () => {
+    if (userState?.user?.group !== 'subscription') {
+      showInfo(t('当前账户不是订阅分组，无需操作'));
+      return;
+    }
+
+    setBackToPayAsYouGoLoading(true);
+    try {
+      const res = await API.post('/api/user/self/back_to_payg');
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('已切换回按量付费'));
+        await getUserData();
+      } else {
+        showError(message || t('操作失败'));
+      }
+    } catch (e) {
+      showError(t('操作失败'));
+    } finally {
+      setBackToPayAsYouGoLoading(false);
+    }
+  };
+
   return (
     <div className='mt-[60px]'>
       <div className='flex justify-center'>
@@ -467,6 +492,8 @@ const PersonalSetting = () => {
               passkeyDeleteLoading={passkeyDeleteLoading}
               onPasskeyRegister={handleRegisterPasskey}
               onPasskeyDelete={handleRemovePasskey}
+              onBackToPayAsYouGo={backToPayAsYouGo}
+              backToPayAsYouGoLoading={backToPayAsYouGoLoading}
             />
 
             {/* 右侧：其他设置 */}

@@ -2695,6 +2695,13 @@
     "线路描述": "Mô tả tuyến",
     "组列表": "Danh sách nhóm",
     "组名": "Tên nhóm",
-    "组织，不填则为默认组织": "Tổ chức, mặc định nếu để trống"
+    "组织，不填则为默认组织": "Tổ chức, mặc định nếu để trống",
+    "按量付费": "Trả theo mức sử dụng",
+    "回到按量付费": "Quay lại trả theo mức sử dụng",
+    "已切换回按量付费": "Đã chuyển về trả theo mức sử dụng",
+    "当前账户不是订阅分组，无需操作": "Tài khoản của bạn không thuộc nhóm subscription; không cần thao tác.",
+    "当前分组为 subscription，可切换回 tier 0": "Nhóm hiện tại là subscription; bạn có thể chuyển về tier 0.",
+    "确认切换回按量付费": "Xác nhận quay lại trả theo mức sử dụng",
+    "此操作将把你的分组从 subscription 修改为 tier 0。": "Thao tác này sẽ đổi nhóm của bạn từ subscription sang tier 0."
   }
 }

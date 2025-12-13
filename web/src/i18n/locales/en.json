@@ -2113,6 +2113,13 @@
     "统一的": "The Unified",
     "大模型接口网关": "LLM API Gateway",
     "正在跳转 GitHub...": "Redirecting to GitHub...",
-    "请求超时，请刷新页面后重新发起 GitHub 登录": "Request timed out, please refresh and restart GitHub login"
+    "请求超时，请刷新页面后重新发起 GitHub 登录": "Request timed out, please refresh and restart GitHub login",
+    "按量付费": "Pay-as-you-go",
+    "回到按量付费": "Back to pay-as-you-go",
+    "已切换回按量付费": "Switched back to pay-as-you-go",
+    "当前账户不是订阅分组，无需操作": "Your account is not in the subscription group; no action needed.",
+    "当前分组为 subscription，可切换回 tier 0": "Current group is subscription; you can switch back to tier 0.",
+    "确认切换回按量付费": "Confirm switch to pay-as-you-go",
+    "此操作将把你的分组从 subscription 修改为 tier 0。": "This will change your group from subscription to tier 0."
   }
 }
