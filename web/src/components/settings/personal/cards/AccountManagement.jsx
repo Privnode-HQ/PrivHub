@@ -66,6 +66,8 @@ const AccountManagement = ({
   passkeyDeleteLoading,
   onPasskeyRegister,
   onPasskeyDelete,
+  onBackToPayAsYouGo,
+  backToPayAsYouGoLoading,
 }) => {
   const renderAccountInfo = (accountId, label) => {
     if (!accountId || accountId === '') {
@@ -604,6 +606,46 @@ const AccountManagement = ({
 
                 {/* 两步验证设置 */}
                 <TwoFASetting t={t} />
+
+                {/* 订阅用户切换回按量付费 */}
+                {userState.user?.group === 'subscription' && (
+                  <Card className='!rounded-xl w-full'>
+                    <div className='flex flex-col sm:flex-row items-start sm:justify-between gap-4'>
+                      <div className='flex items-start w-full sm:w-auto'>
+                        <div className='w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mr-4 flex-shrink-0'>
+                          <IconShield size='large' className='text-slate-600' />
+                        </div>
+                        <div>
+                          <Typography.Title heading={6} className='mb-1'>
+                            {t('按量付费')}
+                          </Typography.Title>
+                          <Typography.Text type='tertiary' className='text-sm'>
+                            {t('当前分组为 subscription，可切换回 tier 0')}
+                          </Typography.Text>
+                        </div>
+                      </div>
+                      <Button
+                        type='primary'
+                        theme='solid'
+                        onClick={() => {
+                          Modal.confirm({
+                            title: t('确认切换回按量付费'),
+                            content: t(
+                              '此操作将把你的分组从 subscription 修改为 tier 0。',
+                            ),
+                            okText: t('回到按量付费'),
+                            cancelText: t('取消'),
+                            onOk: () => onBackToPayAsYouGo?.(),
+                          });
+                        }}
+                        loading={backToPayAsYouGoLoading}
+                        className='w-full sm:w-auto !bg-slate-600 hover:!bg-slate-700'
+                      >
+                        {t('回到按量付费')}
+                      </Button>
+                    </div>
+                  </Card>
+                )}
 
                 {/* 危险区域 */}
                 <Card className='!rounded-xl w-full'>

@@ -2093,6 +2093,13 @@
     "统一的": "La Passerelle",
     "大模型接口网关": "API LLM Unifiée",
     "正在跳转 GitHub...": "Redirection vers GitHub...",
-    "请求超时，请刷新页面后重新发起 GitHub 登录": "Délai dépassé, veuillez actualiser la page puis relancer la connexion GitHub"
+    "请求超时，请刷新页面后重新发起 GitHub 登录": "Délai dépassé, veuillez actualiser la page puis relancer la connexion GitHub",
+    "按量付费": "Paiement à l’usage",
+    "回到按量付费": "Revenir au paiement à l’usage",
+    "已切换回按量付费": "Retour au paiement à l’usage effectué",
+    "当前账户不是订阅分组，无需操作": "Votre compte n’est pas dans le groupe subscription ; aucune action nécessaire.",
+    "当前分组为 subscription，可切换回 tier 0": "Le groupe actuel est subscription ; vous pouvez revenir à tier 0.",
+    "确认切换回按量付费": "Confirmer le retour au paiement à l’usage",
+    "此操作将把你的分组从 subscription 修改为 tier 0。": "Cette action changera votre groupe de subscription à tier 0."
   }
 }

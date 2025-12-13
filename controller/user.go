@@ -758,6 +758,39 @@ func UpdateSelf(c *gin.Context) {
 	return
 }
 
+func BackToPayAsYouGo(c *gin.Context) {
+	userId := c.GetInt("id")
+	user, err := model.GetUserById(userId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if user.Group != "subscription" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "当前账户不是订阅分组，无需操作",
+		})
+		return
+	}
+
+	user.Group = "default"
+	if err := user.Update(false); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	session := sessions.Default(c)
+	if session.Get("id") != nil {
+		session.Set("group", user.Group)
+		_ = session.Save()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+}
+
 func checkUpdatePassword(originalPassword string, newPassword string, userId int) (updatePassword bool, err error) {
 	var currentUser *model.User
 	currentUser, err = model.GetUserById(userId, true)
