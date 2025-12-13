@@ -2,7 +2,7 @@ package model
 
 import "testing"
 
-func TestConsumeFirstUsableSubscriptionItem_SelectsFirstMatchOnly(t *testing.T) {
+func TestConsumeSubscriptionQuotaFromFirstUsableItem_SelectsFirstMatchOnly(t *testing.T) {
 	now := int64(1_700_000_000)
 	items := []SubscriptionItem{
 		{
@@ -41,15 +41,15 @@ func TestConsumeFirstUsableSubscriptionItem_SelectsFirstMatchOnly(t *testing.T) 
 		},
 	}
 
-	updated, ok := consumeFirstUsableSubscriptionItem(items, now, 1)
+	updated, _, ok := consumeSubscriptionQuotaFromFirstUsableItem(items, now, 100)
 	if !ok {
 		t.Fatalf("expected ok=true")
 	}
 	if updated[0].Limit5H.Available != 1 || updated[0].Limit7D.Available != 0 {
 		t.Fatalf("unexpected change in first item: %+v", updated[0])
 	}
-	if updated[1].Limit5H.Available != 1 || updated[1].Limit7D.Available != 1 {
-		t.Fatalf("expected second item decremented by 1, got %+v", updated[1])
+	if updated[1].Limit5H.Available != -98 || updated[1].Limit7D.Available != -98 {
+		t.Fatalf("expected second item decremented by 100, got %+v", updated[1])
 	}
 }
 
@@ -99,7 +99,16 @@ func TestResetAndPruneSubscriptionData_PruneNonDeployedAndReset(t *testing.T) {
 	if updated[0].Limit5H.Available != 10 || updated[0].Limit7D.Available != 20 {
 		t.Fatalf("expected first deployed item reset to total, got %+v", updated[0])
 	}
+	if updated[0].Limit5H.ResetAt <= now || updated[0].Limit7D.ResetAt <= now {
+		t.Fatalf("expected reset_at to advance beyond now, got %+v", updated[0])
+	}
 	if updated[1].Limit5H.Available != 10 || updated[1].Limit7D.Available != 20 {
 		t.Fatalf("expected reset even when reset_at=0, got %+v", updated[1])
+	}
+	if updated[1].Limit5H.ResetAt != now+5*60*60 {
+		t.Fatalf("expected 5h reset_at=%d, got %d", now+5*60*60, updated[1].Limit5H.ResetAt)
+	}
+	if updated[1].Limit7D.ResetAt != now+7*24*60*60 {
+		t.Fatalf("expected 7d reset_at=%d, got %d", now+7*24*60*60, updated[1].Limit7D.ResetAt)
 	}
 }

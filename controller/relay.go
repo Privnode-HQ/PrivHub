@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -151,6 +152,22 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	if priceData.FreeModel {
 		logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
+		if service.ShouldUseSubscriptionQuota(relayInfo) {
+			selectionToken, err := model.PreConsumeUserSubscriptionQuota(relayInfo.UserId, time.Now().Unix(), 0)
+			if err != nil {
+				if errors.Is(err, model.ErrSubscriptionQuotaExhausted) {
+					if relayFormat == types.RelayFormatClaude {
+						newAPIError = types.WithClaudeError(types.ClaudeError{Type: string(types.ErrorCodeSubscriptionQuotaExhausted), Message: err.Error()}, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+					} else {
+						newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeSubscriptionQuotaExhausted, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+					}
+					return
+				}
+				newAPIError = types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+				return
+			}
+			c.Set(service.SubscriptionQuotaSelectionTokenKey, selectionToken)
+		}
 	} else {
 		newAPIError = service.PreConsumeQuota(c, priceData.QuotaToPreConsume, relayInfo)
 		if newAPIError != nil {

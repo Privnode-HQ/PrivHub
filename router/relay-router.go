@@ -77,7 +77,7 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.Use(middleware.Distribute())
 
 		// claude related routes
-		httpRouter.POST("/messages", middleware.SubscriptionQuotaForClaudeBetaMessages(), func(c *gin.Context) {
+		httpRouter.POST("/messages", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatClaude)
 		})
 
@@ -90,7 +90,7 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 
 		// response related routes
-		httpRouter.POST("/responses", middleware.SubscriptionQuotaForOpenAIResponses(), func(c *gin.Context) {
+		httpRouter.POST("/responses", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIResponses)
 		})
 

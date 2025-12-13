@@ -190,9 +190,6 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 }
 
 func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
-	if service.ShouldUseSubscriptionQuota(relayInfo) {
-		return
-	}
 	if usage == nil {
 		usage = &dto.Usage{
 			PromptTokens:     relayInfo.PromptTokens,
@@ -201,6 +198,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		}
 		extraContent += "（可能是请求出错）"
 	}
+	useSubscriptionQuota := service.ShouldUseSubscriptionQuota(relayInfo)
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
 	promptTokens := usage.PromptTokens
 	cacheTokens := usage.PromptTokensDetails.CachedTokens
@@ -370,8 +368,10 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		if !ratio.IsZero() && quota == 0 {
 			quota = 1
 		}
-		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
-		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		if !useSubscriptionQuota {
+			model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
+			model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		}
 	}
 
 	quotaDelta := quota - relayInfo.FinalPreConsumedQuota
@@ -393,9 +393,17 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	}
 
 	if quotaDelta != 0 {
-		err := service.PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
-		if err != nil {
-			logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+		if useSubscriptionQuota {
+			selectionToken := ctx.GetString(service.SubscriptionQuotaSelectionTokenKey)
+			err := model.AdjustUserSubscriptionQuotaBySelectionToken(relayInfo.UserId, selectionToken, int64(quotaDelta))
+			if err != nil {
+				logger.LogError(ctx, "error consuming subscription quota: "+err.Error())
+			}
+		} else {
+			err := service.PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
+			if err != nil {
+				logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+			}
 		}
 	}
 

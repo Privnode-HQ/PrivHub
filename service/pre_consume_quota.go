@@ -1,8 +1,10 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -17,6 +19,17 @@ import (
 func ReturnPreConsumedQuota(c *gin.Context, relayInfo *relaycommon.RelayInfo) {
 	if relayInfo.FinalPreConsumedQuota != 0 {
 		logger.LogInfo(c, fmt.Sprintf("用户 %d 请求失败, 返还预扣费额度 %s", relayInfo.UserId, logger.FormatQuota(relayInfo.FinalPreConsumedQuota)))
+		if ShouldUseSubscriptionQuota(relayInfo) {
+			selectionToken := c.GetString(SubscriptionQuotaSelectionTokenKey)
+			gopool.Go(func() {
+				err := model.AdjustUserSubscriptionQuotaBySelectionToken(relayInfo.UserId, selectionToken, -int64(relayInfo.FinalPreConsumedQuota))
+				if err != nil {
+					common.SysLog("error return pre-consumed subscription quota: " + err.Error())
+				}
+			})
+			return
+		}
+
 		gopool.Go(func() {
 			relayInfoCopy := *relayInfo
 
@@ -32,7 +45,18 @@ func ReturnPreConsumedQuota(c *gin.Context, relayInfo *relaycommon.RelayInfo) {
 // It returns the pre-consumed quota if successful, or an error if not.
 func PreConsumeQuota(c *gin.Context, preConsumedQuota int, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
 	if ShouldUseSubscriptionQuota(relayInfo) {
-		relayInfo.FinalPreConsumedQuota = 0
+		selectionToken, err := model.PreConsumeUserSubscriptionQuota(relayInfo.UserId, time.Now().Unix(), int64(preConsumedQuota))
+		if err != nil {
+			if errors.Is(err, model.ErrSubscriptionQuotaExhausted) {
+				if relayInfo.RelayFormat == types.RelayFormatClaude {
+					return types.WithClaudeError(types.ClaudeError{Type: string(types.ErrorCodeSubscriptionQuotaExhausted), Message: err.Error()}, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+				}
+				return types.NewErrorWithStatusCode(err, types.ErrorCodeSubscriptionQuotaExhausted, http.StatusForbidden, types.ErrOptionWithSkipRetry(), types.ErrOptionWithNoRecordErrorLog())
+			}
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeUpdateDataError, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
+		c.Set(SubscriptionQuotaSelectionTokenKey, selectionToken)
+		relayInfo.FinalPreConsumedQuota = preConsumedQuota
 		return nil
 	}
 
