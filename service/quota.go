@@ -236,10 +236,6 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 }
 
 func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) {
-	if ShouldUseSubscriptionQuota(relayInfo) {
-		return
-	}
-
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
 	promptTokens := usage.PromptTokens
 	completionTokens := usage.CompletionTokens
@@ -306,8 +302,10 @@ func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, modelName, relayInfo.FinalPreConsumedQuota))
 	} else {
-		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
-		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		if !ShouldUseSubscriptionQuota(relayInfo) {
+			model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
+			model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		}
 	}
 
 	quotaDelta := quota - relayInfo.FinalPreConsumedQuota
@@ -327,9 +325,17 @@ func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 	}
 
 	if quotaDelta != 0 {
-		err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
-		if err != nil {
-			logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+		if ShouldUseSubscriptionQuota(relayInfo) {
+			selectionToken := ctx.GetString(SubscriptionQuotaSelectionTokenKey)
+			err := model.AdjustUserSubscriptionQuotaBySelectionToken(relayInfo.UserId, selectionToken, int64(quotaDelta))
+			if err != nil {
+				logger.LogError(ctx, "error consuming subscription quota: "+err.Error())
+			}
+		} else {
+			err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
+			if err != nil {
+				logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+			}
 		}
 	}
 
@@ -378,10 +384,6 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 }
 
 func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
-	if ShouldUseSubscriptionQuota(relayInfo) {
-		return
-	}
-
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
 	textInputTokens := usage.PromptTokensDetails.TextTokens
 	textOutTokens := usage.CompletionTokenDetails.TextTokens
@@ -434,8 +436,10 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, relayInfo.OriginModelName, relayInfo.FinalPreConsumedQuota))
 	} else {
-		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
-		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		if !ShouldUseSubscriptionQuota(relayInfo) {
+			model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, quota)
+			model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
+		}
 	}
 
 	quotaDelta := quota - relayInfo.FinalPreConsumedQuota
@@ -455,9 +459,17 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	}
 
 	if quotaDelta != 0 {
-		err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
-		if err != nil {
-			logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+		if ShouldUseSubscriptionQuota(relayInfo) {
+			selectionToken := ctx.GetString(SubscriptionQuotaSelectionTokenKey)
+			err := model.AdjustUserSubscriptionQuotaBySelectionToken(relayInfo.UserId, selectionToken, int64(quotaDelta))
+			if err != nil {
+				logger.LogError(ctx, "error consuming subscription quota: "+err.Error())
+			}
+		} else {
+			err := PostConsumeQuota(relayInfo, quotaDelta, relayInfo.FinalPreConsumedQuota, true)
+			if err != nil {
+				logger.LogError(ctx, "error consuming token remain quota: "+err.Error())
+			}
 		}
 	}
 

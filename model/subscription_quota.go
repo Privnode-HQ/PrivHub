@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -32,6 +33,52 @@ type SubscriptionItem struct {
 	Duration       SubscriptionDuration `json:"duration"`
 	Owner          int64                `json:"owner"`
 	Status         string               `json:"status"`
+}
+
+const (
+	subscriptionSelectionPrefixSubscriptionID = "sub:"
+	subscriptionSelectionPrefixPlanID         = "plan:"
+	subscriptionSelectionPrefixIndex          = "idx:"
+)
+
+func encodeSubscriptionSelectionToken(item SubscriptionItem, index int) string {
+	if item.SubscriptionID != "" {
+		return subscriptionSelectionPrefixSubscriptionID + item.SubscriptionID
+	}
+	if item.PlanID != "" {
+		return subscriptionSelectionPrefixPlanID + item.PlanID
+	}
+	return fmt.Sprintf("%s%d", subscriptionSelectionPrefixIndex, index)
+}
+
+func findSubscriptionItemIndexByToken(items []SubscriptionItem, token string) (int, bool) {
+	if strings.HasPrefix(token, subscriptionSelectionPrefixSubscriptionID) {
+		target := strings.TrimPrefix(token, subscriptionSelectionPrefixSubscriptionID)
+		for i := range items {
+			if items[i].SubscriptionID == target {
+				return i, true
+			}
+		}
+		return -1, false
+	}
+	if strings.HasPrefix(token, subscriptionSelectionPrefixPlanID) {
+		target := strings.TrimPrefix(token, subscriptionSelectionPrefixPlanID)
+		for i := range items {
+			if items[i].PlanID == target {
+				return i, true
+			}
+		}
+		return -1, false
+	}
+	if strings.HasPrefix(token, subscriptionSelectionPrefixIndex) {
+		idxStr := strings.TrimPrefix(token, subscriptionSelectionPrefixIndex)
+		idx := common.String2Int(idxStr)
+		if idx < 0 || idx >= len(items) {
+			return -1, false
+		}
+		return idx, true
+	}
+	return -1, false
 }
 
 func parseSubscriptionData(raw string) ([]SubscriptionItem, error) {
@@ -85,14 +132,11 @@ func durationContains(duration SubscriptionDuration, nowSec int64) bool {
 	return true
 }
 
-func isUsableSubscriptionItem(item SubscriptionItem, nowSec int64, amount int64) bool {
+func isUsableSubscriptionItem(item SubscriptionItem, nowSec int64) bool {
 	if item.Status != "deployed" {
 		return false
 	}
-	if amount <= 0 {
-		return false
-	}
-	if item.Limit5H.Available < amount || item.Limit7D.Available < amount {
+	if item.Limit5H.Available <= 0 || item.Limit7D.Available <= 0 {
 		return false
 	}
 	if !durationContains(item.Duration, nowSec) {
@@ -101,19 +145,23 @@ func isUsableSubscriptionItem(item SubscriptionItem, nowSec int64, amount int64)
 	return true
 }
 
-func consumeFirstUsableSubscriptionItem(items []SubscriptionItem, nowSec int64, amount int64) ([]SubscriptionItem, bool) {
-	if amount <= 0 {
-		return items, false
+func advanceResetAt(resetAt int64, nowSec int64, intervalSec int64) int64 {
+	if intervalSec <= 0 {
+		return resetAt
 	}
-	for i := range items {
-		if !isUsableSubscriptionItem(items[i], nowSec, amount) {
-			continue
-		}
-		items[i].Limit5H.Available -= amount
-		items[i].Limit7D.Available -= amount
-		return items, true
+	now := nowInSameUnit(resetAt, nowSec)
+	interval := intervalSec
+	if resetAt > 1_000_000_000_000 {
+		interval = intervalSec * 1000
 	}
-	return items, false
+	if resetAt <= 0 {
+		return now + interval
+	}
+	if now <= resetAt {
+		return resetAt
+	}
+	periods := (now-resetAt)/interval + 1
+	return resetAt + periods*interval
 }
 
 func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]SubscriptionItem, bool) {
@@ -134,11 +182,21 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 				item.Limit5H.Available = item.Limit5H.Total
 				changed = true
 			}
+			newResetAt := advanceResetAt(item.Limit5H.ResetAt, nowSec, 5*60*60)
+			if newResetAt != item.Limit5H.ResetAt {
+				item.Limit5H.ResetAt = newResetAt
+				changed = true
+			}
 		}
 		now7d := nowInSameUnit(item.Limit7D.ResetAt, nowSec)
 		if now7d > item.Limit7D.ResetAt {
 			if item.Limit7D.Available != item.Limit7D.Total {
 				item.Limit7D.Available = item.Limit7D.Total
+				changed = true
+			}
+			newResetAt := advanceResetAt(item.Limit7D.ResetAt, nowSec, 7*24*60*60)
+			if newResetAt != item.Limit7D.ResetAt {
+				item.Limit7D.ResetAt = newResetAt
 				changed = true
 			}
 		}
@@ -147,14 +205,76 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 	return pruned, changed || len(pruned) != len(items)
 }
 
-// ConsumeUserSubscriptionQuota deducts quota from the first usable subscription item.
-// It only updates users.subscription_data.
-func ConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) error {
+func consumeSubscriptionQuotaFromFirstUsableItem(items []SubscriptionItem, nowSec int64, amount int64) ([]SubscriptionItem, string, bool) {
+	for i := range items {
+		if !isUsableSubscriptionItem(items[i], nowSec) {
+			continue
+		}
+		items[i].Limit5H.Available -= amount
+		items[i].Limit7D.Available -= amount
+		return items, encodeSubscriptionSelectionToken(items[i], i), true
+	}
+	return items, "", false
+}
+
+// PreConsumeUserSubscriptionQuota deducts quota from the first usable subscription item and
+// returns a selection token for later adjustment/refund. It only updates users.subscription_data.
+func PreConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) (string, error) {
+	if userID <= 0 {
+		return "", fmt.Errorf("invalid userID: %d", userID)
+	}
+	var selectionToken string
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		err := tx.
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id", "subscription_data").
+			Where("id = ?", userID).
+			First(&user).Error
+		if err != nil {
+			return err
+		}
+
+		items, err := parseSubscriptionData(user.SubscriptionData)
+		if err != nil {
+			return err
+		}
+		updated, changed := resetAndPruneSubscriptionData(items, nowSec)
+		items = updated
+
+		items, token, ok := consumeSubscriptionQuotaFromFirstUsableItem(items, nowSec, amount)
+		if !ok {
+			return ErrSubscriptionQuotaExhausted
+		}
+		selectionToken = token
+
+		raw, err := marshalSubscriptionData(items)
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Model(&User{}).
+			Where("id = ?", userID).
+			Update("subscription_data", raw).Error; err != nil {
+			return err
+		}
+		_ = changed
+		return nil
+	})
+	return selectionToken, err
+}
+
+// AdjustUserSubscriptionQuotaBySelectionToken applies additional consumption/refund to the previously selected subscription.
+// Positive delta means extra consume; negative delta means refund. It only updates users.subscription_data.
+func AdjustUserSubscriptionQuotaBySelectionToken(userID int, selectionToken string, delta int64) error {
 	if userID <= 0 {
 		return fmt.Errorf("invalid userID: %d", userID)
 	}
-	if amount <= 0 {
-		return fmt.Errorf("invalid amount: %d", amount)
+	if selectionToken == "" {
+		return fmt.Errorf("empty selectionToken")
+	}
+	if delta == 0 {
+		return nil
 	}
 
 	return DB.Transaction(func(tx *gorm.DB) error {
@@ -173,12 +293,15 @@ func ConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) error 
 			return err
 		}
 
-		updated, ok := consumeFirstUsableSubscriptionItem(items, nowSec, amount)
+		idx, ok := findSubscriptionItemIndexByToken(items, selectionToken)
 		if !ok {
-			return ErrSubscriptionQuotaExhausted
+			return fmt.Errorf("subscription item not found for token: %s", selectionToken)
 		}
 
-		raw, err := marshalSubscriptionData(updated)
+		items[idx].Limit5H.Available -= delta
+		items[idx].Limit7D.Available -= delta
+
+		raw, err := marshalSubscriptionData(items)
 		if err != nil {
 			return err
 		}
