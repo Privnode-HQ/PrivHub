@@ -144,6 +144,57 @@ type SubscriptionItem struct {
 	Status         string               `json:"status"`
 }
 
+// SubscriptionData is stored in users.subscription_data.
+//
+// Legacy format: a JSON array of SubscriptionItem.
+// Current format: {"items": [...], "last_reset_at": <unix seconds>}.
+type SubscriptionData struct {
+	Items       []SubscriptionItem `json:"items"`
+	LastResetAt int64              `json:"last_reset_at"`
+}
+
+func (d *SubscriptionData) UnmarshalJSON(b []byte) error {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+		d.Items = []SubscriptionItem{}
+		d.LastResetAt = 0
+		return nil
+	}
+
+	// Legacy array format.
+	if len(b) > 0 && b[0] == '[' {
+		var items []SubscriptionItem
+		if err := common.Unmarshal(b, &items); err != nil {
+			return err
+		}
+		if items == nil {
+			items = []SubscriptionItem{}
+		}
+		d.Items = items
+		d.LastResetAt = 0
+		return nil
+	}
+
+	type rawData struct {
+		Items       []SubscriptionItem `json:"items"`
+		LastResetAt json.RawMessage    `json:"last_reset_at"`
+	}
+	var raw rawData
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	lastResetAt, err := unmarshalFlexibleInt64(raw.LastResetAt)
+	if err != nil {
+		return fmt.Errorf("invalid last_reset_at: %w", err)
+	}
+	if raw.Items == nil {
+		raw.Items = []SubscriptionItem{}
+	}
+	d.Items = raw.Items
+	d.LastResetAt = lastResetAt
+	return nil
+}
+
 const subscriptionSelectionPrefixFingerprint = "fp:"
 
 func subscriptionItemFingerprint(item SubscriptionItem) string {
@@ -210,26 +261,31 @@ func findSubscriptionItemIndexByToken(items []SubscriptionItem, token string) (i
 	return -1, false
 }
 
-func parseSubscriptionData(raw string) ([]SubscriptionItem, error) {
+func parseSubscriptionData(raw string) (SubscriptionData, bool, error) {
 	if raw == "" || raw == "null" {
-		return []SubscriptionItem{}, nil
+		return SubscriptionData{Items: []SubscriptionItem{}}, false, nil
 	}
-	var items []SubscriptionItem
-	if err := common.Unmarshal([]byte(raw), &items); err != nil {
-		return nil, err
+	trimmed := strings.TrimSpace(raw)
+	legacy := strings.HasPrefix(trimmed, "[")
+	var data SubscriptionData
+	if err := common.Unmarshal([]byte(raw), &data); err != nil {
+		return SubscriptionData{}, legacy, err
 	}
-	if items == nil {
-		items = []SubscriptionItem{}
+	if data.Items == nil {
+		data.Items = []SubscriptionItem{}
 	}
-	return items, nil
+	return data, legacy, nil
 }
 
-func marshalSubscriptionData(items []SubscriptionItem) (string, error) {
-	data, err := common.Marshal(items)
+func marshalSubscriptionData(data SubscriptionData) (string, error) {
+	if data.Items == nil {
+		data.Items = []SubscriptionItem{}
+	}
+	payload, err := common.Marshal(data)
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+	return string(payload), nil
 }
 
 func nowInSameUnit(referenceTimestamp int64, nowSec int64) int64 {
@@ -298,13 +354,18 @@ func advanceResetAt(resetAt int64, nowSec int64, intervalSec int64) int64 {
 	return resetAt + periods*interval
 }
 
-func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]SubscriptionItem, bool) {
-	if len(items) == 0 {
-		return items, false
+func resetAndPruneSubscriptionData(data SubscriptionData, nowSec int64) (SubscriptionData, bool) {
+	if len(data.Items) == 0 {
+		if data.Items == nil {
+			data.Items = []SubscriptionItem{}
+		}
+		return data, false
 	}
+	originalLen := len(data.Items)
 	changed := false
-	pruned := make([]SubscriptionItem, 0, len(items))
-	for _, item := range items {
+	resetOccurred := false
+	pruned := make([]SubscriptionItem, 0, len(data.Items))
+	for _, item := range data.Items {
 		if item.Status != "deployed" {
 			changed = true
 			continue
@@ -312,6 +373,7 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 
 		now5h := nowInSameUnit(item.Limit5H.ResetAt, nowSec)
 		if now5h > item.Limit5H.ResetAt {
+			resetOccurred = true
 			if item.Limit5H.Available != item.Limit5H.Total {
 				item.Limit5H.Available = item.Limit5H.Total
 				changed = true
@@ -324,6 +386,7 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 		}
 		now7d := nowInSameUnit(item.Limit7D.ResetAt, nowSec)
 		if now7d > item.Limit7D.ResetAt {
+			resetOccurred = true
 			if item.Limit7D.Available != item.Limit7D.Total {
 				item.Limit7D.Available = item.Limit7D.Total
 				changed = true
@@ -336,7 +399,12 @@ func resetAndPruneSubscriptionData(items []SubscriptionItem, nowSec int64) ([]Su
 		}
 		pruned = append(pruned, item)
 	}
-	return pruned, changed || len(pruned) != len(items)
+	data.Items = pruned
+	if resetOccurred {
+		data.LastResetAt = nowSec
+		changed = true
+	}
+	return data, changed || len(pruned) != originalLen
 }
 
 func consumeSubscriptionQuotaFromFirstUsableItem(items []SubscriptionItem, nowSec int64, amount int64) ([]SubscriptionItem, string, bool) {
@@ -377,31 +445,31 @@ func PreConsumeUserSubscriptionQuota(userID int, nowSec int64, amount int64) (st
 			return err
 		}
 
-		items, err := parseSubscriptionData(user.SubscriptionData)
+		data, legacy, err := parseSubscriptionData(user.SubscriptionData)
 		if err != nil {
 			return err
 		}
-		updated, changed := resetAndPruneSubscriptionData(items, nowSec)
-		items = updated
+		updated, changed := resetAndPruneSubscriptionData(data, nowSec)
+		data = updated
 
-		items, token, ok := consumeSubscriptionQuotaFromFirstUsableItem(items, nowSec, amount)
+		items, token, ok := consumeSubscriptionQuotaFromFirstUsableItem(data.Items, nowSec, amount)
 		if !ok {
 			return ErrSubscriptionQuotaExhausted
 		}
 		selectionToken = token
+		data.Items = items
 
-		raw, err := marshalSubscriptionData(items)
+		raw, err := marshalSubscriptionData(data)
 		if err != nil {
 			return err
 		}
-		if changed || amount > 0 {
+		if legacy || changed || amount > 0 {
 			if err := tx.Model(&User{}).
 				Where("id = ?", userID).
 				Update("subscription_data", raw).Error; err != nil {
 				return err
 			}
 		}
-		_ = changed
 		return nil
 	})
 	return selectionToken, err
@@ -431,10 +499,11 @@ func AdjustUserSubscriptionQuotaBySelectionToken(userID int, selectionToken stri
 			return err
 		}
 
-		items, err := parseSubscriptionData(user.SubscriptionData)
+		data, _, err := parseSubscriptionData(user.SubscriptionData)
 		if err != nil {
 			return err
 		}
+		items := data.Items
 
 		idx, ok := findSubscriptionItemIndexByToken(items, selectionToken)
 		if !ok {
@@ -459,7 +528,8 @@ func AdjustUserSubscriptionQuotaBySelectionToken(userID int, selectionToken stri
 		items[idx].Limit5H.Available = new5h
 		items[idx].Limit7D.Available = new7d
 
-		raw, err := marshalSubscriptionData(items)
+		data.Items = items
+		raw, err := marshalSubscriptionData(data)
 		if err != nil {
 			return err
 		}
@@ -494,13 +564,13 @@ func ResetSubscriptionQuotaForAllUsers(nowSec int64) error {
 				common.SysLog(fmt.Sprintf("failed to load subscription_data for user %d: %v", userID, err))
 				return nil
 			}
-			items, err := parseSubscriptionData(user.SubscriptionData)
+			data, legacy, err := parseSubscriptionData(user.SubscriptionData)
 			if err != nil {
 				common.SysLog(fmt.Sprintf("failed to parse subscription_data for user %d: %v", userID, err))
 				return nil
 			}
-			updated, changed := resetAndPruneSubscriptionData(items, nowSec)
-			if !changed {
+			updated, changed := resetAndPruneSubscriptionData(data, nowSec)
+			if !legacy && !changed {
 				return nil
 			}
 			raw, err := marshalSubscriptionData(updated)
