@@ -95,27 +95,30 @@ func TestResetAndPruneSubscriptionData_PruneNonDeployedAndReset(t *testing.T) {
 		},
 	}
 
-	updated, changed := resetAndPruneSubscriptionData(items, now)
+	updated, changed := resetAndPruneSubscriptionData(SubscriptionData{Items: items}, now)
 	if !changed {
 		t.Fatalf("expected changed=true")
 	}
-	if len(updated) != 2 {
-		t.Fatalf("expected only deployed items kept, got len=%d", len(updated))
+	if len(updated.Items) != 2 {
+		t.Fatalf("expected only deployed items kept, got len=%d", len(updated.Items))
 	}
-	if updated[0].Limit5H.Available != 10 || updated[0].Limit7D.Available != 20 {
-		t.Fatalf("expected first deployed item reset to total, got %+v", updated[0])
+	if updated.LastResetAt != now {
+		t.Fatalf("expected last_reset_at=%d, got %d", now, updated.LastResetAt)
 	}
-	if updated[0].Limit5H.ResetAt <= now || updated[0].Limit7D.ResetAt <= now {
-		t.Fatalf("expected reset_at to advance beyond now, got %+v", updated[0])
+	if updated.Items[0].Limit5H.Available != 10 || updated.Items[0].Limit7D.Available != 20 {
+		t.Fatalf("expected first deployed item reset to total, got %+v", updated.Items[0])
 	}
-	if updated[1].Limit5H.Available != 10 || updated[1].Limit7D.Available != 20 {
-		t.Fatalf("expected reset even when reset_at=0, got %+v", updated[1])
+	if updated.Items[0].Limit5H.ResetAt <= now || updated.Items[0].Limit7D.ResetAt <= now {
+		t.Fatalf("expected reset_at to advance beyond now, got %+v", updated.Items[0])
 	}
-	if updated[1].Limit5H.ResetAt != now+5*60*60 {
-		t.Fatalf("expected 5h reset_at=%d, got %d", now+5*60*60, updated[1].Limit5H.ResetAt)
+	if updated.Items[1].Limit5H.Available != 10 || updated.Items[1].Limit7D.Available != 20 {
+		t.Fatalf("expected reset even when reset_at=0, got %+v", updated.Items[1])
 	}
-	if updated[1].Limit7D.ResetAt != now+7*24*60*60 {
-		t.Fatalf("expected 7d reset_at=%d, got %d", now+7*24*60*60, updated[1].Limit7D.ResetAt)
+	if updated.Items[1].Limit5H.ResetAt != now+5*60*60 {
+		t.Fatalf("expected 5h reset_at=%d, got %d", now+5*60*60, updated.Items[1].Limit5H.ResetAt)
+	}
+	if updated.Items[1].Limit7D.ResetAt != now+7*24*60*60 {
+		t.Fatalf("expected 7d reset_at=%d, got %d", now+7*24*60*60, updated.Items[1].Limit7D.ResetAt)
 	}
 }
 
@@ -148,17 +151,40 @@ func TestParseSubscriptionData_AllowsStringTimestampsAndQuotas(t *testing.T) {
 		}
 	]`
 
-	items, err := parseSubscriptionData(raw)
+	data, legacy, err := parseSubscriptionData(raw)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("expected 1 item, got %d", len(items))
+	if !legacy {
+		t.Fatalf("expected legacy=true for array format")
 	}
-	if items[0].Duration.EndAt != 1700003600 {
-		t.Fatalf("expected EndAt=1700003600, got %d", items[0].Duration.EndAt)
+	if len(data.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(data.Items))
 	}
-	if items[0].Limit5H.Total != 10 || items[0].Limit5H.Available != 9 || items[0].Limit5H.ResetAt != 1700000000 {
-		t.Fatalf("unexpected 5h_limit: %+v", items[0].Limit5H)
+	if data.Items[0].Duration.EndAt != 1700003600 {
+		t.Fatalf("expected EndAt=1700003600, got %d", data.Items[0].Duration.EndAt)
+	}
+	if data.Items[0].Limit5H.Total != 10 || data.Items[0].Limit5H.Available != 9 || data.Items[0].Limit5H.ResetAt != 1700000000 {
+		t.Fatalf("unexpected 5h_limit: %+v", data.Items[0].Limit5H)
+	}
+	if data.LastResetAt != 0 {
+		t.Fatalf("expected last_reset_at default 0 for legacy data, got %d", data.LastResetAt)
+	}
+}
+
+func TestParseSubscriptionData_ObjectFormatWithLastResetAt(t *testing.T) {
+	raw := `{"items": [{"status": "deployed"}], "last_reset_at": "1700001234"}`
+	data, legacy, err := parseSubscriptionData(raw)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if legacy {
+		t.Fatalf("expected legacy=false for object format")
+	}
+	if len(data.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(data.Items))
+	}
+	if data.LastResetAt != 1700001234 {
+		t.Fatalf("expected last_reset_at=1700001234, got %d", data.LastResetAt)
 	}
 }
