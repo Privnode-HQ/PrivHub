@@ -9,6 +9,24 @@ import (
 
 const affRebateMinMoney = 30.0
 
+// affSpecialInviterRebateRates defines overrides for inviter rebate rates.
+// If the invitee's inviter matches one of these IDs, the inviter earns the fixed rate on every eligible top-up,
+// independent of purchase-count tiers.
+var affSpecialInviterRebateRates = map[int]float64{
+	20635: 0.10,
+}
+
+func getAffSpecialRebateRate(inviterId int) (float64, bool) {
+	rate, ok := affSpecialInviterRebateRates[inviterId]
+	if !ok {
+		return 0, false
+	}
+	if rate <= 0 || rate > 1 {
+		return 0, false
+	}
+	return rate, true
+}
+
 var affRebateTiers = []struct {
 	maxPurchase int
 	rate        float64
@@ -52,7 +70,7 @@ type AffRebateResult struct {
 // ApplyAffRebateTx adds inviter rewards when an invitee completes an eligible top-up.
 // The logic needs to run within the caller's transaction to avoid crediting rebates when top-ups fail.
 func ApplyAffRebateTx(tx *gorm.DB, inviteeId int, topUpId int, quotaAdded int64, payMoney float64) (*AffRebateResult, error) {
-	if quotaAdded <= 0 || payMoney < affRebateMinMoney {
+	if quotaAdded <= 0 {
 		return nil, nil
 	}
 	if tx == nil {
@@ -76,14 +94,29 @@ func ApplyAffRebateTx(tx *gorm.DB, inviteeId int, topUpId int, quotaAdded int64,
 		return nil, nil
 	}
 
-	var purchaseCount int64
-	if err := tx.Model(&TopUp{}).
-		Where("user_id = ? AND status = ? AND money >= ?", invitee.Id, common.TopUpStatusSuccess, affRebateMinMoney).
-		Count(&purchaseCount).Error; err != nil {
-		return nil, err
+	specialRate, isSpecial := getAffSpecialRebateRate(invitee.InviterId)
+	if !isSpecial && payMoney < affRebateMinMoney {
+		return nil, nil
 	}
-	// purchaseCount is post-increment: the current successful top-up is already persisted before this query.
-	rate := getAffRebateRate(int(purchaseCount))
+
+	var purchaseCount int64
+	var rate float64
+	if isSpecial {
+		if err := tx.Model(&TopUp{}).
+			Where("user_id = ? AND status = ?", invitee.Id, common.TopUpStatusSuccess).
+			Count(&purchaseCount).Error; err != nil {
+			return nil, err
+		}
+		rate = specialRate
+	} else {
+		if err := tx.Model(&TopUp{}).
+			Where("user_id = ? AND status = ? AND money >= ?", invitee.Id, common.TopUpStatusSuccess, affRebateMinMoney).
+			Count(&purchaseCount).Error; err != nil {
+			return nil, err
+		}
+		// purchaseCount is post-increment: the current successful top-up is already persisted before this query.
+		rate = getAffRebateRate(int(purchaseCount))
+	}
 	if rate <= 0 {
 		return nil, nil
 	}
