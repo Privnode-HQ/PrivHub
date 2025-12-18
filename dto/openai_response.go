@@ -235,6 +235,9 @@ type Usage struct {
 	ClaudeCacheCreation5mTokens int `json:"claude_cache_creation_5_m_tokens"`
 	ClaudeCacheCreation1hTokens int `json:"claude_cache_creation_1_h_tokens"`
 
+	// cache creation billing skipped
+	CacheCreationBillingSkipped bool `json:"-"`
+
 	// OpenRouter Params
 	Cost any `json:"cost,omitempty"`
 }
