@@ -731,7 +731,8 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 						claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreationInputTokens
 						claudeResponse.Message.Usage.CacheCreationInputTokens = 0
 						if claudeResponse.Message.Usage.CacheCreation != nil {
-							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.InputTokens
+							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.Ephemeral5mInputTokens
+							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.Ephemeral1hInputTokens
 							claudeResponse.Message.Usage.CacheCreation = nil
 						}
 					}
@@ -743,7 +744,8 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 					claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
 					claudeResponse.Usage.CacheCreationInputTokens = 0
 					if claudeResponse.Usage.CacheCreation != nil {
-						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.InputTokens
+						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
 						claudeResponse.Usage.CacheCreation = nil
 					}
 				}
@@ -868,7 +870,8 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
 			claudeResponse.Usage.CacheCreationInputTokens = 0
 			if claudeResponse.Usage.CacheCreation != nil {
-				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.InputTokens
+				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
+				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
 				claudeResponse.Usage.CacheCreation = nil
 			}
 		}
