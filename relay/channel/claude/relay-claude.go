@@ -609,6 +609,45 @@ func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *C
 	transferCacheCreationTokensToHits(claudeInfo.Usage)
 }
 
+// foldCacheCreationIntoRead is an idempotent helper that converts cache creation tokens
+// into cache read tokens when cache_creation_billing_skipped is true.
+//
+// Per Anthropic Messages API specification:
+// - cache_creation_input_tokens equals cache_creation.ephemeral_5m + ephemeral_1h
+// - These are parent-child relationship, NOT independent fields
+// - Must only count once, prioritizing the detailed breakdown when available
+//
+// This function is safe to call multiple times (idempotent).
+func foldCacheCreationIntoRead(usage *dto.ClaudeUsage) {
+	if usage == nil {
+		return
+	}
+
+	// Check if already folded (idempotency check)
+	if usage.CacheCreationInputTokens == 0 && usage.CacheCreation == nil {
+		return
+	}
+
+	// Calculate tokens to transfer (choose ONE source only)
+	var tokensToTransfer int
+
+	// Priority 1: Use detailed breakdown from cache_creation object
+	if usage.CacheCreation != nil {
+		tokensToTransfer = usage.CacheCreation.Ephemeral5mInputTokens + usage.CacheCreation.Ephemeral1hInputTokens
+		// Clear the source to prevent double counting
+		usage.CacheCreation = nil
+	} else if usage.CacheCreationInputTokens > 0 {
+		// Priority 2: Fallback to aggregate field
+		tokensToTransfer = usage.CacheCreationInputTokens
+	}
+
+	// Transfer to cache read (treating creation as hit)
+	if tokensToTransfer > 0 {
+		usage.CacheReadInputTokens += tokensToTransfer
+		usage.CacheCreationInputTokens = 0
+	}
+}
+
 func transferCacheCreationTokensToHits(usage *dto.Usage) {
 	if usage == nil {
 		return
@@ -726,28 +765,18 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 				// message_start, 获取usage
 				info.UpstreamModelName = claudeResponse.Message.Model
 				// Apply cache creation billing skipped for message_start
+				// Per Anthropic API spec: avoid double-counting cache_creation tokens
 				if claudeResponse.Message != nil && claudeResponse.Message.Usage != nil {
 					if claudeResponse.Message.Usage.ShouldTreatCacheCreationAsHit() {
-						claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreationInputTokens
-						claudeResponse.Message.Usage.CacheCreationInputTokens = 0
-						if claudeResponse.Message.Usage.CacheCreation != nil {
-							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.Ephemeral5mInputTokens
-							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.Ephemeral1hInputTokens
-							claudeResponse.Message.Usage.CacheCreation = nil
-						}
+						foldCacheCreationIntoRead(claudeResponse.Message.Usage)
 					}
 				}
 			} else if claudeResponse.Type == "content_block_delta" {
 			} else if claudeResponse.Type == "message_delta" {
 				// Apply cache creation billing skipped for message_delta
+				// Per Anthropic API spec: avoid double-counting cache_creation tokens
 				if claudeResponse.Usage != nil && claudeResponse.Usage.ShouldTreatCacheCreationAsHit() {
-					claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
-					claudeResponse.Usage.CacheCreationInputTokens = 0
-					if claudeResponse.Usage.CacheCreation != nil {
-						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
-						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
-						claudeResponse.Usage.CacheCreation = nil
-					}
+					foldCacheCreationIntoRead(claudeResponse.Usage)
 				}
 			}
 		}
@@ -866,14 +895,9 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		}
 	case types.RelayFormatClaude:
 		// Apply cache creation billing skipped to Claude response
+		// Per Anthropic API spec: must not double-count cache_creation tokens
 		if claudeInfo.CacheCreationBillingSkipped {
-			claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
-			claudeResponse.Usage.CacheCreationInputTokens = 0
-			if claudeResponse.Usage.CacheCreation != nil {
-				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral5mInputTokens
-				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.Ephemeral1hInputTokens
-				claudeResponse.Usage.CacheCreation = nil
-			}
+			foldCacheCreationIntoRead(claudeResponse.Usage)
 		}
 		responseData, err = json.Marshal(claudeResponse)
 		if err != nil {
