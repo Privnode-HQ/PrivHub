@@ -606,6 +606,7 @@ func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *C
 	if !isMessagesEndpoint(info.RequestURLPath) {
 		return
 	}
+	claudeInfo.Usage.CacheCreationBillingSkipped = true
 	transferCacheCreationTokensToHits(claudeInfo.Usage)
 }
 
