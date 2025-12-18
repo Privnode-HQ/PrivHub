@@ -725,11 +725,38 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			if claudeResponse.Type == "message_start" {
 				// message_start, 获取usage
 				info.UpstreamModelName = claudeResponse.Message.Model
+				// Apply cache creation billing skipped for message_start
+				if claudeResponse.Message != nil && claudeResponse.Message.Usage != nil {
+					if claudeResponse.Message.Usage.ShouldTreatCacheCreationAsHit() {
+						claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreationInputTokens
+						claudeResponse.Message.Usage.CacheCreationInputTokens = 0
+						if claudeResponse.Message.Usage.CacheCreation != nil {
+							claudeResponse.Message.Usage.CacheReadInputTokens += claudeResponse.Message.Usage.CacheCreation.InputTokens
+							claudeResponse.Message.Usage.CacheCreation = nil
+						}
+					}
+				}
 			} else if claudeResponse.Type == "content_block_delta" {
 			} else if claudeResponse.Type == "message_delta" {
+				// Apply cache creation billing skipped for message_delta
+				if claudeResponse.Usage != nil && claudeResponse.Usage.ShouldTreatCacheCreationAsHit() {
+					claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
+					claudeResponse.Usage.CacheCreationInputTokens = 0
+					if claudeResponse.Usage.CacheCreation != nil {
+						claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.InputTokens
+						claudeResponse.Usage.CacheCreation = nil
+					}
+				}
 			}
 		}
-		helper.ClaudeChunkData(c, claudeResponse, data)
+		// Re-marshal the modified response
+		modifiedData, err := json.Marshal(claudeResponse)
+		if err != nil {
+			logger.LogError(c, "error marshalling modified claude response: "+err.Error())
+			helper.ClaudeChunkData(c, claudeResponse, data)
+		} else {
+			helper.ClaudeChunkData(c, claudeResponse, string(modifiedData))
+		}
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
 		response := StreamResponseClaude2OpenAI(requestMode, &claudeResponse)
 
@@ -836,7 +863,19 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			return types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 	case types.RelayFormatClaude:
-		responseData = data
+		// Apply cache creation billing skipped to Claude response
+		if claudeInfo.CacheCreationBillingSkipped {
+			claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreationInputTokens
+			claudeResponse.Usage.CacheCreationInputTokens = 0
+			if claudeResponse.Usage.CacheCreation != nil {
+				claudeResponse.Usage.CacheReadInputTokens += claudeResponse.Usage.CacheCreation.InputTokens
+				claudeResponse.Usage.CacheCreation = nil
+			}
+		}
+		responseData, err = json.Marshal(claudeResponse)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
 	}
 
 	if claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {
