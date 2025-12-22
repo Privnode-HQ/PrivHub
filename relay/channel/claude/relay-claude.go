@@ -600,12 +600,29 @@ func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *C
 	if info == nil || claudeInfo == nil || claudeInfo.Usage == nil {
 		return
 	}
-	if !claudeInfo.CacheCreationBillingSkipped {
-		return
-	}
+
+	// 检查是否是 /v1/messages 端点
 	if !isMessagesEndpoint(info.RequestURLPath) {
 		return
 	}
+
+	// 检查渠道名称中是否配置了缓存创建跳过阈值
+	shouldSkipByThreshold := false
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelName != "" {
+		if threshold, hasThreshold := parseCacheCreationSkipThreshold(info.ChannelMeta.ChannelName); hasThreshold {
+			if shouldSkipCacheCreationByThreshold(claudeInfo.Usage, threshold) {
+				shouldSkipByThreshold = true
+				claudeInfo.CacheCreationBillingSkipped = true
+			}
+		}
+	}
+
+	// 如果 Claude API 已经标记为跳过，或者自定义阈值检查通过，则应用跳过逻辑
+	if !claudeInfo.CacheCreationBillingSkipped && !shouldSkipByThreshold {
+		return
+	}
+
+	// 设置使用标志并转移 tokens
 	claudeInfo.Usage.CacheCreationBillingSkipped = true
 	transferCacheCreationTokensToHits(claudeInfo.Usage)
 }
@@ -687,6 +704,56 @@ func isMessagesEndpoint(requestPath string) bool {
 		trimmed = "/"
 	}
 	return strings.HasSuffix(trimmed, "/v1/messages")
+}
+
+// parseCacheCreationSkipThreshold 解析渠道名称中的缓存创建跳过阈值
+// 如果渠道名称包含 "cache-creation-skip_数字" 格式，则返回阈值和 true
+// 例如：渠道名称 "my-channel-cache-creation-skip_1024" 返回 (1024, true)
+func parseCacheCreationSkipThreshold(channelName string) (int, bool) {
+	if channelName == "" {
+		return 0, false
+	}
+	// 查找 "cache-creation-skip_" 模式
+	pattern := "cache-creation-skip_"
+	idx := strings.Index(channelName, pattern)
+	if idx == -1 {
+		return 0, false
+	}
+	// 提取数字部分
+	start := idx + len(pattern)
+	if start >= len(channelName) {
+		return 0, false
+	}
+	// 找到数字的结束位置（遇到非数字字符或字符串结尾）
+	end := start
+	for end < len(channelName) && channelName[end] >= '0' && channelName[end] <= '9' {
+		end++
+	}
+	if end == start {
+		return 0, false
+	}
+	// 解析数字
+	thresholdStr := channelName[start:end]
+	var threshold int
+	_, err := fmt.Sscanf(thresholdStr, "%d", &threshold)
+	if err != nil {
+		return 0, false
+	}
+	return threshold, true
+}
+
+// shouldSkipCacheCreationByThreshold 检查缓存创建 tokens 是否超过阈值
+// 如果超过阈值，返回 true 表示应该跳过缓存创建计费
+func shouldSkipCacheCreationByThreshold(usage *dto.Usage, threshold int) bool {
+	if usage == nil || threshold <= 0 {
+		return false
+	}
+	// 计算总的缓存创建 tokens
+	totalCacheCreationTokens := usage.PromptTokensDetails.CachedCreationTokens
+	if totalCacheCreationTokens == 0 {
+		totalCacheCreationTokens = usage.ClaudeCacheCreation5mTokens + usage.ClaudeCacheCreation1hTokens
+	}
+	return totalCacheCreationTokens > threshold
 }
 
 func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeResponse, oaiResponse *dto.ChatCompletionsStreamResponse, claudeInfo *ClaudeResponseInfo) bool {
