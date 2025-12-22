@@ -606,6 +606,11 @@ func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *C
 		return
 	}
 
+	// 如果已经处理过，避免重复执行
+	if claudeInfo.Usage.CacheCreationBillingSkipped {
+		return
+	}
+
 	// 检查渠道名称中是否配置了缓存创建跳过阈值
 	shouldSkipByThreshold := false
 	if info.ChannelMeta != nil && info.ChannelMeta.ChannelName != "" {
@@ -622,7 +627,7 @@ func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *C
 		return
 	}
 
-	// 设置使用标志并转移 tokens
+	// 设置使用标志并转移 tokens（只执行一次）
 	claudeInfo.Usage.CacheCreationBillingSkipped = true
 	transferCacheCreationTokensToHits(claudeInfo.Usage)
 }
