@@ -95,6 +95,7 @@ export default function SettingsSidebarModulesUser() {
         enabled: true,
         topup: isSidebarModuleAllowed('personal', 'topup'),
         personal: isSidebarModuleAllowed('personal', 'personal'),
+        support: isSidebarModuleAllowed('personal', 'support'),
       };
     }
 
@@ -312,6 +313,11 @@ export default function SettingsSidebarModulesUser() {
           key: 'personal',
           title: t('个人设置'),
           description: t('个人信息设置'),
+        },
+        {
+          key: 'support',
+          title: t('联系支持'),
+          description: t('获取技术支持'),
         },
       ],
     },
