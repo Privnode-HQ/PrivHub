@@ -120,9 +120,30 @@ func SSOApprove(c *gin.Context) {
 		return
 	}
 
-	// AccessToken 可能为 nil，需要检查
+	// AccessToken 可能为 nil，需要自动生成
 	authtk := ""
 	if user.AccessToken != nil {
+		authtk = *user.AccessToken
+	} else {
+		// 自动生成 AccessToken
+		randI := common.GetRandomInt(4)
+		key, err := common.GenerateRandomKey(29 + randI)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": "生成访问令牌失败",
+			})
+			return
+		}
+		user.SetAccessToken(key)
+		err = user.Update(false)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": "保存访问令牌失败",
+			})
+			return
+		}
 		authtk = *user.AccessToken
 	}
 
