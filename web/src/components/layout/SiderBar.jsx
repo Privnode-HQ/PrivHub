@@ -47,6 +47,7 @@ const routerMap = {
   models: '/console/models',
   playground: '/console/playground',
   personal: '/console/personal',
+  support: '//support.privnode.com',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
@@ -131,6 +132,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('个人设置'),
         itemKey: 'personal',
         to: '/personal',
+      },
+      {
+        text: t('联系支持'),
+        itemKey: 'support',
+        to: '/support',
+        isExternal: true,
       },
     ];
 
@@ -402,6 +409,21 @@ const SiderBar = ({ onNavigate = () => {} }) => {
 
             // 如果没有路由，直接返回元素
             if (!to) return itemElement;
+
+            // 检查是否为外部链接（以//开头）
+            if (to.startsWith('//') || to.startsWith('http://') || to.startsWith('https://')) {
+              return (
+                <a
+                  href={to}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: 'none' }}
+                  onClick={onNavigate}
+                >
+                  {itemElement}
+                </a>
+              );
+            }
 
             return (
               <Link
