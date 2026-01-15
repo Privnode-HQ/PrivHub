@@ -48,6 +48,7 @@ import PersonalSetting from './components/settings/PersonalSetting';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 import ReferralRedirect from './pages/Referral';
+import SSOAuthorize from './pages/SSOAuthorize';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -334,6 +335,16 @@ function App() {
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
               <Chat />
             </Suspense>
+          }
+        />
+        <Route
+          path='/sso-beta/authorize'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <SSOAuthorize />
+              </Suspense>
+            </PrivateRoute>
           }
         />
         {/* 方便使用chat2link直接跳转聊天... */}

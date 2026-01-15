@@ -257,5 +257,12 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.PUT("/", controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)
 		}
+
+		// SSO API routes
+		ssoRoute := apiRouter.Group("/sso-beta")
+		{
+			ssoRoute.POST("/approve", middleware.UserAuth(), controller.SSOApprove)
+			ssoRoute.POST("/cancel", controller.SSOCancel)
+		}
 	}
 }
