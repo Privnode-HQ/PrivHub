@@ -158,6 +158,26 @@ if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 3. **HTTPS**: 生产环境必须使用 HTTPS 传输
 4. **密钥管理**: `SSO_JWT_SECRET` 应该是强随机字符串，妥善保管
 5. **协议和客户端验证**: 系统会验证 `protocol` 和 `client_id` 参数
+6. **Session Cookie 配置**: 系统使用 `SameSite=Lax` 模式，允许跨站链接跳转时发送 Cookie（SSO 必需）
+
+## 重要配置说明
+
+### Session Cookie SameSite 策略
+
+为了支持 SSO 跨站授权流程，系统的 Session Cookie 已配置为 `SameSite=Lax` 模式（在 `main.go:154`）。
+
+**SameSite 模式对比：**
+
+| 模式 | 跨站链接跳转 | SSO 支持 | 安全性 |
+|------|------------|---------|--------|
+| `Strict` | ❌ 不发送 Cookie | ❌ 无法使用 | 最高 |
+| `Lax` | ✅ 发送 Cookie | ✅ 正常工作 | 高 |
+| `None` | ✅ 发送 Cookie | ✅ 正常工作 | 中（需要 HTTPS）|
+
+**为什么需要 Lax 模式？**
+- 当用户从第三方应用（如 `example.com`）点击链接跳转到 SSO 入口时，浏览器需要发送 Session Cookie 来验证登录状态
+- `Strict` 模式会完全阻止跨站请求发送 Cookie，导致已登录用户也被认为未登录
+- `Lax` 模式在保持较高安全性的同时，允许顶级导航（链接跳转）发送 Cookie
 
 ## 测试示例
 
@@ -183,6 +203,65 @@ http://localhost:3000/sso-beta/v1?protocol=i0&client_id=ticket-v1&nonce=test123&
 - 无效的客户端 ID：`{"success": false, "message": "无效的客户端ID"}`
 - 未登录（API 调用）：`{"success": false, "message": "未登录"}`
 - 生成 token 失败：`{"success": false, "message": "生成 token 失败"}`
+
+## 常见问题排查
+
+### 问题 1: 已登录用户通过链接跳转仍被要求登录 🔥
+
+**症状：**
+- ✅ 直接访问 SSO URL 正常，能看到授权页面
+- ❌ 从其他网站链接跳转到 SSO URL 时，已登录用户被重定向到登录页
+- 浏览器 Network 显示 302 重定向
+
+**原因：**
+Session Cookie 的 `SameSite` 设置为 `Strict` 模式，浏览器在跨站链接跳转时不发送 Cookie
+
+**解决方案：**
+✅ **已修复**：系统已将 `main.go:154` 中的 Session 配置改为 `SameSiteLaxMode`
+
+验证配置：
+```go
+// main.go
+store.Options(sessions.Options{
+    SameSite: http.SameSiteLaxMode, // ✅ 正确配置
+    // SameSite: http.SameSiteStrictMode, // ❌ 错误配置
+})
+```
+
+**重启应用后生效**
+
+### 问题 2: 缺少必需参数
+
+**症状：**
+浏览器收到 JSON 错误响应：
+```json
+{"success": false, "message": "缺少必需参数"}
+```
+
+**原因：**
+SSO URL 缺少必需的查询参数
+
+**解决方案：**
+确保 URL 包含所有必需参数：
+```
+✅ 正确：https://example.com/sso-beta/v1?protocol=i0&client_id=ticket-v1&nonce=xxx&postauth=callback.com
+❌ 错误：https://example.com/sso-beta/v1
+```
+
+### 问题 3: Session 过期或不存在
+
+**症状：**
+用户明明已登录，但 SSO 仍然重定向到登录页
+
+**排查方法：**
+1. 打开浏览器开发者工具 → Application/Storage → Cookies
+2. 检查是否存在 `session` Cookie
+3. 访问 `/api/user/self` 验证登录状态
+
+**可能原因：**
+- Session 已过期（30天后）
+- Cookie 被清除
+- 不同子域名的 Cookie 域设置问题
 
 ## 注意事项
 
