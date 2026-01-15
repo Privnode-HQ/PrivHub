@@ -110,6 +110,9 @@ func InitEnv() {
 	initConstantEnv()
 
 	SetModerationEnabledGroups(os.Getenv("MODERATION_ENABLED_GROUPS"))
+
+	// Initialize SSO JWT
+	InitSSOJWT()
 }
 
 func initConstantEnv() {
