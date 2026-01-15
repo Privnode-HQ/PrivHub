@@ -77,6 +77,7 @@ const NotificationSettings = ({
       enabled: true,
       topup: true,
       personal: true,
+      support: true,
     },
     admin: {
       enabled: true,
@@ -159,7 +160,7 @@ const NotificationSettings = ({
         midjourney: true,
         task: true,
       },
-      personal: { enabled: true, topup: true, personal: true },
+      personal: { enabled: true, topup: true, personal: true, support: true },
       admin: {
         enabled: true,
         channel: true,
@@ -262,6 +263,11 @@ const NotificationSettings = ({
           key: 'personal',
           title: t('个人设置'),
           description: t('个人信息设置'),
+        },
+        {
+          key: 'support',
+          title: t('联系支持'),
+          description: t('获取技术支持'),
         },
       ],
     },
