@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Space, Typography, Spin } from '@douyinfe/semi-ui';
 import { API } from '../helpers';
-import { showError, showSuccess } from '../helpers';
+import { showError } from '../helpers';
 
 const { Title, Text } = Typography;
 
@@ -12,22 +12,31 @@ const SSOAuthorize = () => {
   const [loading, setLoading] = useState(false);
   const [approving, setApproving] = useState(false);
 
+  const clientId = searchParams.get('client_id');
   const nonce = searchParams.get('nonce');
   const metadata = searchParams.get('metadata');
   const postauth = searchParams.get('postauth');
 
+  const clientNameMap = {
+    'ticket-v1': 'Privnode 支持',
+    'h8kdFu9IQTHdMV7wxdcZpqFv': '佬友API',
+  };
+
+  const clientName = clientNameMap[clientId] || clientId || '第三方应用';
+
   useEffect(() => {
     // 验证必需参数
-    if (!nonce || !postauth) {
+    if (!clientId || !nonce || !postauth) {
       showError('缺少必需参数');
       navigate('/');
     }
-  }, [nonce, postauth, navigate]);
+  }, [clientId, nonce, postauth, navigate]);
 
   const handleApprove = async () => {
     setApproving(true);
     try {
       const response = await API.post('/api/sso-beta/approve', {
+        client_id: clientId,
         nonce,
         metadata,
         postauth
@@ -95,7 +104,7 @@ const SSOAuthorize = () => {
           </Title>
 
           <Text style={{ fontSize: '16px', marginTop: '8px' }}>
-            是否授权 <strong>Privnode 支持</strong> 访问您的账号信息？
+            是否授权 <strong>{clientName}</strong> 访问您的账号信息？
           </Text>
 
           <Card
@@ -106,7 +115,7 @@ const SSOAuthorize = () => {
             }}
           >
             <Space vertical spacing="small">
-              <Text strong>Privnode 支持 将可以：</Text>
+              <Text strong>{clientName} 将可以：</Text>
               <Text>• 获取您的用户基本信息</Text>
             </Space>
           </Card>

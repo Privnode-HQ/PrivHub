@@ -406,3 +406,44 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 
 	return nil
 }
+
+// GetUserTotalPaidQuota returns the total quota that a user obtained via successful top-ups.
+//
+// This is used to calculate the paid portion of the user's total quota (excluding promotional quota).
+func GetUserTotalPaidQuota(userId int) (int64, error) {
+	type topUpRow struct {
+		PaymentMethod string  `gorm:"column:payment_method"`
+		Amount        int64   `gorm:"column:amount"`
+		Money         float64 `gorm:"column:money"`
+	}
+
+	var topUps []topUpRow
+	err := DB.Model(&TopUp{}).
+		Select("payment_method, amount, money").
+		Where("user_id = ? AND status = ?", userId, common.TopUpStatusSuccess).
+		Find(&topUps).Error
+	if err != nil {
+		return 0, err
+	}
+
+	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	var total int64
+	for _, topUp := range topUps {
+		switch topUp.PaymentMethod {
+		case "stripe":
+			quota := decimal.NewFromFloat(topUp.Money).Mul(dQuotaPerUnit).IntPart()
+			total += quota
+		case "creem", "":
+			// Creem stores quota directly in Amount; legacy records may have an empty payment_method.
+			total += topUp.Amount
+		default:
+			quota := decimal.NewFromInt(topUp.Amount).Mul(dQuotaPerUnit).IntPart()
+			total += quota
+		}
+	}
+
+	if total < 0 {
+		return 0, nil
+	}
+	return total, nil
+}

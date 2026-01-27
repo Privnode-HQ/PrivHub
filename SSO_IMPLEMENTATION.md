@@ -69,7 +69,9 @@ https://your-domain.com/sso-beta/v1?protocol=i0&client_id=ticket-v1&nonce=xxx&me
 
 **参数说明：**
 - `protocol`: 协议版本，固定为 `i0`
-- `client_id`: 客户端 ID，固定为 `ticket-v1`
+- `client_id`: 客户端 ID（白名单）
+  - `ticket-v1`（Privnode 支持）
+  - `h8kdFu9IQTHdMV7wxdcZpqFv`（佬友API）
 - `nonce`: 随机字符串，用于防止重放攻击
 - `metadata`: 可选的元数据
 - `postauth`: 回调地址的 hostname（不包含协议和路径）
@@ -83,9 +85,9 @@ https://your-domain.com/sso-beta/v1?protocol=i0&client_id=ticket-v1&nonce=xxx&me
 授权页面会显示：
 
 ```
-是否授权 Privnode 支持 访问您的账号信息？
+是否授权 <应用名称> 访问您的账号信息？
 
-Privnode 支持 将可以：
+<应用名称> 将可以：
 • 获取您的用户基本信息
 
 他们无法代表您执行操作。
