@@ -183,7 +183,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	for i := 0; i <= common.RetryTimes; i++ {
-		channel, err := getChannel(c, group, originalModel, i)
+		channel, err := getChannel(c, originalModel, i)
 		if err != nil {
 			logger.LogError(c, err.Error())
 			newAPIError = err
@@ -240,7 +240,7 @@ func addUsedChannel(c *gin.Context, channelId int) {
 	c.Set("use_channel", useChannel)
 }
 
-func getChannel(c *gin.Context, group, originalModel string, retryCount int) (*model.Channel, *types.NewAPIError) {
+func getChannel(c *gin.Context, originalModel string, retryCount int) (*model.Channel, *types.NewAPIError) {
 	if retryCount == 0 {
 		autoBan := c.GetBool("auto_ban")
 		autoBanInt := 1
@@ -254,13 +254,70 @@ func getChannel(c *gin.Context, group, originalModel string, retryCount int) (*m
 			AutoBan: &autoBanInt,
 		}, nil
 	}
-	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(c, group, originalModel, retryCount)
-	if err != nil {
-		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, originalModel, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+
+	currentGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	if currentGroup == "" {
+		currentGroup = common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 	}
+	candidates := common.GetContextKeyStringSlice(c, constant.ContextKeyUsingGroups)
+	if len(candidates) == 0 {
+		candidates = []string{currentGroup}
+	}
+
+	var (
+		channel          *model.Channel
+		selectGroup      string
+		selectedGroup    string
+		lastSelectGroup  string
+		lastErr          error
+		err              error
+		perGroupRetryCnt int
+	)
+
+	for _, group := range candidates {
+		if group == "" {
+			continue
+		}
+		perGroupRetryCnt = 0
+		if group == currentGroup {
+			perGroupRetryCnt = retryCount
+		}
+		channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(c, group, originalModel, perGroupRetryCnt)
+		if err != nil {
+			lastErr = err
+			lastSelectGroup = selectGroup
+			continue
+		}
+		if channel == nil {
+			lastErr = nil
+			lastSelectGroup = selectGroup
+			continue
+		}
+		selectedGroup = group
+		break
+	}
+
 	if channel == nil {
-		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, originalModel), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		showGroup := strings.Join(candidates, " -> ")
+		if len(candidates) == 1 {
+			showGroup = candidates[0]
+			if showGroup == "auto" && lastSelectGroup != "" {
+				showGroup = fmt.Sprintf("auto(%s)", lastSelectGroup)
+			}
+		}
+		if lastErr != nil {
+			return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", showGroup, originalModel, lastErr.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", showGroup, originalModel), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
+
+	if selectedGroup != "" && selectedGroup != currentGroup {
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, selectedGroup)
+	}
+	if selectedGroup != "auto" {
+		c.Set("auto_group", "")
+	}
+
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, originalModel)
 	if newAPIError != nil {
 		return nil, newAPIError
@@ -453,7 +510,6 @@ func RelayNotFound(c *gin.Context) {
 func RelayTask(c *gin.Context) {
 	retryTimes := common.RetryTimes
 	channelId := c.GetInt("channel_id")
-	group := c.GetString("group")
 	originalModel := c.GetString("original_model")
 	c.Set("use_channel", []string{fmt.Sprintf("%d", channelId)})
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
@@ -465,7 +521,7 @@ func RelayTask(c *gin.Context) {
 		retryTimes = 0
 	}
 	for i := 0; shouldRetryTaskRelay(c, channelId, taskErr, retryTimes) && i < retryTimes; i++ {
-		channel, newAPIError := getChannel(c, group, originalModel, i)
+		channel, newAPIError := getChannel(c, originalModel, i)
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("CacheGetRandomSatisfiedChannel failed: %s", newAPIError.Error()))
 			taskErr = service.TaskErrorWrapperLocal(newAPIError.Err, "get_channel_failed", http.StatusInternalServerError)

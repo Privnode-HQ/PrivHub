@@ -158,6 +158,12 @@ func AddToken(c *gin.Context) {
 		common.SysLog("failed to generate token key: " + err.Error())
 		return
 	}
+
+	orderedGroups := token.GetOrderedGroups()
+	primaryGroup := ""
+	if len(orderedGroups) > 0 {
+		primaryGroup = orderedGroups[0]
+	}
 	cleanToken := model.Token{
 		UserId:             c.GetInt("id"),
 		Name:               token.Name,
@@ -170,7 +176,8 @@ func AddToken(c *gin.Context) {
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
 		AllowIps:           token.AllowIps,
-		Group:              token.Group,
+		Group:              primaryGroup,
+		Groups:             model.TokenGroups(orderedGroups),
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -239,6 +246,11 @@ func UpdateToken(c *gin.Context) {
 	if statusOnly != "" {
 		cleanToken.Status = token.Status
 	} else {
+		orderedGroups := token.GetOrderedGroups()
+		primaryGroup := ""
+		if len(orderedGroups) > 0 {
+			primaryGroup = orderedGroups[0]
+		}
 		// If you add more fields, please also update token.Update()
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
@@ -247,7 +259,8 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
 		cleanToken.ModelLimits = token.ModelLimits
 		cleanToken.AllowIps = token.AllowIps
-		cleanToken.Group = token.Group
+		cleanToken.Group = primaryGroup
+		cleanToken.Groups = model.TokenGroups(orderedGroups)
 	}
 	err = cleanToken.Update()
 	if err != nil {

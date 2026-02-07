@@ -2122,6 +2122,7 @@
     "当前账户不是订阅分组，无需操作": "Your account is not in the subscription group; no action needed.",
     "当前分组为 subscription，可切换回 tier 0": "Current group is subscription; you can switch back to tier 0.",
     "确认切换回按量付费": "Confirm switch to pay-as-you-go",
-    "此操作将把你的分组从 subscription 修改为 tier 0。": "This will change your group from subscription to tier 0."
+    "此操作将把你的分组从 subscription 修改为 tier 0。": "This will change your group from subscription to tier 0.",
+    "将按以下顺序尝试分组（前面的分组不可用时会自动尝试后面的分组）": "Groups will be tried in the following order (if earlier groups are unavailable, it will automatically try the next ones)."
   }
 }

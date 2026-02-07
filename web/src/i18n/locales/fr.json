@@ -2100,6 +2100,7 @@
     "当前账户不是订阅分组，无需操作": "Votre compte n’est pas dans le groupe subscription ; aucune action nécessaire.",
     "当前分组为 subscription，可切换回 tier 0": "Le groupe actuel est subscription ; vous pouvez revenir à tier 0.",
     "确认切换回按量付费": "Confirmer le retour au paiement à l’usage",
-    "此操作将把你的分组从 subscription 修改为 tier 0。": "Cette action changera votre groupe de subscription à tier 0."
+    "此操作将把你的分组从 subscription 修改为 tier 0。": "Cette action changera votre groupe de subscription à tier 0.",
+    "将按以下顺序尝试分组（前面的分组不可用时会自动尝试后面的分组）": "Les groupes seront essayés dans l’ordre suivant (si un groupe précédent est indisponible, le suivant sera essayé automatiquement)."
   }
 }
