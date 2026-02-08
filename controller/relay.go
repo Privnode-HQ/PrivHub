@@ -110,13 +110,26 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	meta := request.GetTokenCountMeta()
+
+	if shouldRejectDetectMagicString(relayFormat) && requestContainsDetectMagicString(request, meta) {
+		code := types.ErrorCodePrivnodeInternalDetectedRefusal
+		if relayFormat == types.RelayFormatClaude {
+			newAPIError = types.WithClaudeError(types.ClaudeError{
+				Type:    string(code),
+				Message: string(code),
+			}, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		} else {
+			newAPIError = types.NewErrorWithStatusCode(errors.New(string(code)), code, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		return
+	}
+
 	relayInfo, err := relaycommon.GenRelayInfo(c, relayFormat, request, ws)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
-
-	meta := request.GetTokenCountMeta()
 
 	if err := service.EnforceChatModeration(c, relayInfo.RelayMode, relayFormat, request, meta); err != nil {
 		newAPIError = err
@@ -221,6 +234,29 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		retryLogStr := fmt.Sprintf("重试：%s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(useChannel)), "->"), "[]"))
 		logger.LogInfo(c, retryLogStr)
 	}
+}
+
+func shouldRejectDetectMagicString(relayFormat types.RelayFormat) bool {
+	switch relayFormat {
+	case types.RelayFormatOpenAI, types.RelayFormatOpenAIResponses, types.RelayFormatClaude, types.RelayFormatGemini:
+		return true
+	default:
+		return false
+	}
+}
+
+func requestContainsDetectMagicString(request dto.Request, meta *types.TokenCountMeta) bool {
+	if meta != nil && strings.Contains(meta.CombineText, constant.PrivnodeDetectMagicString) {
+		return true
+	}
+	if request == nil {
+		return false
+	}
+	body, err := common.Marshal(request)
+	if err != nil {
+		return false
+	}
+	return bytes.Contains(body, []byte(constant.PrivnodeDetectMagicString))
 }
 
 var upgrader = websocket.Upgrader{

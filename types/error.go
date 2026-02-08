@@ -36,8 +36,9 @@ const (
 type ErrorCode string
 
 const (
-	ErrorCodeInvalidRequest         ErrorCode = "invalid_request"
-	ErrorCodeSensitiveWordsDetected ErrorCode = "sensitive_words_detected"
+	ErrorCodeInvalidRequest                  ErrorCode = "invalid_request"
+	ErrorCodeSensitiveWordsDetected          ErrorCode = "sensitive_words_detected"
+	ErrorCodePrivnodeInternalDetectedRefusal ErrorCode = "privnode_internal_detected_refusal"
 
 	// new api error
 	ErrorCodeCountTokenFailed   ErrorCode = "count_token_failed"
