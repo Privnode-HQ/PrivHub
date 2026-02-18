@@ -912,8 +912,9 @@ func CreateUser(c *gin.Context) {
 }
 
 type ManageRequest struct {
-	Id     int    `json:"id"`
-	Action string `json:"action"`
+	Id        int    `json:"id"`
+	Action    string `json:"action"`
+	BanReason string `json:"ban_reason"`
 }
 
 // ManageUser Only admin user can do this
@@ -951,6 +952,7 @@ func ManageUser(c *gin.Context) {
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
+		user.BanReason = strings.TrimSpace(req.BanReason)
 		if user.Role == common.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -1009,13 +1011,19 @@ func ManageUser(c *gin.Context) {
 		user.Role = common.RoleCommonUser
 	}
 
-	if err := user.Update(false); err != nil {
+	if req.Action == "disable" || req.Action == "enable" {
+		if err := user.UpdateSelected("Status", "BanReason"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if err := user.Update(false); err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	clearUser := model.User{
-		Role:   user.Role,
-		Status: user.Status,
+		Role:      user.Role,
+		Status:    user.Status,
+		BanReason: user.BanReason,
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

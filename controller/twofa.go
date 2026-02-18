@@ -433,6 +433,10 @@ func Verify2FALogin(c *gin.Context) {
 		})
 		return
 	}
+	if user.Status != common.UserStatusEnabled {
+		common.ApiErrorMsg(c, common.UserBannedMessage(user.BanReason))
+		return
+	}
 
 	// 获取2FA记录
 	twoFA, err := model.GetTwoFAByUserId(user.Id)

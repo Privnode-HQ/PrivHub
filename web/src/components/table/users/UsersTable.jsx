@@ -105,8 +105,8 @@ const UsersTable = (usersData) => {
     setShowDemoteModal(false);
   };
 
-  const handleEnableDisableConfirm = () => {
-    manageUser(modalUser.id, enableDisableAction, modalUser);
+  const handleEnableDisableConfirm = (banReason) => {
+    manageUser(modalUser.id, enableDisableAction, modalUser, banReason);
     setShowEnableDisableModal(false);
   };
 
