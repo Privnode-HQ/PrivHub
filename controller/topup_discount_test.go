@@ -45,9 +45,11 @@ func TestApplyTopupDiscount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			operation_setting.GetPaymentSetting().AmountDiscount = map[int]float64{}
+			operation_setting.GetPaymentSetting().AmountDiscount = map[int]operation_setting.AmountDiscountRule{}
 			if tt.config > 0 {
-				operation_setting.GetPaymentSetting().AmountDiscount[int(tt.originalAmount)] = tt.config
+				operation_setting.GetPaymentSetting().AmountDiscount[int(tt.originalAmount)] = operation_setting.AmountDiscountRule{
+					DiscountAmount: tt.config,
+				}
 			}
 
 			got := applyTopupDiscount(decimal.RequireFromString(tt.base), tt.originalAmount)
