@@ -18,6 +18,8 @@ tiktoken_cache
 .gocache
 .cache
 web/bun.lock
+.codex
+.specify
 
 electron/node_modules
 electron/dist
