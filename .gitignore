@@ -20,6 +20,23 @@ tiktoken_cache
 web/bun.lock
 .codex
 .specify
+specs
+
+AGENTS.md
 
 electron/node_modules
 electron/dist
+web/node_modules
+node_modules
+dist
+coverage
+*.log
+.env.*
+!.env.example
+*.test
+*.out
+bin
+tmp
+Thumbs.db
+*.tmp
+*.swp

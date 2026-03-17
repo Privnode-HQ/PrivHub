@@ -47,6 +47,8 @@ const (
 	ContextKeyUsingGroups ContextKey = "using_groups"
 	ContextKeyUserName    ContextKey = "username"
 
+	ContextKeyUsageReservationID ContextKey = "usage_reservation_id"
+
 	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"
 
 	ContextKeySystemPromptOverride ContextKey = "system_prompt_override"

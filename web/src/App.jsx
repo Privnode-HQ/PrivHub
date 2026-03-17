@@ -36,6 +36,7 @@ import Token from './pages/Token';
 import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
+import Usage from './pages/Usage';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
 import Midjourney from './pages/Midjourney';
@@ -245,6 +246,14 @@ function App() {
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <TopUp />
               </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/usage'
+          element={
+            <PrivateRoute>
+              <Usage />
             </PrivateRoute>
           }
         />

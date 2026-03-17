@@ -110,6 +110,7 @@ type RelayInfo struct {
 	SendResponseCount      int
 	FinalPreConsumedQuota  int  // 最终预消耗的配额
 	IsClaudeBetaQuery      bool // /v1/messages?beta=true
+	UsageReservationID     string
 
 	PriceData types.PriceData
 
@@ -410,6 +411,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 			IsFirstThinkingContent:  true,
 			SendLastThinkingContent: false,
 		},
+		UsageReservationID: common.GetContextKeyString(c, constant.ContextKeyUsageReservationID),
 	}
 
 	if info.RelayMode == relayconstant.RelayModeUnknown {
