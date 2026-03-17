@@ -270,7 +270,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 		}
 
 		if user.Status != common.UserStatusEnabled {
-			return nil, errors.New("该用户已被禁用")
+			return nil, errors.New(common.UserBannedMessage(user.BanReason))
 		}
 
 		if len(userHandle) > 0 {
@@ -305,7 +305,7 @@ func PasskeyLoginFinish(c *gin.Context) {
 	}
 
 	if modelUser.Status != common.UserStatusEnabled {
-		common.ApiErrorMsg(c, "该用户已被禁用")
+		common.ApiErrorMsg(c, common.UserBannedMessage(modelUser.BanReason))
 		return
 	}
 
@@ -491,7 +491,7 @@ func getSessionUser(c *gin.Context) (*model.User, error) {
 		return nil, err
 	}
 	if user.Status != common.UserStatusEnabled {
-		return nil, errors.New("该用户已被禁用")
+		return nil, errors.New(common.UserBannedMessage(user.BanReason))
 	}
 	return user, nil
 }

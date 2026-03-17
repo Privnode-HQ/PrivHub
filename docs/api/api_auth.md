@@ -34,7 +34,7 @@
 *   如果 `New-Api-User` 中的用户 ID 与 Access Token 不匹配，则会返回 `401 Unauthorized` 错误，并提示“无权进行此操作，与登录用户不匹配，请重新登录”。
 *   如果没有提供 `New-Api-User` 请求头，则会返回 `401 Unauthorized` 错误，并提示“无权进行此操作，未提供 New-Api-User”。
 *   如果 `New-Api-User` 请求头格式错误，则会返回 `401 Unauthorized` 错误，并提示“无权进行此操作，New-Api-User 格式错误”。
-*   如果用户已被禁用，则会返回 `403 Forbidden` 错误，并提示“用户已被封禁”。
+*   如果用户已被禁用，则会返回 `403 Forbidden` 错误，并提示“用户已被封禁”（若设置了封禁原因会在提示中附带原因）。
 *   如果用户权限不足，则会返回 `403 Forbidden` 错误，并提示“无权进行此操作，权限不足”。
 *   如果用户信息无效，则会返回 `403 Forbidden` 错误，并提示“无权进行此操作，用户信息无效”。
 
@@ -50,4 +50,3 @@ curl -X GET \
 ```
 
 请将 `access_token`、`123` 和 `https://your-domain.com` 替换为实际的值。
-
