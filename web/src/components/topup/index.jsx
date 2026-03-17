@@ -429,7 +429,7 @@ const TopUp = () => {
         if (data.amount_options && data.amount_options.length > 0) {
           const customPresets = data.amount_options.map((amount) => ({
             value: amount,
-            discount: data.discount[amount] || 1.0,
+            discount: data.discount?.[amount] ?? 0,
           }));
           setPresetAmounts(customPresets);
         }
@@ -596,9 +596,13 @@ const TopUp = () => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
 
-    // 计算实际支付金额，考虑折扣
-    const discount = preset.discount || topupInfo.discount[preset.value] || 1.0;
-    const discountedAmount = preset.value * priceRatio * discount;
+    // 计算实际支付金额，考虑固定减免
+    const discountAmount =
+      preset.discount ?? topupInfo.discount?.[preset.value] ?? 0;
+    const discountedAmount = Math.max(
+      preset.value * priceRatio - discountAmount,
+      0,
+    );
     setAmount(discountedAmount);
   };
 
@@ -644,7 +648,7 @@ const TopUp = () => {
         payWay={payWay}
         payMethods={payMethods}
         amountNumber={amount}
-        discountRate={topupInfo?.discount?.[topUpCount] || 1.0}
+        discountAmount={topupInfo?.discount?.[topUpCount] ?? 0}
       />
 
       {/* 充值账单模态框 */}

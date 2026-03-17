@@ -36,14 +36,15 @@ const PaymentConfirmModal = ({
   renderAmount,
   payWay,
   payMethods,
-  // 新增：用于显示折扣明细
   amountNumber,
-  discountRate,
+  discountAmount,
 }) => {
-  const hasDiscount =
-    discountRate && discountRate > 0 && discountRate < 1 && amountNumber > 0;
-  const originalAmount = hasDiscount ? amountNumber / discountRate : 0;
-  const discountAmount = hasDiscount ? originalAmount - amountNumber : 0;
+  const normalizedDiscountAmount =
+    discountAmount && discountAmount > 0 ? discountAmount : 0;
+  const hasDiscount = normalizedDiscountAmount > 0 && amountNumber > 0;
+  const originalAmount = hasDiscount
+    ? amountNumber + normalizedDiscountAmount
+    : 0;
   return (
     <Modal
       title={
@@ -78,16 +79,9 @@ const PaymentConfirmModal = ({
               {amountLoading ? (
                 <Skeleton.Title style={{ width: '60px', height: '16px' }} />
               ) : (
-                <div className='flex items-baseline space-x-2'>
-                  <Text strong className='font-bold' style={{ color: 'red' }}>
-                    {renderAmount()}
-                  </Text>
-                  {hasDiscount && (
-                    <Text size='small' className='text-rose-500'>
-                      {Math.round(discountRate * 100)}%
-                    </Text>
-                  )}
-                </div>
+                <Text strong className='font-bold' style={{ color: 'red' }}>
+                  {renderAmount()}
+                </Text>
               )}
             </div>
             {hasDiscount && !amountLoading && (
@@ -105,7 +99,7 @@ const PaymentConfirmModal = ({
                     {t('优惠')}：
                   </Text>
                   <Text className='text-emerald-600 dark:text-emerald-400'>
-                    {`- ${discountAmount.toFixed(2)} ${t('元')}`}
+                    {`- ${normalizedDiscountAmount.toFixed(2)} ${t('元')}`}
                   </Text>
                 </div>
               </>

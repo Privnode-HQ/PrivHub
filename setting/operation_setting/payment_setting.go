@@ -4,7 +4,7 @@ import "github.com/QuantumNous/new-api/setting/config"
 
 type PaymentSetting struct {
 	AmountOptions  []int           `json:"amount_options"`
-	AmountDiscount map[int]float64 `json:"amount_discount"` // 充值金额对应的折扣，例如 100 元 0.9 表示 100 元充值享受 9 折优惠
+	AmountDiscount map[int]float64 `json:"amount_discount"` // 充值金额对应的优惠金额，例如 100 元 5 表示 100 元充值减免 5 元
 }
 
 // 默认配置
