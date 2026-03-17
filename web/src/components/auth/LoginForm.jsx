@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../../context/User';
 import {
   API,
@@ -58,6 +58,7 @@ import { SiDiscord }from 'react-icons/si';
 
 const LoginForm = () => {
   let navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
   const [inputs, setInputs] = useState({
     username: '',
@@ -181,6 +182,54 @@ const LoginForm = () => {
     performLogout();
   }, [searchParams, userDispatch]);
 
+  const sanitizeRedirectTarget = (target) => {
+    if (!target || typeof target !== 'string') {
+      return null;
+    }
+
+    const trimmed = target.trim();
+
+    if (!trimmed.startsWith('/')) {
+      return null;
+    }
+    if (trimmed.startsWith('//')) {
+      return null;
+    }
+    if (trimmed.includes('://')) {
+      return null;
+    }
+    if (trimmed.includes('\n') || trimmed.includes('\r')) {
+      return null;
+    }
+    if (trimmed.startsWith('/login')) {
+      return null;
+    }
+    if (trimmed.startsWith('/api')) {
+      return null;
+    }
+
+    return trimmed;
+  };
+
+  const getPostLoginRedirectTarget = () => {
+    const redirectParam = sanitizeRedirectTarget(searchParams.get('redirect'));
+    if (redirectParam) {
+      return redirectParam;
+    }
+
+    const from = location?.state?.from;
+    const fromPath =
+      from && typeof from === 'object'
+        ? `${from.pathname || ''}${from.search || ''}${from.hash || ''}`
+        : null;
+    return sanitizeRedirectTarget(fromPath);
+  };
+
+  const navigateAfterLogin = (fallback = '/console') => {
+    const target = getPostLoginRedirectTarget();
+    navigate(target || fallback, { replace: true });
+  };
+
   const onWeChatLoginClicked = () => {
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
       showInfo(t('请先阅读并同意用户协议和隐私政策'));
@@ -207,7 +256,7 @@ const LoginForm = () => {
         localStorage.setItem('user', JSON.stringify(data));
         setUserData(data);
         updateAPI();
-        navigate('/');
+        navigateAfterLogin('/');
         showSuccess('登录成功！');
         setShowWeChatLoginModal(false);
       } else {
@@ -264,7 +313,7 @@ const LoginForm = () => {
               centered: true,
             });
           }
-          navigate('/console');
+          navigateAfterLogin('/console');
         } else {
           showError(message);
         }
@@ -309,7 +358,7 @@ const LoginForm = () => {
         showSuccess('登录成功！');
         setUserData(data);
         updateAPI();
-        navigate('/');
+        navigateAfterLogin('/');
       } else {
         showError(message);
       }
@@ -443,7 +492,7 @@ const LoginForm = () => {
         setUserData(finish.data);
         updateAPI();
         showSuccess('登录成功！');
-        navigate('/console');
+        navigateAfterLogin('/console');
       } else {
         showError(finish.message || 'Passkey 登录失败，请重试');
       }
@@ -478,7 +527,7 @@ const LoginForm = () => {
     setUserData(data);
     updateAPI();
     showSuccess('登录成功！');
-    navigate('/console');
+    navigateAfterLogin('/console');
   };
 
   // 返回登录页面

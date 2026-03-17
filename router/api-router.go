@@ -264,5 +264,13 @@ func SetApiRouter(router *gin.Engine) {
 			ssoRoute.POST("/approve", middleware.UserAuth(), controller.SSOApprove)
 			ssoRoute.POST("/cancel", controller.SSOCancel)
 		}
+
+		// Beta API routes
+		betaRoute := apiRouter.Group("/beta")
+		betaRoute.Use(middleware.UserAuth())
+		{
+			betaRoute.GET("/remain_actual_paid_amount", controller.GetRemainActualPaidAmount)
+			betaRoute.PUT("/self_quota_take_away", controller.SelfQuotaTakeAway)
+		}
 	}
 }
