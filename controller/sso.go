@@ -38,7 +38,7 @@ func SSOAuthRequest(c *gin.Context) {
 	}
 
 	// 验证 client_id
-	if clientID != "ticket-v1" {
+	if !common.IsSSOClientIDAllowed(clientID) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"message": "无效的客户端ID",
@@ -50,6 +50,16 @@ func SSOAuthRequest(c *gin.Context) {
 	session := sessions.Default(c)
 	userID := session.Get("id")
 
+	authorizeParams := url.Values{}
+	authorizeParams.Set("protocol", protocol)
+	authorizeParams.Set("client_id", clientID)
+	authorizeParams.Set("nonce", nonce)
+	if metadata != "" {
+		authorizeParams.Set("metadata", metadata)
+	}
+	authorizeParams.Set("postauth", postauth)
+	authorizeURL := "/sso-beta/authorize?" + authorizeParams.Encode()
+
 	if userID == nil {
 		// 用户未登录，保存原始请求参数到 session
 		session.Set("sso_protocol", protocol)
@@ -60,20 +70,14 @@ func SSOAuthRequest(c *gin.Context) {
 		session.Save()
 
 		// 重定向到前端登录页面，登录后返回到授权页面
-		c.Redirect(http.StatusFound, "/login?redirect=/sso-beta/authorize?protocol="+url.QueryEscape(protocol)+
-			"&client_id="+url.QueryEscape(clientID)+
-			"&nonce="+url.QueryEscape(nonce)+
-			"&metadata="+url.QueryEscape(metadata)+
-			"&postauth="+url.QueryEscape(postauth))
+		loginParams := url.Values{}
+		loginParams.Set("redirect", authorizeURL)
+		c.Redirect(http.StatusFound, "/login?"+loginParams.Encode())
 		return
 	}
 
 	// 用户已登录，重定向到授权页面
-	c.Redirect(http.StatusFound, "/sso-beta/authorize?protocol="+url.QueryEscape(protocol)+
-		"&client_id="+url.QueryEscape(clientID)+
-		"&nonce="+url.QueryEscape(nonce)+
-		"&metadata="+url.QueryEscape(metadata)+
-		"&postauth="+url.QueryEscape(postauth))
+	c.Redirect(http.StatusFound, authorizeURL)
 }
 
 // SSOApprove 处理用户授权确认
@@ -92,6 +96,7 @@ func SSOApprove(c *gin.Context) {
 
 	// 获取请求参数
 	var request struct {
+		ClientID string `json:"client_id" binding:"required"`
 		Nonce    string `json:"nonce" binding:"required"`
 		Metadata string `json:"metadata"`
 		Postauth string `json:"postauth" binding:"required"`
@@ -101,6 +106,14 @@ func SSOApprove(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"message": "无效的请求参数",
+		})
+		return
+	}
+
+	if !common.IsSSOClientIDAllowed(request.ClientID) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "无效的客户端ID",
 		})
 		return
 	}
