@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import { Modal } from '@douyinfe/semi-ui';
+import React, { useEffect, useState } from 'react';
+import { Modal, TextArea, Typography } from '@douyinfe/semi-ui';
 
 const EnableDisableUserModal = ({
   visible,
@@ -29,16 +29,44 @@ const EnableDisableUserModal = ({
   t,
 }) => {
   const isDisable = action === 'disable';
+  const [banReason, setBanReason] = useState('');
+
+  useEffect(() => {
+    if (!visible) return;
+    if (!isDisable) {
+      setBanReason('');
+      return;
+    }
+    setBanReason(user?.ban_reason || '');
+  }, [visible, isDisable, user]);
 
   return (
     <Modal
       title={isDisable ? t('确定要禁用此用户吗？') : t('确定要启用此用户吗？')}
       visible={visible}
       onCancel={onCancel}
-      onOk={onConfirm}
+      onOk={() => onConfirm(isDisable ? banReason : '')}
       type='warning'
     >
-      {isDisable ? t('此操作将禁用用户账户') : t('此操作将启用用户账户')}
+      {isDisable ? (
+        <div className='space-y-3'>
+          <div>{t('此操作将禁用用户账户')}</div>
+          <div>
+            <Typography.Text>{t('封禁原因（可选）')}</Typography.Text>
+            <TextArea
+              value={banReason}
+              onChange={setBanReason}
+              placeholder={t('请输入封禁原因（可选）')}
+              maxLength={255}
+              showClear
+              autosize={{ minRows: 2, maxRows: 4 }}
+              className='mt-2'
+            />
+          </div>
+        </div>
+      ) : (
+        t('此操作将启用用户账户')
+      )}
     </Modal>
   );
 };

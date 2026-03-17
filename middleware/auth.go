@@ -99,9 +99,15 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	if status.(int) == common.UserStatusDisabled {
+		message := "用户已被封禁"
+		if userId, ok := id.(int); ok && userId != 0 {
+			if userCache, err := model.GetUserCache(userId); err == nil {
+				message = common.UserBannedMessage(userCache.BanReason)
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "用户已被封禁",
+			"message": message,
 		})
 		c.Abort()
 		return
@@ -256,7 +262,7 @@ func TokenAuth() func(c *gin.Context) {
 		}
 		userEnabled := userCache.Status == common.UserStatusEnabled
 		if !userEnabled {
-			abortWithOpenAiMessage(c, http.StatusForbidden, "用户已被封禁")
+			abortWithOpenAiMessage(c, http.StatusForbidden, common.UserBannedMessage(userCache.BanReason))
 			return
 		}
 

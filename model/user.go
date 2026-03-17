@@ -25,6 +25,7 @@ type User struct {
 	DisplayName      string         `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int            `json:"role" gorm:"type:int;default:1"`   // admin, common
 	Status           int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	BanReason        string         `json:"ban_reason,omitempty" gorm:"type:varchar(255);column:ban_reason" validate:"max=255"`
 	Email            string         `json:"email" gorm:"index" validate:"max=50"`
 	GitHubId         string         `json:"github_id" gorm:"column:github_id;index"`
 	DiscordId        string         `json:"discord_id" gorm:"column:discord_id;index"`
@@ -52,13 +53,14 @@ type User struct {
 
 func (user *User) ToBaseUser() *UserBase {
 	cache := &UserBase{
-		Id:       user.Id,
-		Group:    user.Group,
-		Quota:    user.Quota,
-		Status:   user.Status,
-		Username: user.Username,
-		Setting:  user.Setting,
-		Email:    user.Email,
+		Id:        user.Id,
+		Group:     user.Group,
+		Quota:     user.Quota,
+		Status:    user.Status,
+		Username:  user.Username,
+		Setting:   user.Setting,
+		Email:     user.Email,
+		BanReason: user.BanReason,
 	}
 	return cache
 }
@@ -449,6 +451,25 @@ func (user *User) Update(updatePassword bool) error {
 	return updateUserCache(*user)
 }
 
+// UpdateSelected updates specific fields (including zero values) and refreshes cache.
+// Pass struct field names, e.g. "Status", "BanReason".
+func (user *User) UpdateSelected(fields ...string) error {
+	if user.Id == 0 {
+		return errors.New("id 为空！")
+	}
+	if len(fields) == 0 {
+		return errors.New("fields 为空！")
+	}
+	if err := DB.Model(&User{}).Where("id = ?", user.Id).Select(fields).Updates(user).Error; err != nil {
+		return err
+	}
+	refreshed, err := GetUserById(user.Id, false)
+	if err != nil {
+		return err
+	}
+	return updateUserCache(*refreshed)
+}
+
 func (user *User) Edit(updatePassword bool) error {
 	var err error
 	if updatePassword {
@@ -509,12 +530,25 @@ func (user *User) ValidateAndFill() (err error) {
 	if username == "" || password == "" {
 		return errors.New("用户名或密码为空")
 	}
-	// find buy username or email
-	DB.Where("username = ? OR email = ?", username, username).First(user)
-	okay := common.ValidatePasswordAndHash(password, user.Password)
-	if !okay || user.Status != common.UserStatusEnabled {
-		return errors.New("用户名或密码错误，或用户已被封禁")
+
+	found := User{}
+	if err := DB.Where("username = ? OR email = ?", username, username).First(&found).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("用户名或密码错误")
+		}
+		return err
 	}
+
+	if found.Status != common.UserStatusEnabled {
+		return errors.New(common.UserBannedMessage(found.BanReason))
+	}
+
+	okay := common.ValidatePasswordAndHash(password, found.Password)
+	if !okay {
+		return errors.New("用户名或密码错误")
+	}
+
+	*user = found
 	return nil
 }
 
