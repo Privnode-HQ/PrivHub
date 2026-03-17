@@ -48,6 +48,8 @@ import {
   IconSave,
   IconClose,
   IconKey,
+  IconChevronUp,
+  IconChevronDown,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../../../context/Status';
@@ -72,7 +74,7 @@ const EditTokenModal = (props) => {
     model_limits_enabled: false,
     model_limits: [],
     allow_ips: '',
-    group: '',
+    groups: [],
     tokenCount: 1,
   });
 
@@ -161,6 +163,9 @@ const EditTokenModal = (props) => {
       } else {
         data.model_limits = [];
       }
+      if (!Array.isArray(data.groups) || data.groups.length === 0) {
+        data.groups = data.group ? [data.group] : [];
+      }
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
@@ -209,6 +214,10 @@ const EditTokenModal = (props) => {
     if (isEdit) {
       let { tokenCount: _tc, ...localInputs } = values;
       localInputs.remain_quota = parseInt(localInputs.remain_quota);
+      localInputs.groups = Array.isArray(localInputs.groups)
+        ? localInputs.groups.filter((g) => g && g.trim() !== '')
+        : [];
+      localInputs.group = localInputs.groups[0] || '';
       if (localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
         if (isNaN(time)) {
@@ -245,6 +254,11 @@ const EditTokenModal = (props) => {
           localInputs.name = baseName;
         }
         localInputs.remain_quota = parseInt(localInputs.remain_quota);
+
+        localInputs.groups = Array.isArray(localInputs.groups)
+          ? localInputs.groups.filter((g) => g && g.trim() !== '')
+          : [];
+        localInputs.group = localInputs.groups[0] || '';
 
         if (localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
@@ -359,15 +373,114 @@ const EditTokenModal = (props) => {
                   </Col>
                   <Col span={24}>
                     {groups.length > 0 ? (
-                      <Form.Select
-                        field='group'
-                        label={t('令牌分组')}
-                        placeholder={t('令牌分组，默认为用户的分组')}
-                        optionList={groups}
-                        renderOptionItem={renderGroupOption}
-                        showClear
-                        style={{ width: '100%' }}
-                      />
+                      <>
+                        <Form.Select
+                          field='groups'
+                          label={t('令牌分组')}
+                          placeholder={t('令牌分组，默认为用户的分组')}
+                          optionList={groups}
+                          renderOptionItem={renderGroupOption}
+                          multiple
+                          showClear
+                          style={{ width: '100%' }}
+                        />
+                        {Array.isArray(values.groups) &&
+                          values.groups.length > 0 && (
+                            <div className='mt-2 rounded-lg border border-gray-200 bg-gray-50 p-2'>
+                              <div className='text-xs text-gray-600 mb-2'>
+                                {t(
+                                  '将按以下顺序尝试分组（前面的分组不可用时会自动尝试后面的分组）',
+                                )}
+                              </div>
+                              <div className='flex flex-col gap-2'>
+                                {values.groups.map((group, index) => (
+                                  <div
+                                    key={`${group}-${index}`}
+                                    className='flex items-center justify-between gap-2'
+                                  >
+                                    <div className='min-w-0'>
+                                      <Tag
+                                        color={
+                                          group === 'auto' ? 'white' : 'blue'
+                                        }
+                                        shape='circle'
+                                      >
+                                        {group === 'auto'
+                                          ? t('智能熔断')
+                                          : group}
+                                      </Tag>
+                                    </div>
+                                    <div className='flex items-center gap-1 flex-shrink-0'>
+                                      <Button
+                                        size='small'
+                                        type='tertiary'
+                                        icon={<IconChevronUp />}
+                                        disabled={index === 0}
+                                        onClick={() => {
+                                          const current =
+                                            formApiRef.current?.getValue(
+                                              'groups',
+                                            ) || [];
+                                          const next = [...current];
+                                          const [moved] = next.splice(
+                                            index,
+                                            1,
+                                          );
+                                          next.splice(index - 1, 0, moved);
+                                          formApiRef.current?.setValue(
+                                            'groups',
+                                            next,
+                                          );
+                                        }}
+                                      />
+                                      <Button
+                                        size='small'
+                                        type='tertiary'
+                                        icon={<IconChevronDown />}
+                                        disabled={
+                                          index === values.groups.length - 1
+                                        }
+                                        onClick={() => {
+                                          const current =
+                                            formApiRef.current?.getValue(
+                                              'groups',
+                                            ) || [];
+                                          const next = [...current];
+                                          const [moved] = next.splice(
+                                            index,
+                                            1,
+                                          );
+                                          next.splice(index + 1, 0, moved);
+                                          formApiRef.current?.setValue(
+                                            'groups',
+                                            next,
+                                          );
+                                        }}
+                                      />
+                                      <Button
+                                        size='small'
+                                        type='tertiary'
+                                        icon={<IconClose />}
+                                        onClick={() => {
+                                          const current =
+                                            formApiRef.current?.getValue(
+                                              'groups',
+                                            ) || [];
+                                          const next = [...current];
+                                          next.splice(index, 1);
+                                          formApiRef.current?.setValue(
+                                            'groups',
+                                            next,
+                                          );
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                      </>
                     ) : (
                       <Form.Select
                         placeholder={t('管理员未设置用户可选分组')}

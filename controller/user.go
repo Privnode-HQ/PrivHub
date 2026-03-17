@@ -256,6 +256,7 @@ func Register(c *gin.Context) {
 		}
 		if setting.DefaultUseAutoGroup {
 			token.Group = "auto"
+			token.Groups = model.TokenGroups{"auto"}
 		}
 		if err := token.Insert(); err != nil {
 			c.JSON(http.StatusOK, gin.H{

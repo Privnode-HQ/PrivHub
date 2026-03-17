@@ -88,23 +88,54 @@ const renderStatus = (text, record, t) => {
 };
 
 // Render group column
-const renderGroupColumn = (text, t) => {
-  if (text === 'auto') {
-    return (
-      <Tooltip
-        content={t(
-          '当前分组为 auto，会自动选择最优分组，当一个组不可用时自动降级到下一个组（熔断机制）',
-        )}
-        position='top'
-      >
-        <Tag color='white' shape='circle'>
-          {' '}
-          {t('智能熔断')}{' '}
-        </Tag>
-      </Tooltip>
-    );
+const renderAutoGroupTag = (t) => (
+  <Tooltip
+    content={t(
+      '当前分组为 auto，会自动选择最优分组，当一个组不可用时自动降级到下一个组（熔断机制）',
+    )}
+    position='top'
+  >
+    <Tag color='white' shape='circle'>
+      {t('智能熔断')}
+    </Tag>
+  </Tooltip>
+);
+
+const getTokenOrderedGroups = (record) => {
+  if (Array.isArray(record?.groups) && record.groups.length > 0) {
+    return record.groups;
   }
-  return renderGroup(text);
+  if (record?.group) {
+    return [record.group];
+  }
+  return [];
+};
+
+const renderGroupColumn = (text, record, t) => {
+  const groups = getTokenOrderedGroups(record);
+
+  if (groups.length === 0) {
+    return renderGroup('');
+  }
+  if (groups.length === 1) {
+    if (groups[0] === 'auto') {
+      return renderAutoGroupTag(t);
+    }
+    return renderGroup(groups[0]);
+  }
+
+  return (
+    <div className='flex flex-wrap items-center gap-1'>
+      {groups.map((group, index) => (
+        <React.Fragment key={`${group}-${index}`}>
+          {group === 'auto' ? renderAutoGroupTag(t) : renderGroup(group)}
+          {index < groups.length - 1 && (
+            <span className='text-gray-400'>→</span>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
 };
 
 // Render token key column with show/hide and copy functionality
@@ -455,7 +486,7 @@ export const getTokensColumns = ({
       title: t('分组'),
       dataIndex: 'group',
       key: 'group',
-      render: (text) => renderGroupColumn(text, t),
+      render: (text, record) => renderGroupColumn(text, record, t),
     },
     {
       title: t('密钥'),

@@ -263,23 +263,43 @@ func TokenAuth() func(c *gin.Context) {
 		userCache.WriteContext(c)
 
 		userGroup := userCache.Group
-		tokenGroup := token.Group
-		if tokenGroup != "" {
-			// check common.UserUsableGroups[userGroup]
-			if _, ok := service.GetUserUsableGroups(userGroup)[tokenGroup]; !ok {
-				abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问 %s 分组", tokenGroup))
+		usingGroup := userGroup
+		usingGroups := make([]string, 0)
+
+		if token.HasGroupOverride() {
+			candidates := token.GetOrderedGroups()
+			if len(candidates) == 0 {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "令牌分组配置错误")
 				return
 			}
-			// check group in common.GroupRatio
-			if !ratio_setting.ContainsGroupRatio(tokenGroup) {
-				if tokenGroup != "auto" {
-					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("分组 %s 已被弃用", tokenGroup))
-					return
+			usableGroups := service.GetUserUsableGroups(userGroup)
+			seen := make(map[string]struct{}, len(candidates))
+			for _, group := range candidates {
+				if group == "" {
+					continue
 				}
+				if _, ok := seen[group]; ok {
+					continue
+				}
+				seen[group] = struct{}{}
+
+				if _, ok := usableGroups[group]; !ok {
+					continue
+				}
+				if group != "auto" && !ratio_setting.ContainsGroupRatio(group) {
+					continue
+				}
+				usingGroups = append(usingGroups, group)
 			}
-			userGroup = tokenGroup
+			if len(usingGroups) == 0 {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "令牌分组不可用，请重新设置")
+				return
+			}
+			usingGroup = usingGroups[0]
+			common.SetContextKey(c, constant.ContextKeyUsingGroups, usingGroups)
 		}
-		common.SetContextKey(c, constant.ContextKeyUsingGroup, userGroup)
+
+		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
@@ -307,7 +327,11 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	} else {
 		c.Set("token_model_limit_enabled", false)
 	}
-	c.Set("token_group", token.Group)
+	tokenGroup := token.PrimaryGroup()
+	if usingGroups := common.GetContextKeyStringSlice(c, constant.ContextKeyUsingGroups); len(usingGroups) > 0 {
+		tokenGroup = usingGroups[0]
+	}
+	c.Set("token_group", tokenGroup)
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

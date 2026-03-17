@@ -24,10 +24,12 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 	}
 
 	// check auto group
-	autoGroup, exists := ctx.Get("auto_group")
+	autoGroupAny, exists := ctx.Get("auto_group")
 	if exists {
-		logger.LogDebug(ctx, fmt.Sprintf("final group: %s", autoGroup))
-		relayInfo.UsingGroup = autoGroup.(string)
+		if autoGroup, ok := autoGroupAny.(string); ok && autoGroup != "" {
+			logger.LogDebug(ctx, fmt.Sprintf("final group: %s", autoGroup))
+			relayInfo.UsingGroup = autoGroup
+		}
 	}
 
 	// check user group special ratio
