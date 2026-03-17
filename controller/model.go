@@ -161,23 +161,29 @@ func ListModels(c *gin.Context, modelType int) {
 			})
 			return
 		}
-		group := userGroup
-		tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
-		if tokenGroup != "" {
-			group = tokenGroup
-		}
 		var models []string
-		if tokenGroup == "auto" {
-			for _, autoGroup := range service.GetUserAutoGroup(userGroup) {
-				groupModels := model.GetGroupEnabledModels(autoGroup)
-				for _, g := range groupModels {
-					if !common.StringsContains(models, g) {
-						models = append(models, g)
+		groups := common.GetContextKeyStringSlice(c, constant.ContextKeyUsingGroups)
+		if len(groups) == 0 {
+			groups = []string{userGroup}
+		}
+		for _, group := range groups {
+			if group == "auto" {
+				for _, autoGroup := range service.GetUserAutoGroup(userGroup) {
+					groupModels := model.GetGroupEnabledModels(autoGroup)
+					for _, g := range groupModels {
+						if !common.StringsContains(models, g) {
+							models = append(models, g)
+						}
 					}
 				}
+				continue
 			}
-		} else {
-			models = model.GetGroupEnabledModels(group)
+			groupModels := model.GetGroupEnabledModels(group)
+			for _, g := range groupModels {
+				if !common.StringsContains(models, g) {
+					models = append(models, g)
+				}
+			}
 		}
 		for _, modelName := range models {
 			if !acceptUnsetRatioModel {

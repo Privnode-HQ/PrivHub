@@ -101,24 +101,55 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}
 				}
-				channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(c, usingGroup, modelRequest.Model, 0)
-				if err != nil {
-					showGroup := usingGroup
-					if usingGroup == "auto" {
-						showGroup = fmt.Sprintf("auto(%s)", selectGroup)
+				candidates := common.GetContextKeyStringSlice(c, constant.ContextKeyUsingGroups)
+				if len(candidates) == 0 {
+					candidates = []string{usingGroup}
+				}
+
+				var lastErr error
+				var lastSelectGroup string
+				var selectedCandidate string
+				for _, group := range candidates {
+					var ch *model.Channel
+					ch, selectGroup, err = service.CacheGetRandomSatisfiedChannel(c, group, modelRequest.Model, 0)
+					if err != nil {
+						lastErr = err
+						lastSelectGroup = selectGroup
+						continue
 					}
-					message := fmt.Sprintf("获取分组 %s 下模型 %s 的可用渠道失败（distributor）: %s", showGroup, modelRequest.Model, err.Error())
-					// 如果错误，但是渠道不为空，说明是数据库一致性问题
-					//if channel != nil {
-					//	common.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
-					//	message = "数据库一致性已被破坏，请联系管理员"
-					//}
-					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, string(types.ErrorCodeModelNotFound))
+					if ch == nil {
+						lastErr = nil
+						lastSelectGroup = selectGroup
+						continue
+					}
+					channel = ch
+					selectedCandidate = group
+					break
+				}
+
+				if channel == nil {
+					showGroup := strings.Join(candidates, " -> ")
+					if len(candidates) == 1 {
+						showGroup = candidates[0]
+						if showGroup == "auto" && lastSelectGroup != "" {
+							showGroup = fmt.Sprintf("auto(%s)", lastSelectGroup)
+						}
+					}
+					if lastErr != nil {
+						message := fmt.Sprintf("获取分组 %s 下模型 %s 的可用渠道失败（distributor）: %s", showGroup, modelRequest.Model, lastErr.Error())
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, string(types.ErrorCodeModelNotFound))
+						return
+					}
+					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, fmt.Sprintf("分组 %s 下模型 %s 无可用渠道（distributor）", showGroup, modelRequest.Model), string(types.ErrorCodeModelNotFound))
 					return
 				}
-				if channel == nil {
-					abortWithOpenAiMessage(c, http.StatusServiceUnavailable, fmt.Sprintf("分组 %s 下模型 %s 无可用渠道（distributor）", usingGroup, modelRequest.Model), string(types.ErrorCodeModelNotFound))
-					return
+
+				// Ensure ContextKeyUsingGroup reflects the group selection strategy for this request.
+				// - For non-auto groups: use the selected group.
+				// - For auto group: keep "auto" (not the final auto-selected group) to preserve auto-group retry semantics.
+				if selectedCandidate != "" && selectedCandidate != usingGroup {
+					usingGroup = selectedCandidate
+					common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 				}
 			}
 		}
