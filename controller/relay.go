@@ -136,6 +136,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	defer func() {
+		if newAPIError != nil {
+			if err := service.ReleaseUsageReservation(relayInfo); err != nil {
+				logger.LogError(c, "release usage reservation failed: "+err.Error())
+			}
+		}
+	}()
+
 	if err := service.EnforceChatModeration(c, relayInfo.RelayMode, relayFormat, request, meta); err != nil {
 		newAPIError = err
 		return
@@ -163,6 +171,11 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError)
+		return
+	}
+
+	newAPIError = service.ReserveUsageEstimate(c, relayInfo, meta, priceData.QuotaToPreConsume)
+	if newAPIError != nil {
 		return
 	}
 

@@ -50,6 +50,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       detail: true,
       token: true,
       log: true,
+      usage: true,
       midjourney: true,
       task: true,
     },
@@ -66,6 +67,41 @@ export default function SettingsSidebarModulesAdmin(props) {
       redemption: true,
       user: true,
       setting: true,
+    },
+  });
+
+  const mergeSidebarModules = (config) => ({
+    chat: {
+      enabled: true,
+      playground: true,
+      chat: true,
+      ...(config?.chat || {}),
+    },
+    console: {
+      enabled: true,
+      detail: true,
+      token: true,
+      log: true,
+      usage: true,
+      midjourney: true,
+      task: true,
+      ...(config?.console || {}),
+    },
+    personal: {
+      enabled: true,
+      topup: true,
+      personal: true,
+      support: true,
+      ...(config?.personal || {}),
+    },
+    admin: {
+      enabled: true,
+      channel: true,
+      models: true,
+      redemption: true,
+      user: true,
+      setting: true,
+      ...(config?.admin || {}),
     },
   });
 
@@ -110,6 +146,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         detail: true,
         token: true,
         log: true,
+        usage: true,
         midjourney: true,
         task: true,
       },
@@ -172,30 +209,10 @@ export default function SettingsSidebarModulesAdmin(props) {
     if (props.options && props.options.SidebarModulesAdmin) {
       try {
         const modules = JSON.parse(props.options.SidebarModulesAdmin);
-        setSidebarModulesAdmin(modules);
+        setSidebarModulesAdmin(mergeSidebarModules(modules));
       } catch (error) {
         // 使用默认配置
-        const defaultModules = {
-          chat: { enabled: true, playground: true, chat: true },
-          console: {
-            enabled: true,
-            detail: true,
-            token: true,
-            log: true,
-            midjourney: true,
-            task: true,
-          },
-          personal: { enabled: true, topup: true, personal: true, support: true },
-          admin: {
-            enabled: true,
-            channel: true,
-            models: true,
-            redemption: true,
-            user: true,
-            setting: true,
-          },
-        };
-        setSidebarModulesAdmin(defaultModules);
+        setSidebarModulesAdmin(mergeSidebarModules());
       }
     }
   }, [props.options]);
@@ -223,6 +240,11 @@ export default function SettingsSidebarModulesAdmin(props) {
         { key: 'detail', title: t('数据看板'), description: t('系统数据统计') },
         { key: 'token', title: t('令牌管理'), description: t('API令牌管理') },
         { key: 'log', title: t('使用日志'), description: t('API使用记录') },
+        {
+          key: 'usage',
+          title: t('使用限制'),
+          description: t('当前限制与剩余额度'),
+        },
         {
           key: 'midjourney',
           title: t('绘图日志'),

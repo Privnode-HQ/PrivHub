@@ -84,6 +84,7 @@ export default function SettingsSidebarModulesUser() {
         detail: isSidebarModuleAllowed('console', 'detail'),
         token: isSidebarModuleAllowed('console', 'token'),
         log: isSidebarModuleAllowed('console', 'log'),
+        usage: isSidebarModuleAllowed('console', 'usage'),
         midjourney: isSidebarModuleAllowed('console', 'midjourney'),
         task: isSidebarModuleAllowed('console', 'task'),
       };
@@ -112,6 +113,17 @@ export default function SettingsSidebarModulesUser() {
     }
 
     return defaultConfig;
+  };
+
+  const mergeSidebarModules = (config, defaults) => {
+    const merged = {};
+    Object.keys(defaults).forEach((sectionKey) => {
+      merged[sectionKey] = {
+        ...defaults[sectionKey],
+        ...(config?.[sectionKey] || {}),
+      };
+    });
+    return merged;
   };
 
   // 用户个人左侧边栏模块设置
@@ -231,7 +243,10 @@ export default function SettingsSidebarModulesUser() {
               });
             }
           });
-          setSidebarModulesUser(filteredUserConf);
+          const defaultConfig = generateDefaultConfig();
+          setSidebarModulesUser(
+            mergeSidebarModules(filteredUserConf, defaultConfig),
+          );
           console.log('权限过滤后的用户配置:', filteredUserConf);
         } else {
           // 如果用户没有配置，使用权限过滤后的默认配置
@@ -295,6 +310,11 @@ export default function SettingsSidebarModulesUser() {
         { key: 'detail', title: t('数据看板'), description: t('系统数据统计') },
         { key: 'token', title: t('令牌管理'), description: t('API令牌管理') },
         { key: 'log', title: t('使用日志'), description: t('API使用记录') },
+        {
+          key: 'usage',
+          title: t('使用限制'),
+          description: t('当前限制与剩余额度'),
+        },
         {
           key: 'midjourney',
           title: t('绘图日志'),

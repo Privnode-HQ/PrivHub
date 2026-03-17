@@ -70,6 +70,7 @@ const NotificationSettings = ({
       detail: true,
       token: true,
       log: true,
+      usage: true,
       midjourney: true,
       task: true,
     },
@@ -89,6 +90,41 @@ const NotificationSettings = ({
     },
   });
   const [adminConfig, setAdminConfig] = useState(null);
+
+  const mergeSidebarModules = (config) => ({
+    chat: {
+      enabled: true,
+      playground: true,
+      chat: true,
+      ...(config?.chat || {}),
+    },
+    console: {
+      enabled: true,
+      detail: true,
+      token: true,
+      log: true,
+      usage: true,
+      midjourney: true,
+      task: true,
+      ...(config?.console || {}),
+    },
+    personal: {
+      enabled: true,
+      topup: true,
+      personal: true,
+      support: true,
+      ...(config?.personal || {}),
+    },
+    admin: {
+      enabled: true,
+      channel: true,
+      models: true,
+      redemption: true,
+      user: true,
+      setting: true,
+      ...(config?.admin || {}),
+    },
+  });
 
   // 使用后端权限验证替代前端角色判断
   const {
@@ -157,6 +193,7 @@ const NotificationSettings = ({
         detail: true,
         token: true,
         log: true,
+        usage: true,
         midjourney: true,
         task: true,
       },
@@ -180,14 +217,14 @@ const NotificationSettings = ({
         // 获取管理员全局配置
         if (statusState?.status?.SidebarModulesAdmin) {
           const adminConf = JSON.parse(statusState.status.SidebarModulesAdmin);
-          setAdminConfig(adminConf);
+          setAdminConfig(mergeSidebarModules(adminConf));
         }
 
         // 获取用户个人配置
         const userRes = await API.get('/api/user/self');
         if (userRes.data.success && userRes.data.data.sidebar_modules) {
           const userConf = JSON.parse(userRes.data.data.sidebar_modules);
-          setSidebarModulesUser(userConf);
+          setSidebarModulesUser(mergeSidebarModules(userConf));
         }
       } catch (error) {
         console.error('加载边栏配置失败:', error);
@@ -245,6 +282,11 @@ const NotificationSettings = ({
         { key: 'detail', title: t('数据看板'), description: t('系统数据统计') },
         { key: 'token', title: t('令牌管理'), description: t('API令牌管理') },
         { key: 'log', title: t('使用日志'), description: t('API使用记录') },
+        {
+          key: 'usage',
+          title: t('使用限制'),
+          description: t('当前限制与剩余额度'),
+        },
         {
           key: 'midjourney',
           title: t('绘图日志'),

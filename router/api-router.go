@@ -173,6 +173,7 @@ func SetApiRouter(router *gin.Engine) {
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CriticalRateLimit())
 		{
+			usageRoute.GET("/self/limits", middleware.UserAuth(), controller.GetSelfUsageLimits)
 			tokenUsageRoute := usageRoute.Group("/token")
 			tokenUsageRoute.Use(middleware.TokenAuth())
 			{

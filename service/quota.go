@@ -235,6 +235,9 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+	if err := SettleUsageReservation(relayInfo, int(totalTokens), quota); err != nil {
+		logger.LogError(ctx, "settle usage reservation failed: "+err.Error())
+	}
 }
 
 func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) {
@@ -361,6 +364,9 @@ func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+	if err := SettleUsageReservation(relayInfo, totalTokens, quota); err != nil {
+		logger.LogError(ctx, "settle usage reservation failed: "+err.Error())
+	}
 
 }
 
@@ -495,6 +501,9 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+	if err := SettleUsageReservation(relayInfo, totalTokens, quota); err != nil {
+		logger.LogError(ctx, "settle usage reservation failed: "+err.Error())
+	}
 }
 
 func PreConsumeTokenQuota(relayInfo *relaycommon.RelayInfo, quota int) error {

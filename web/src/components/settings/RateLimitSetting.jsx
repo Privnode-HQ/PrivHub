@@ -20,18 +20,12 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useEffect, useState } from 'react';
 import { Card, Spin } from '@douyinfe/semi-ui';
 
-import { API, showError, toBoolean } from '../../helpers';
-import { useTranslation } from 'react-i18next';
+import { API, showError } from '../../helpers';
 import RequestRateLimit from '../../pages/Setting/RateLimit/SettingsRequestRateLimit';
 
 const RateLimitSetting = () => {
-  const { t } = useTranslation();
   let [inputs, setInputs] = useState({
-    ModelRequestRateLimitEnabled: false,
-    ModelRequestRateLimitCount: 0,
-    ModelRequestRateLimitSuccessCount: 1000,
-    ModelRequestRateLimitDurationMinutes: 1,
-    ModelRequestRateLimitGroup: '',
+    UserGroupUsageLimits: '{}',
   });
 
   let [loading, setLoading] = useState(false);
@@ -42,18 +36,15 @@ const RateLimitSetting = () => {
     if (success) {
       let newInputs = {};
       data.forEach((item) => {
-        if (item.key === 'ModelRequestRateLimitGroup') {
+        if (item.key === 'UserGroupUsageLimits') {
           item.value = JSON.stringify(JSON.parse(item.value), null, 2);
         }
-
-        if (item.key.endsWith('Enabled')) {
-          newInputs[item.key] = toBoolean(item.value);
-        } else {
+        if (Object.prototype.hasOwnProperty.call(inputs, item.key)) {
           newInputs[item.key] = item.value;
         }
       });
 
-      setInputs(newInputs);
+      setInputs((prev) => ({ ...prev, ...newInputs }));
     } else {
       showError(message);
     }
@@ -77,7 +68,7 @@ const RateLimitSetting = () => {
   return (
     <>
       <Spin spinning={loading} size='large'>
-        {/* AI请求速率限制 */}
+        {/* 用户分组使用限制 */}
         <Card style={{ marginTop: '10px' }}>
           <RequestRateLimit options={inputs} refresh={onRefresh} />
         </Card>
