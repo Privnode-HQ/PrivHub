@@ -395,7 +395,7 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 	}
 
 	now := time.Now()
-	bounds := getUsageWindowBounds(now)
+	currentBounds := getUsageWindowBounds(now)
 	maxTokens := 0
 	if meta != nil {
 		maxTokens = meta.MaxTokens
@@ -417,15 +417,17 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 			return nil
 		}
 
-		minuteWindow, err := getOrCreateUsageWindowTx(tx, relayInfo.UserId, bounds[usageWindowMinute])
+		reservationBounds := getReservationWindowBounds(&reservation)
+
+		minuteWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, reservationBounds[usageWindowMinute])
 		if err != nil {
 			return err
 		}
-		dayWindow, err := getOrCreateUsageWindowTx(tx, relayInfo.UserId, bounds[usageWindowDay])
+		dayWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, reservationBounds[usageWindowDay])
 		if err != nil {
 			return err
 		}
-		monthWindow, err := getOrCreateUsageWindowTx(tx, relayInfo.UserId, bounds[usageWindowMonth])
+		monthWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, reservationBounds[usageWindowMonth])
 		if err != nil {
 			return err
 		}
@@ -434,15 +436,37 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 		budgetDelta := int64(estimatedBudget) - reservation.ReservedBudget
 
 		if tokenDelta > 0 {
-			if policy.TPM != nil && minuteWindow.TokenUsed+minuteWindow.TokenReserved+tokenDelta > *policy.TPM {
-				return &usageLimitExceededError{Metric: "tpm", Limit: *policy.TPM, ResetAt: bounds[usageWindowMinute].End}
+			if policy.TPM != nil && reservationBounds[usageWindowMinute].Start.Equal(currentBounds[usageWindowMinute].Start) &&
+				minuteWindow.TokenUsed+minuteWindow.TokenReserved+tokenDelta > *policy.TPM {
+				return &usageLimitExceededError{Metric: "tpm", Limit: *policy.TPM, ResetAt: reservationBounds[usageWindowMinute].End}
 			}
-			if policy.TPD != nil && dayWindow.TokenUsed+dayWindow.TokenReserved+tokenDelta > *policy.TPD {
-				return &usageLimitExceededError{Metric: "tpd", Limit: *policy.TPD, ResetAt: bounds[usageWindowDay].End}
+
+			dayCheckWindow := dayWindow
+			dayResetAt := reservationBounds[usageWindowDay].End
+			if !reservationBounds[usageWindowDay].Start.Equal(currentBounds[usageWindowDay].Start) {
+				dayCheckWindow, err = getUsageWindowTx(tx, reservation.UserID, currentBounds[usageWindowDay])
+				if err != nil {
+					return err
+				}
+				dayResetAt = currentBounds[usageWindowDay].End
+			}
+			if policy.TPD != nil && dayCheckWindow.TokenUsed+dayCheckWindow.TokenReserved+tokenDelta > *policy.TPD {
+				return &usageLimitExceededError{Metric: "tpd", Limit: *policy.TPD, ResetAt: dayResetAt}
 			}
 		}
-		if budgetDelta > 0 && policy.Monthly != nil && monthWindow.BudgetUsed+monthWindow.BudgetReserved+budgetDelta > *policy.Monthly {
-			return &usageLimitExceededError{Metric: "monthly", Limit: *policy.Monthly, ResetAt: bounds[usageWindowMonth].End}
+		if budgetDelta > 0 && policy.Monthly != nil {
+			monthCheckWindow := monthWindow
+			monthResetAt := reservationBounds[usageWindowMonth].End
+			if !reservationBounds[usageWindowMonth].Start.Equal(currentBounds[usageWindowMonth].Start) {
+				monthCheckWindow, err = getUsageWindowTx(tx, reservation.UserID, currentBounds[usageWindowMonth])
+				if err != nil {
+					return err
+				}
+				monthResetAt = currentBounds[usageWindowMonth].End
+			}
+			if monthCheckWindow.BudgetUsed+monthCheckWindow.BudgetReserved+budgetDelta > *policy.Monthly {
+				return &usageLimitExceededError{Metric: "monthly", Limit: *policy.Monthly, ResetAt: monthResetAt}
+			}
 		}
 
 		minuteWindow.TokenReserved += tokenDelta
