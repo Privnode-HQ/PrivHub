@@ -509,8 +509,10 @@ func releaseUsageReservationByID(userID int, reservationID string) error {
 		// Failed requests still consume RPM/RPD, but token and budget reservations
 		// are returned because no successful model usage was finalized.
 		windows.Minute.RequestReserved -= reservation.ReservedRequests
+		windows.Minute.RequestUsed += reservation.ReservedRequests
 		windows.Minute.TokenReserved -= reservation.ReservedTokens
 		windows.Day.RequestReserved -= reservation.ReservedRequests
+		windows.Day.RequestUsed += reservation.ReservedRequests
 		windows.Day.TokenReserved -= reservation.ReservedTokens
 		windows.Month.BudgetReserved -= reservation.ReservedBudget
 
