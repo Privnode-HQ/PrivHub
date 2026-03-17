@@ -284,7 +284,6 @@ func genStripeLink(
 				Coupon: stripe.String(discountRule.CouponID),
 			},
 		}
-		params.AllowPromotionCodes = stripe.Bool(false)
 	} else {
 		params.AllowPromotionCodes = stripe.Bool(setting.StripePromotionCodesEnabled)
 	}
