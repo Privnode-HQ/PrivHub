@@ -34,6 +34,7 @@ const routerMap = {
   home: '/',
   channel: '/console/channel',
   token: '/console/token',
+  usage: '/console/usage',
   redemption: '/console/redemption',
   topup: '/console/topup',
   user: '/console/user',
@@ -87,6 +88,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('使用日志'),
         itemKey: 'log',
         to: '/log',
+      },
+      {
+        text: t('使用限制'),
+        itemKey: 'usage',
+        to: '/usage',
       },
       {
         text: t('绘图日志'),
@@ -411,12 +417,16 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             if (!to) return itemElement;
 
             // 检查是否为外部链接（以//开头）
-            if (to.startsWith('//') || to.startsWith('http://') || to.startsWith('https://')) {
+            if (
+              to.startsWith('//') ||
+              to.startsWith('http://') ||
+              to.startsWith('https://')
+            ) {
               return (
                 <a
                   href={to}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target='_blank'
+                  rel='noopener noreferrer'
                   style={{ textDecoration: 'none' }}
                   onClick={onNavigate}
                 >

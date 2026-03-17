@@ -476,4 +476,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 	})
+	if err := service.SettleUsageReservation(relayInfo, totalTokens, quota); err != nil {
+		logger.LogError(ctx, "settle usage reservation failed: "+err.Error())
+	}
 }

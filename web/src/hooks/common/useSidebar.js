@@ -49,6 +49,7 @@ export const useSidebar = () => {
       detail: true,
       token: true,
       log: true,
+      usage: true,
       midjourney: true,
       task: true,
     },
@@ -68,12 +69,23 @@ export const useSidebar = () => {
     },
   };
 
+  const mergeSidebarConfig = (config, defaults = defaultAdminConfig) => {
+    const merged = {};
+    Object.keys(defaults).forEach((sectionKey) => {
+      merged[sectionKey] = {
+        ...defaults[sectionKey],
+        ...(config?.[sectionKey] || {}),
+      };
+    });
+    return merged;
+  };
+
   // 获取管理员配置
   const adminConfig = useMemo(() => {
     if (statusState?.status?.SidebarModulesAdmin) {
       try {
         const config = JSON.parse(statusState.status.SidebarModulesAdmin);
-        return config;
+        return mergeSidebarConfig(config);
       } catch (error) {
         return defaultAdminConfig;
       }
@@ -102,7 +114,7 @@ export const useSidebar = () => {
         } else {
           config = res.data.data.sidebar_modules;
         }
-        setUserConfig(config);
+        setUserConfig(mergeSidebarConfig(config));
       } else {
         // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
         // 这样可以确保权限控制正确生效
