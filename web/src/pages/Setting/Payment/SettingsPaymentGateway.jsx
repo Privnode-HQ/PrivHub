@@ -314,11 +314,11 @@ export default function SettingsPaymentGateway(props) {
                 field='AmountDiscount'
                 label={t('充值金额折扣配置')}
                 placeholder={t(
-                  '为一个 JSON 对象，例如：{"100": 5, "200": 15, "500": 40}',
+                  '为一个 JSON 对象，例如：{"100": [5, "coupon_id"], "200": [15, "coupon_id"]}',
                 )}
                 autosize
                 extraText={t(
-                  '设置不同充值金额对应的优惠金额，键为充值金额，值为减免金额，例如：{"100": 5, "200": 15, "500": 40}',
+                  '设置不同充值金额对应的优惠配置，键为充值金额，值为 [减免金额, Stripe Coupon ID]，例如：{"100": [5, "coupon_id"], "200": [15, "coupon_id"]}',
                 )}
               />
             </Col>

@@ -5,12 +5,17 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+func getTopupDiscountRule(originalAmount int64) (operation_setting.AmountDiscountRule, bool) {
+	rule, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]
+	return rule, ok
+}
+
 func getTopupDiscountAmount(originalAmount int64) decimal.Decimal {
-	discount, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]
-	if !ok || discount <= 0 {
+	rule, ok := getTopupDiscountRule(originalAmount)
+	if !ok || rule.DiscountAmount <= 0 {
 		return decimal.Zero
 	}
-	return decimal.NewFromFloat(discount)
+	return decimal.NewFromFloat(rule.DiscountAmount)
 }
 
 func applyTopupDiscount(base decimal.Decimal, originalAmount int64) decimal.Decimal {

@@ -74,16 +74,18 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	id := c.GetInt("id")
 	user, _ := model.GetUserById(id, false)
 	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
-	payMoney := getStripePayMoney(req.Amount, user.Group)
-	if payMoney <= 0.01 {
+	originalPayMoney := getStripeOriginalPayMoney(req.Amount, user.Group)
+	payMoney := applyTopupDiscount(originalPayMoney, req.Amount)
+	if payMoney.InexactFloat64() <= 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
+	discountRule, _ := getTopupDiscountRule(req.Amount)
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, payMoney)
+	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, originalPayMoney, discountRule)
 	if err != nil {
 		log.Println("获取Stripe Checkout支付链接失败", err)
 		c.JSON(200, gin.H{"message": "error", "data": "拉起支付失败"})
@@ -217,7 +219,14 @@ func sessionExpired(event stripe.Event) {
 	log.Println("充值订单已过期", referenceId)
 }
 
-func genStripeLink(referenceId string, customerId string, email string, amount int64, payMoney float64) (string, error) {
+func genStripeLink(
+	referenceId string,
+	customerId string,
+	email string,
+	amount int64,
+	originalPayMoney decimal.Decimal,
+	discountRule operation_setting.AmountDiscountRule,
+) (string, error) {
 	if !strings.HasPrefix(setting.StripeApiSecret, "sk_") && !strings.HasPrefix(setting.StripeApiSecret, "rk_") {
 		return "", fmt.Errorf("无效的Stripe API密钥")
 	}
@@ -229,11 +238,13 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 		return "", fmt.Errorf("获取Stripe价格配置失败: %w", err)
 	}
 
-	minorAmount := getStripeMinorUnitAmount(
-		decimal.NewFromFloat(payMoney),
-		setting.StripeUnitPrice,
-		priceInfo.UnitAmount,
-	)
+	lineAmount := originalPayMoney
+	usePresetCoupon := discountRule.CouponID != "" && discountRule.DiscountAmount > 0
+	if !usePresetCoupon {
+		lineAmount = applyTopupDiscount(originalPayMoney, amount)
+	}
+
+	minorAmount := getStripeMinorUnitAmount(lineAmount, setting.StripeUnitPrice, priceInfo.UnitAmount)
 	if minorAmount <= 0 {
 		return "", fmt.Errorf("无效的Stripe支付金额")
 	}
@@ -265,8 +276,17 @@ func genStripeLink(referenceId string, customerId string, email string, amount i
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			lineItem,
 		},
-		Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
-		AllowPromotionCodes: stripe.Bool(setting.StripePromotionCodesEnabled),
+		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
+	}
+	if usePresetCoupon {
+		params.Discounts = []*stripe.CheckoutSessionDiscountParams{
+			{
+				Coupon: stripe.String(discountRule.CouponID),
+			},
+		}
+		params.AllowPromotionCodes = stripe.Bool(false)
+	} else {
+		params.AllowPromotionCodes = stripe.Bool(setting.StripePromotionCodesEnabled)
 	}
 
 	if "" == customerId {
@@ -297,7 +317,12 @@ func GetChargedAmount(count float64, user model.User) float64 {
 }
 
 func getStripePayMoney(amount int64, group string) float64 {
-	originalAmount := amount
+	payMoney := getStripeOriginalPayMoney(amount, group)
+	payMoney = applyTopupDiscount(payMoney, amount)
+	return payMoney.InexactFloat64()
+}
+
+func getStripeOriginalPayMoney(amount int64, group string) decimal.Decimal {
 	dAmount := decimal.NewFromInt(amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
 		dAmount = dAmount.Div(decimal.NewFromFloat(common.QuotaPerUnit))
@@ -308,9 +333,7 @@ func getStripePayMoney(amount int64, group string) float64 {
 	}
 	dTopupGroupRatio := decimal.NewFromFloat(topupGroupRatio)
 	dUnitPrice := decimal.NewFromFloat(setting.StripeUnitPrice)
-	payMoney := dAmount.Mul(dUnitPrice).Mul(dTopupGroupRatio)
-	payMoney = applyTopupDiscount(payMoney, originalAmount)
-	return payMoney.InexactFloat64()
+	return dAmount.Mul(dUnitPrice).Mul(dTopupGroupRatio)
 }
 
 func getStripeMinTopup() int64 {
