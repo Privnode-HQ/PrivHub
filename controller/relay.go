@@ -114,10 +114,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	if shouldRejectDetectMagicString(relayFormat) && requestContainsDetectMagicString(request, meta) {
 		code := types.ErrorCodePrivnodeInternalDetectedRefusal
+		if userId := c.GetInt("id"); requestId != "" && userId != 0 {
+			requestId = fmt.Sprintf("%s-%d", requestId, userId)
+		}
 		if relayFormat == types.RelayFormatClaude {
-			newAPIError = types.WithClaudeError(types.ClaudeError{
-				Type:    string(code),
+			newAPIError = types.WithOpenAIError(types.OpenAIError{
 				Message: string(code),
+				Type:    string(types.ErrorTypeNewAPIError),
+				Param:   "",
+				Code:    string(code),
 			}, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		} else {
 			newAPIError = types.NewErrorWithStatusCode(errors.New(string(code)), code, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
