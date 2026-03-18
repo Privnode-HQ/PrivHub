@@ -39,6 +39,18 @@ import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
 
+const emptyTopupQuote = {
+  available_coupons: [],
+  original_amount: 0,
+  base_payable_amount: 0,
+  platform_discount_amount: 0,
+  coupon_discount_amount: 0,
+  final_payable_amount: 0,
+  min_payable_threshold: 0,
+  selected_coupon_id: 0,
+  ineligible_reason: '',
+};
+
 const TopUp = () => {
   const { t } = useTranslation();
   const [userState, userDispatch] = useContext(UserContext);
@@ -83,6 +95,9 @@ const TopUp = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [payMethods, setPayMethods] = useState([]);
+  const [topupQuote, setTopupQuote] = useState(emptyTopupQuote);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [selectedCouponId, setSelectedCouponId] = useState(0);
 
   const affFetchedRef = useRef(false);
 
@@ -155,6 +170,59 @@ const TopUp = () => {
     window.open(topUpLink, '_blank');
   };
 
+  const resetTopupQuote = () => {
+    setTopupQuote({ ...emptyTopupQuote });
+    setSelectedCouponId(0);
+  };
+
+  const loadTopupQuote = async ({
+    paymentMethod,
+    amountValue,
+    couponId = 0,
+    product = null,
+  }) => {
+    if (!paymentMethod) return null;
+
+    const payload = {
+      payment_method: paymentMethod,
+    };
+
+    if (paymentMethod === 'creem') {
+      if (!product?.productId) return null;
+      payload.product_id = product.productId;
+    } else {
+      payload.amount = parseInt(amountValue ?? topUpCount);
+      if (!payload.amount || payload.amount < 1) return null;
+    }
+
+    if (couponId) {
+      payload.coupon_id = couponId;
+    }
+
+    setQuoteLoading(true);
+    try {
+      const res = await API.post('/api/user/topup/quote', payload);
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return null;
+      }
+
+      setTopupQuote({
+        ...emptyTopupQuote,
+        ...data,
+        available_coupons: data.available_coupons || [],
+      });
+      setSelectedCouponId(data.selected_coupon_id || 0);
+      return data;
+    } catch (error) {
+      showError(error.message);
+      return null;
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
   const preTopUp = async (payment) => {
     if (payment === 'stripe') {
       if (!enableStripeTopUp) {
@@ -170,6 +238,7 @@ const TopUp = () => {
 
     setPayWay(payment);
     setPaymentLoading(true);
+    resetTopupQuote();
     try {
       if (payment === 'stripe') {
         await getStripeAmount();
@@ -179,6 +248,13 @@ const TopUp = () => {
 
       if (topUpCount < minTopUp) {
         showError(t('充值数量不能小于') + minTopUp);
+        return;
+      }
+      const quote = await loadTopupQuote({
+        paymentMethod: payment,
+        amountValue: topUpCount,
+      });
+      if (!quote) {
         return;
       }
       setOpen(true);
@@ -208,18 +284,30 @@ const TopUp = () => {
     }
     setConfirmLoading(true);
     try {
+      if (!topupQuote.final_payable_amount) {
+        const quote = await loadTopupQuote({
+          paymentMethod: payWay,
+          amountValue: topUpCount,
+          couponId: selectedCouponId,
+        });
+        if (!quote) {
+          return;
+        }
+      }
       let res;
       if (payWay === 'stripe') {
         // Stripe 支付请求
         res = await API.post('/api/user/stripe/pay', {
           amount: parseInt(topUpCount),
           payment_method: 'stripe',
+          coupon_id: selectedCouponId || undefined,
         });
       } else {
         // 普通支付请求
         res = await API.post('/api/user/pay', {
           amount: parseInt(topUpCount),
           payment_method: payWay,
+          coupon_id: selectedCouponId || undefined,
         });
       }
 
@@ -265,6 +353,7 @@ const TopUp = () => {
     } finally {
       setOpen(false);
       setConfirmLoading(false);
+      resetTopupQuote();
     }
   };
 
@@ -273,7 +362,13 @@ const TopUp = () => {
       showError(t('管理员未开启 Creem 充值！'));
       return;
     }
+    setPayWay('creem');
+    resetTopupQuote();
     setSelectedCreemProduct(product);
+    await loadTopupQuote({
+      paymentMethod: 'creem',
+      product,
+    });
     setCreemOpen(true);
   };
 
@@ -292,6 +387,7 @@ const TopUp = () => {
       const res = await API.post('/api/user/creem/pay', {
         product_id: selectedCreemProduct.productId,
         payment_method: 'creem',
+        coupon_id: selectedCouponId || undefined,
       });
       if (res !== undefined) {
         const { message, data } = res.data;
@@ -309,6 +405,7 @@ const TopUp = () => {
     } finally {
       setCreemOpen(false);
       setConfirmLoading(false);
+      resetTopupQuote();
     }
   };
 
@@ -336,6 +433,7 @@ const TopUp = () => {
         setTopupInfo({
           amount_options: data.amount_options || [],
           discount: data.discount || {},
+          coupon_summary: data.coupon_summary || null,
         });
 
         // 处理支付方式
@@ -572,6 +670,7 @@ const TopUp = () => {
 
   const handleCancel = () => {
     setOpen(false);
+    resetTopupQuote();
   };
 
   const handleTransferCancel = () => {
@@ -589,6 +688,22 @@ const TopUp = () => {
   const handleCreemCancel = () => {
     setCreemOpen(false);
     setSelectedCreemProduct(null);
+    resetTopupQuote();
+  };
+
+  const handleCouponChange = async (couponId) => {
+    const nextCouponId = Number(couponId) || 0;
+    setSelectedCouponId(nextCouponId);
+    await loadTopupQuote({
+      paymentMethod: payWay,
+      amountValue: topUpCount,
+      product: selectedCreemProduct,
+      couponId: nextCouponId,
+    });
+  };
+
+  const handleCouponBannerClick = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // 选择预设充值额度
@@ -643,12 +758,17 @@ const TopUp = () => {
         confirmLoading={confirmLoading}
         topUpCount={topUpCount}
         renderQuotaWithAmount={renderQuotaWithAmount}
-        amountLoading={amountLoading}
-        renderAmount={renderAmount}
+        amountLoading={quoteLoading}
         payWay={payWay}
         payMethods={payMethods}
-        amountNumber={amount}
-        discountAmount={topupInfo?.discount?.[topUpCount] ?? 0}
+        originalAmount={topupQuote.original_amount || amount}
+        platformDiscountAmount={topupQuote.platform_discount_amount || 0}
+        couponDiscountAmount={topupQuote.coupon_discount_amount || 0}
+        finalPayableAmount={topupQuote.final_payable_amount || amount}
+        availableCoupons={topupQuote.available_coupons || []}
+        selectedCouponId={selectedCouponId}
+        onCouponChange={handleCouponChange}
+        ineligibleReason={topupQuote.ineligible_reason || ''}
       />
 
       {/* 充值账单模态框 */}
@@ -675,11 +795,13 @@ const TopUp = () => {
               {t('产品名称')}：{selectedCreemProduct.name}
             </p>
             <p>
-              {t('价格')}：{selectedCreemProduct.currency === 'EUR' ? '€' : '$'}{selectedCreemProduct.price}
+              {t('价格')}：{selectedCreemProduct.currency === 'EUR' ? '€' : '$'}
+              {topupQuote.final_payable_amount || selectedCreemProduct.price}
             </p>
             <p>
               {t('充值额度')}：{selectedCreemProduct.quota}
             </p>
+            <p>{t('当前支付方式暂不支持优惠券')}</p>
             <p>{t('是否确认充值？')}</p>
           </>
         )}
@@ -725,6 +847,7 @@ const TopUp = () => {
               statusLoading={statusLoading}
               topupInfo={topupInfo}
               onOpenHistory={handleOpenHistory}
+              onCouponBannerClick={handleCouponBannerClick}
               turnstileEnabled={turnstileEnabled}
               turnstileSiteKey={turnstileSiteKey}
               setTurnstileToken={setTurnstileToken}

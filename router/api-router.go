@@ -78,6 +78,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.DELETE("/passkey", controller.PasskeyDelete)
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
+				selfRoute.POST("/topup/quote", controller.RequestTopUpQuote)
 				selfRoute.GET("/topup/self", controller.GetUserTopUps)
 				selfRoute.POST("/topup", middleware.TurnstileCheck(), controller.TopUp)
 				selfRoute.POST("/pay", middleware.CriticalRateLimit(), controller.RequestEpay)
@@ -191,6 +192,15 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.PUT("/", controller.UpdateRedemption)
 			redemptionRoute.DELETE("/invalid", controller.DeleteInvalidRedemption)
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
+		}
+		topUpCouponRoute := apiRouter.Group("/topup-coupon")
+		topUpCouponRoute.Use(middleware.AdminAuth())
+		{
+			topUpCouponRoute.GET("/", controller.GetAllTopUpCoupons)
+			topUpCouponRoute.GET("/search", controller.SearchTopUpCoupons)
+			topUpCouponRoute.GET("/:id", controller.GetTopUpCoupon)
+			topUpCouponRoute.POST("/", controller.AddTopUpCoupon)
+			topUpCouponRoute.PUT("/", controller.UpdateTopUpCoupon)
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)

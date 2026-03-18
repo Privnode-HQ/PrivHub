@@ -34,6 +34,7 @@ import PasswordResetConfirm from './components/auth/PasswordResetConfirm';
 import Channel from './pages/Channel';
 import Token from './pages/Token';
 import Redemption from './pages/Redemption';
+import TopupCoupon from './pages/TopupCoupon';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
 import Usage from './pages/Usage';
@@ -140,6 +141,14 @@ function App() {
           element={
             <AdminRoute>
               <Redemption />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/topup-coupon'
+          element={
+            <AdminRoute>
+              <TopupCoupon />
             </AdminRoute>
           }
         />

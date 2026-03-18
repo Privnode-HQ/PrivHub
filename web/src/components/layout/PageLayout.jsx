@@ -53,6 +53,7 @@ const PageLayout = () => {
     '/console/log',
     '/console/usage',
     '/console/redemption',
+    '/console/topup-coupon',
     '/console/user',
     '/console/token',
     '/console/midjourney',

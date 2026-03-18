@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
+import { Modal, Typography, Card, Select, Skeleton } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
 
@@ -33,18 +33,29 @@ const PaymentConfirmModal = ({
   topUpCount,
   renderQuotaWithAmount,
   amountLoading,
-  renderAmount,
   payWay,
   payMethods,
-  amountNumber,
-  discountAmount,
+  originalAmount,
+  platformDiscountAmount,
+  couponDiscountAmount,
+  finalPayableAmount,
+  availableCoupons,
+  selectedCouponId,
+  onCouponChange,
+  ineligibleReason,
 }) => {
-  const normalizedDiscountAmount =
-    discountAmount && discountAmount > 0 ? discountAmount : 0;
-  const hasDiscount = normalizedDiscountAmount > 0 && amountNumber > 0;
-  const originalAmount = hasDiscount
-    ? amountNumber + normalizedDiscountAmount
-    : 0;
+  const normalizedOriginalAmount =
+    originalAmount && originalAmount > 0 ? originalAmount : 0;
+  const normalizedPlatformDiscount =
+    platformDiscountAmount && platformDiscountAmount > 0
+      ? platformDiscountAmount
+      : 0;
+  const normalizedCouponDiscount =
+    couponDiscountAmount && couponDiscountAmount > 0 ? couponDiscountAmount : 0;
+  const normalizedFinalAmount =
+    finalPayableAmount && finalPayableAmount > 0 ? finalPayableAmount : 0;
+  const hasAnyDiscount =
+    normalizedPlatformDiscount > 0 || normalizedCouponDiscount > 0;
   return (
     <Modal
       title={
@@ -60,6 +71,9 @@ const PaymentConfirmModal = ({
       size='small'
       centered
       confirmLoading={confirmLoading}
+      okButtonProps={{
+        disabled: amountLoading || Boolean(ineligibleReason),
+      }}
     >
       <div className='space-y-4'>
         <Card className='!rounded-xl !border-0 bg-slate-50 dark:bg-slate-800'>
@@ -80,28 +94,65 @@ const PaymentConfirmModal = ({
                 <Skeleton.Title style={{ width: '60px', height: '16px' }} />
               ) : (
                 <Text strong className='font-bold' style={{ color: 'red' }}>
-                  {renderAmount()}
+                  {`${normalizedFinalAmount.toFixed(2)} ${t('元')}`}
                 </Text>
               )}
             </div>
-            {hasDiscount && !amountLoading && (
+            {availableCoupons?.length > 0 && (
+              <div className='space-y-2'>
+                <Text strong className='text-slate-700 dark:text-slate-200'>
+                  {t('选择优惠券')}：
+                </Text>
+                <Select
+                  value={selectedCouponId || 0}
+                  onChange={onCouponChange}
+                  size='small'
+                  style={{ width: '100%' }}
+                >
+                  <Select.Option value={0}>
+                    {t('不使用优惠券')}
+                  </Select.Option>
+                  {availableCoupons.map((coupon) => (
+                    <Select.Option value={coupon.id} key={coupon.id}>
+                      {`${coupon.name} (-${Number(coupon.deduction_amount || 0).toFixed(2)} ${t('元')})`}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            {ineligibleReason && (
+              <Text type='danger'>{t(ineligibleReason)}</Text>
+            )}
+            {hasAnyDiscount && !amountLoading && (
               <>
                 <div className='flex justify-between items-center'>
                   <Text className='text-slate-500 dark:text-slate-400'>
                     {t('原价')}：
                   </Text>
                   <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {`${originalAmount.toFixed(2)} ${t('元')}`}
+                    {`${normalizedOriginalAmount.toFixed(2)} ${t('元')}`}
                   </Text>
                 </div>
-                <div className='flex justify-between items-center'>
-                  <Text className='text-slate-500 dark:text-slate-400'>
-                    {t('优惠')}：
-                  </Text>
-                  <Text className='text-emerald-600 dark:text-emerald-400'>
-                    {`- ${normalizedDiscountAmount.toFixed(2)} ${t('元')}`}
-                  </Text>
-                </div>
+                {normalizedPlatformDiscount > 0 && (
+                  <div className='flex justify-between items-center'>
+                    <Text className='text-slate-500 dark:text-slate-400'>
+                      {t('平台优惠')}：
+                    </Text>
+                    <Text className='text-emerald-600 dark:text-emerald-400'>
+                      {`- ${normalizedPlatformDiscount.toFixed(2)} ${t('元')}`}
+                    </Text>
+                  </div>
+                )}
+                {normalizedCouponDiscount > 0 && (
+                  <div className='flex justify-between items-center'>
+                    <Text className='text-slate-500 dark:text-slate-400'>
+                      {t('优惠券抵扣')}：
+                    </Text>
+                    <Text className='text-emerald-600 dark:text-emerald-400'>
+                      {`- ${normalizedCouponDiscount.toFixed(2)} ${t('元')}`}
+                    </Text>
+                  </div>
+                )}
               </>
             )}
             <div className='flex justify-between items-center'>

@@ -60,6 +60,9 @@ func GetTopUpInfo(c *gin.Context) {
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().GetAmountDiscountValues(),
 	}
+	if summary, err := model.GetUserTopUpCouponSummary(c.GetInt("id")); err == nil {
+		data["coupon_summary"] = summary
+	}
 	common.ApiSuccess(c, data)
 }
 
@@ -67,11 +70,13 @@ type EpayRequest struct {
 	Amount        int64  `json:"amount"`
 	PaymentMethod string `json:"payment_method"`
 	TopUpCode     string `json:"top_up_code"`
+	CouponId      int    `json:"coupon_id"`
 }
 
 type AmountRequest struct {
 	Amount    int64  `json:"amount"`
 	TopUpCode string `json:"top_up_code"`
+	CouponId  int    `json:"coupon_id"`
 }
 
 func GetEpayClient() *epay.Client {
@@ -89,7 +94,12 @@ func GetEpayClient() *epay.Client {
 }
 
 func getPayMoney(amount int64, group string) float64 {
-	originalAmount := amount
+	payMoney := getOriginalPayMoney(amount, group)
+	payMoney = applyTopupDiscount(payMoney, amount)
+	return payMoney.InexactFloat64()
+}
+
+func getOriginalPayMoney(amount int64, group string) decimal.Decimal {
 	dAmount := decimal.NewFromInt(amount)
 	// 充值金额以“展示类型”为准：
 	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
@@ -105,10 +115,7 @@ func getPayMoney(amount int64, group string) float64 {
 
 	dTopupGroupRatio := decimal.NewFromFloat(topupGroupRatio)
 	dPrice := decimal.NewFromFloat(operation_setting.Price)
-	payMoney := dAmount.Mul(dPrice).Mul(dTopupGroupRatio)
-	payMoney = applyTopupDiscount(payMoney, originalAmount)
-
-	return payMoney.InexactFloat64()
+	return dAmount.Mul(dPrice).Mul(dTopupGroupRatio)
 }
 
 func getMinTopup() int64 {
@@ -134,12 +141,25 @@ func RequestEpay(c *gin.Context) {
 	}
 
 	id := c.GetInt("id")
-	group, err := model.GetUserGroup(id, true)
-	if err != nil {
-		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
+	user, err := model.GetUserById(id, false)
+	if err != nil || user == nil {
+		c.JSON(200, gin.H{"message": "error", "data": "获取用户信息失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
+	quote, err := buildTopUpQuote(user, TopUpQuoteRequest{
+		PaymentMethod: req.PaymentMethod,
+		Amount:        req.Amount,
+		CouponId:      req.CouponId,
+	})
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	if err := validateSelectedCoupon(req.CouponId, quote); err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	payMoney := quote.FinalPayableAmount
 	if payMoney < 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -180,18 +200,26 @@ func RequestEpay(c *gin.Context) {
 		amount = dAmount.Div(dQuotaPerUnit).IntPart()
 	}
 	topUp := &model.TopUp{
-		UserId:        id,
-		Amount:        amount,
-		Money:         payMoney,
-		TradeNo:       tradeNo,
-		PaymentMethod: req.PaymentMethod,
-		CreateTime:    time.Now().Unix(),
-		Status:        "pending",
+		UserId:           id,
+		Amount:           amount,
+		Money:            payMoney,
+		TradeNo:          tradeNo,
+		PaymentMethod:    req.PaymentMethod,
+		CreateTime:       time.Now().Unix(),
+		Status:           common.TopUpStatusPending,
+		CouponId:         req.CouponId,
+		OriginalMoney:    quote.OriginalAmount,
+		PlatformDiscount: quote.PlatformDiscountAmount,
+		CouponDiscount:   quote.CouponDiscountAmount,
+		PayMoney:         quote.FinalPayableAmount,
 	}
-	err = topUp.Insert()
+	err = createTopUpOrder(topUp)
 	if err != nil {
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})
 		return
+	}
+	if req.CouponId != 0 {
+		model.RecordLog(id, model.LogTypeTopup, fmt.Sprintf("创建充值订单并使用优惠券 %s，抵扣 %.2f", topUp.CouponName, topUp.CouponDiscount))
 	}
 	c.JSON(200, gin.H{"message": "success", "data": params, "url": uri})
 }
@@ -281,6 +309,9 @@ func EpayNotify(c *gin.Context) {
 			topUp.Status = common.TopUpStatusSuccess
 			topUp.CompleteTime = common.GetTimestamp()
 			if err := tx.Save(topUp).Error; err != nil {
+				return err
+			}
+			if err := model.MarkTopUpCouponUsedTx(tx, topUp); err != nil {
 				return err
 			}
 

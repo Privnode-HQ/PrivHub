@@ -17,11 +17,30 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-export * from './channel.constants';
-export * from './user.constants';
-export * from './toast.constants';
-export * from './common.constant';
-export * from './dashboard.constants';
-export * from './playground.constants';
-export * from './redemption.constants';
-export * from './topup-coupon.constants';
+import React from 'react';
+import { Button } from '@douyinfe/semi-ui';
+
+const TopupCouponsActions = ({ openCreate, refresh, t }) => {
+  return (
+    <div className='flex flex-wrap gap-2 w-full md:w-auto order-2 md:order-1'>
+      <Button
+        type='primary'
+        className='flex-1 md:flex-initial'
+        onClick={openCreate}
+        size='small'
+      >
+        {t('发放优惠券')}
+      </Button>
+      <Button
+        type='tertiary'
+        className='flex-1 md:flex-initial'
+        onClick={() => refresh()}
+        size='small'
+      >
+        {t('刷新')}
+      </Button>
+    </div>
+  );
+};
+
+export default TopupCouponsActions;

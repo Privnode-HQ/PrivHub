@@ -7,12 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
+	"io"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +51,7 @@ func verifyCreemSignature(payload string, signature string, secret string) bool 
 type CreemPayRequest struct {
 	ProductId     string `json:"product_id"`
 	PaymentMethod string `json:"payment_method"`
+	CouponId      int    `json:"coupon_id"`
 }
 
 type CreemProduct struct {
@@ -72,6 +73,10 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	if req.ProductId == "" {
 		c.JSON(200, gin.H{"message": "error", "data": "请选择产品"})
+		return
+	}
+	if req.CouponId != 0 {
+		c.JSON(200, gin.H{"message": "error", "data": "当前支付方式暂不支持优惠券"})
 		return
 	}
 
@@ -107,14 +112,17 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
-		UserId:     id,
-		Amount:     selectedProduct.Quota, // 充值额度
-		Money:      selectedProduct.Price, // 支付金额
-		TradeNo:    referenceId,
-		CreateTime: time.Now().Unix(),
-		Status:     common.TopUpStatusPending,
+		UserId:        id,
+		Amount:        selectedProduct.Quota, // 充值额度
+		Money:         selectedProduct.Price, // 用于额度与统计的价格快照
+		TradeNo:       referenceId,
+		PaymentMethod: PaymentMethodCreem,
+		CreateTime:    time.Now().Unix(),
+		Status:        common.TopUpStatusPending,
+		OriginalMoney: selectedProduct.Price,
+		PayMoney:      selectedProduct.Price,
 	}
-	err = topUp.Insert()
+	err = createTopUpOrder(topUp)
 	if err != nil {
 		log.Printf("创建Creem订单失败: %v", err)
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})
