@@ -92,6 +92,8 @@ const RechargeCard = ({
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
+  const preferUserCoupon =
+    topupInfo?.coupon_summary?.has_available_coupon === true;
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
@@ -418,9 +420,11 @@ const RechargeCard = ({
                     <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2'>
                       {presetAmounts.map((preset, index) => {
                         const discountAmountRaw =
-                          preset.discount ??
-                          topupInfo?.discount?.[preset.value] ??
-                          0;
+                          preferUserCoupon
+                            ? 0
+                            : (preset.discount ??
+                              topupInfo?.discount?.[preset.value] ??
+                              0);
                         const originalPrice = preset.value * priceRatio;
                         const actualPay = Math.max(
                           originalPrice - discountAmountRaw,

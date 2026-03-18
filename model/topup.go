@@ -12,21 +12,22 @@ import (
 )
 
 type TopUp struct {
-	Id                int     `json:"id"`
-	UserId            int     `json:"user_id" gorm:"index"`
-	Amount            int64   `json:"amount"`
-	Money             float64 `json:"money"`
-	TradeNo           string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod     string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime        int64   `json:"create_time"`
-	CompleteTime      int64   `json:"complete_time"`
-	Status            string  `json:"status"`
-	CouponId          int     `json:"coupon_id" gorm:"index"`
-	CouponName        string  `json:"coupon_name" gorm:"type:varchar(100)"`
-	OriginalMoney     float64 `json:"original_money"`
-	PlatformDiscount  float64 `json:"platform_discount"`
-	CouponDiscount    float64 `json:"coupon_discount"`
-	PayMoney          float64 `json:"pay_money"`
+	Id               int     `json:"id"`
+	UserId           int     `json:"user_id" gorm:"index"`
+	Amount           int64   `json:"amount"`
+	Money            float64 `json:"money"`
+	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod    string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime       int64   `json:"create_time"`
+	CompleteTime     int64   `json:"complete_time"`
+	Status           string  `json:"status"`
+	CouponId         int     `json:"coupon_id" gorm:"index"`
+	CouponName       string  `json:"coupon_name" gorm:"type:varchar(100)"`
+	OriginalMoney    float64 `json:"original_money"`
+	PlatformDiscount float64 `json:"platform_discount"`
+	CouponDiscount   float64 `json:"coupon_discount"`
+	PayMoney         float64 `json:"pay_money"`
+	StripeCouponId   string  `json:"-" gorm:"type:varchar(255)"`
 }
 
 func (topUp *TopUp) Insert() error {

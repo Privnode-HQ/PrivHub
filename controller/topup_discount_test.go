@@ -109,6 +109,7 @@ func TestResolveStripeCheckoutAmount(t *testing.T) {
 	tests := []struct {
 		name               string
 		original           string
+		basePayable        string
 		final              string
 		rule               operation_setting.AmountDiscountRule
 		hasUserCoupon      bool
@@ -118,23 +119,26 @@ func TestResolveStripeCheckoutAmount(t *testing.T) {
 		{
 			name:               "preset stripe coupon keeps original line amount",
 			original:           "100",
+			basePayable:        "95",
 			final:              "95",
 			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
 			expectedAmount:     "100",
 			expectPresetCoupon: true,
 		},
 		{
-			name:               "user coupon disables preset stripe coupon",
+			name:               "user coupon uses base payable line amount",
 			original:           "100",
+			basePayable:        "95",
 			final:              "88",
 			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
 			hasUserCoupon:      true,
-			expectedAmount:     "88",
+			expectedAmount:     "95",
 			expectPresetCoupon: false,
 		},
 		{
 			name:               "inline discount uses final amount when no stripe coupon",
 			original:           "100",
+			basePayable:        "95",
 			final:              "95",
 			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5},
 			expectedAmount:     "95",
@@ -146,6 +150,7 @@ func TestResolveStripeCheckoutAmount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotAmount, gotPresetCoupon := resolveStripeCheckoutAmount(
 				decimal.RequireFromString(tt.original),
+				decimal.RequireFromString(tt.basePayable),
 				decimal.RequireFromString(tt.final),
 				tt.rule,
 				tt.hasUserCoupon,
@@ -155,6 +160,53 @@ func TestResolveStripeCheckoutAmount(t *testing.T) {
 			}
 			if gotPresetCoupon != tt.expectPresetCoupon {
 				t.Fatalf("expected preset coupon %v, got %v", tt.expectPresetCoupon, gotPresetCoupon)
+			}
+		})
+	}
+}
+
+func TestResolveTopUpBasePayable(t *testing.T) {
+	tests := []struct {
+		name                  string
+		original              string
+		discounted            string
+		platformDiscount      string
+		hasEligibleUserCoupon bool
+		expectedBase          string
+		expectedPlatform      string
+	}{
+		{
+			name:             "keep platform discount when no eligible user coupon",
+			original:         "100",
+			discounted:       "95",
+			platformDiscount: "5",
+			expectedBase:     "95",
+			expectedPlatform: "5",
+		},
+		{
+			name:                  "prefer user coupon over platform discount",
+			original:              "100",
+			discounted:            "95",
+			platformDiscount:      "5",
+			hasEligibleUserCoupon: true,
+			expectedBase:          "100",
+			expectedPlatform:      "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotBase, gotPlatform := resolveTopUpBasePayable(
+				decimal.RequireFromString(tt.original),
+				decimal.RequireFromString(tt.discounted),
+				decimal.RequireFromString(tt.platformDiscount),
+				tt.hasEligibleUserCoupon,
+			)
+			if gotBase.String() != tt.expectedBase {
+				t.Fatalf("expected base %s, got %s", tt.expectedBase, gotBase.String())
+			}
+			if gotPlatform.String() != tt.expectedPlatform {
+				t.Fatalf("expected platform %s, got %s", tt.expectedPlatform, gotPlatform.String())
 			}
 		})
 	}

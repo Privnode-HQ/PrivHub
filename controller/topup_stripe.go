@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/checkout/session"
+	stripecoupon "github.com/stripe/stripe-go/v81/coupon"
 	stripeprice "github.com/stripe/stripe-go/v81/price"
 	"github.com/stripe/stripe-go/v81/webhook"
 	"github.com/thanhpk/randstr"
@@ -39,6 +41,13 @@ type StripePayRequest struct {
 type StripeAdaptor struct {
 }
 
+type stripeUserCouponContext struct {
+	UserID         int
+	Username       string
+	UserCouponID   int
+	DiscountAmount decimal.Decimal
+}
+
 func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 	if req.Amount < getStripeMinTopup() {
 		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getStripeMinTopup())})
@@ -50,7 +59,17 @@ func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getStripePayMoney(req.Amount, group)
+	originalPayMoney := getStripeOriginalPayMoney(req.Amount, group)
+	minThreshold := decimal.NewFromFloat(getStripePayMoney(getStripeMinTopup(), group))
+	hasUserCouponPriority, err := hasEligibleTopUpCoupon(id, originalPayMoney, minThreshold)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": "获取优惠券信息失败"})
+		return
+	}
+	payMoney := applyTopupDiscount(originalPayMoney, req.Amount).InexactFloat64()
+	if hasUserCouponPriority {
+		payMoney = originalPayMoney.InexactFloat64()
+	}
 	if payMoney <= 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -99,11 +118,33 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		return
 	}
 	discountRule, _ := getTopupDiscountRule(req.Amount)
+	if quote.PlatformDiscountAmount <= 0 {
+		discountRule = operation_setting.AmountDiscountRule{}
+	}
+	var userCoupon *stripeUserCouponContext
+	if req.CouponId != 0 {
+		userCoupon = &stripeUserCouponContext{
+			UserID:         user.Id,
+			Username:       user.Username,
+			UserCouponID:   req.CouponId,
+			DiscountAmount: decimal.NewFromFloat(quote.CouponDiscountAmount),
+		}
+	}
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
 	referenceId := "ref_" + common.Sha1([]byte(reference))
 
-	payLink, err := genStripeLink(referenceId, user.StripeCustomer, user.Email, req.Amount, originalPayMoney, payMoney, discountRule, req.CouponId != 0)
+	payLink, stripeCouponId, err := genStripeLink(
+		referenceId,
+		user.StripeCustomer,
+		user.Email,
+		req.Amount,
+		originalPayMoney,
+		decimal.NewFromFloat(quote.BasePayableAmount),
+		payMoney,
+		discountRule,
+		userCoupon,
+	)
 	if err != nil {
 		log.Println("获取Stripe Checkout支付链接失败", err)
 		c.JSON(200, gin.H{"message": "error", "data": "拉起支付失败"})
@@ -123,9 +164,13 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		PlatformDiscount: quote.PlatformDiscountAmount,
 		CouponDiscount:   quote.CouponDiscountAmount,
 		PayMoney:         quote.FinalPayableAmount,
+		StripeCouponId:   stripeCouponId,
 	}
 	err = createTopUpOrder(topUp)
 	if err != nil {
+		if cleanupErr := cleanupStripeCouponByID(stripeCouponId); cleanupErr != nil {
+			log.Printf("清理 Stripe 临时优惠券失败: %v", cleanupErr)
+		}
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
@@ -183,6 +228,8 @@ func StripeWebhook(c *gin.Context) {
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
 		sessionCompleted(event)
+	case stripe.EventTypeCheckoutSessionAsyncPaymentFailed:
+		sessionAsyncPaymentFailed(event)
 	case stripe.EventTypeCheckoutSessionExpired:
 		sessionExpired(event)
 	default:
@@ -206,10 +253,28 @@ func sessionCompleted(event stripe.Event) {
 		log.Println(err.Error(), referenceId)
 		return
 	}
+	if err := cleanupStripeCheckoutCouponByTradeNo(referenceId); err != nil {
+		log.Println("清理 Stripe 临时优惠券失败", referenceId, ", err:", err.Error())
+	}
 
 	total, _ := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
 	currency := strings.ToUpper(event.GetObjectValue("currency"))
 	log.Printf("收到款项：%s, %.2f(%s)", referenceId, total/100, currency)
+}
+
+func sessionAsyncPaymentFailed(event stripe.Event) {
+	referenceId := event.GetObjectValue("client_reference_id")
+	if len(referenceId) == 0 {
+		log.Println("未提供支付单号")
+		return
+	}
+
+	if err := expireTopUpOrderByTradeNo(referenceId); err != nil {
+		log.Println("异步支付失败处理订单失败", referenceId, ", err:", err.Error())
+	}
+	if err := cleanupStripeCheckoutCouponByTradeNo(referenceId); err != nil {
+		log.Println("清理 Stripe 临时优惠券失败", referenceId, ", err:", err.Error())
+	}
 }
 
 func sessionExpired(event stripe.Event) {
@@ -240,6 +305,9 @@ func sessionExpired(event stripe.Event) {
 		log.Println("过期充值订单失败", referenceId, ", err:", err.Error())
 		return
 	}
+	if err := cleanupStripeCheckoutCouponByTradeNo(referenceId); err != nil {
+		log.Println("清理 Stripe 临时优惠券失败", referenceId, ", err:", err.Error())
+	}
 
 	log.Println("充值订单已过期", referenceId)
 }
@@ -250,31 +318,48 @@ func genStripeLink(
 	email string,
 	amount int64,
 	originalPayMoney decimal.Decimal,
+	basePayableMoney decimal.Decimal,
 	finalPayMoney decimal.Decimal,
 	discountRule operation_setting.AmountDiscountRule,
-	hasUserCoupon bool,
-) (string, error) {
+	userCoupon *stripeUserCouponContext,
+) (string, string, error) {
 	if !strings.HasPrefix(setting.StripeApiSecret, "sk_") && !strings.HasPrefix(setting.StripeApiSecret, "rk_") {
-		return "", fmt.Errorf("无效的Stripe API密钥")
+		return "", "", fmt.Errorf("无效的Stripe API密钥")
 	}
 
 	stripe.Key = setting.StripeApiSecret
 
 	priceInfo, err := stripeprice.Get(setting.StripePriceId, nil)
 	if err != nil {
-		return "", fmt.Errorf("获取Stripe价格配置失败: %w", err)
+		return "", "", fmt.Errorf("获取Stripe价格配置失败: %w", err)
 	}
 
 	lineAmount, usePresetCoupon := resolveStripeCheckoutAmount(
 		originalPayMoney,
+		basePayableMoney,
 		finalPayMoney,
 		discountRule,
-		hasUserCoupon,
+		userCoupon != nil,
 	)
+	appliedCouponID := ""
+	temporaryCouponID := ""
+	if userCoupon != nil {
+		createdCoupon, createErr := createStripeUserDiscountCoupon(priceInfo, userCoupon)
+		if createErr != nil {
+			return "", "", createErr
+		}
+		appliedCouponID = createdCoupon.ID
+		temporaryCouponID = createdCoupon.ID
+	} else if usePresetCoupon {
+		appliedCouponID = discountRule.CouponID
+	}
 
 	minorAmount := getStripeMinorUnitAmount(lineAmount, setting.StripeUnitPrice, priceInfo.UnitAmount)
 	if minorAmount <= 0 {
-		return "", fmt.Errorf("无效的Stripe支付金额")
+		if cleanupErr := cleanupStripeCouponByID(temporaryCouponID); cleanupErr != nil {
+			log.Printf("清理 Stripe 临时优惠券失败: %v", cleanupErr)
+		}
+		return "", "", fmt.Errorf("无效的Stripe支付金额")
 	}
 
 	lineItem := &stripe.CheckoutSessionLineItemParams{
@@ -306,14 +391,14 @@ func genStripeLink(
 		},
 		Mode: stripe.String(string(stripe.CheckoutSessionModePayment)),
 	}
-	if usePresetCoupon {
+	if appliedCouponID != "" {
 		params.Discounts = []*stripe.CheckoutSessionDiscountParams{
 			{
-				Coupon: stripe.String(discountRule.CouponID),
+				Coupon: stripe.String(appliedCouponID),
 			},
 		}
 	} else {
-		params.AllowPromotionCodes = stripe.Bool(setting.StripePromotionCodesEnabled && !hasUserCoupon)
+		params.AllowPromotionCodes = stripe.Bool(setting.StripePromotionCodesEnabled)
 	}
 
 	if "" == customerId {
@@ -328,14 +413,18 @@ func genStripeLink(
 
 	result, err := session.New(params)
 	if err != nil {
-		return "", err
+		if cleanupErr := cleanupStripeCouponByID(temporaryCouponID); cleanupErr != nil {
+			log.Printf("清理 Stripe 临时优惠券失败: %v", cleanupErr)
+		}
+		return "", "", err
 	}
 
-	return result.URL, nil
+	return result.URL, temporaryCouponID, nil
 }
 
 func resolveStripeCheckoutAmount(
 	originalPayMoney decimal.Decimal,
+	basePayableMoney decimal.Decimal,
 	finalPayMoney decimal.Decimal,
 	discountRule operation_setting.AmountDiscountRule,
 	hasUserCoupon bool,
@@ -344,9 +433,9 @@ func resolveStripeCheckoutAmount(
 
 	switch {
 	case hasUserCoupon:
-		// User-bound coupons are not represented as Stripe coupons, so the
-		// line item must already match the final payable amount.
-		return finalPayMoney, false
+		// Checkout supports only one coupon, so platform discounts stay baked
+		// into the line item and the user coupon is represented as the Stripe coupon.
+		return basePayableMoney, false
 	case usePresetCoupon:
 		// Platform discount is delegated to Stripe via the preset coupon, so
 		// Stripe must receive the original price to avoid double-discounting.
@@ -356,6 +445,66 @@ func resolveStripeCheckoutAmount(
 		// discounted payable amount.
 		return finalPayMoney, false
 	}
+}
+
+func createStripeUserDiscountCoupon(priceInfo *stripe.Price, userCoupon *stripeUserCouponContext) (*stripe.Coupon, error) {
+	if priceInfo == nil || userCoupon == nil {
+		return nil, fmt.Errorf("缺少 Stripe 用户优惠券上下文")
+	}
+
+	amountOff := getStripeMinorUnitAmount(userCoupon.DiscountAmount, setting.StripeUnitPrice, priceInfo.UnitAmount)
+	if amountOff <= 0 {
+		return nil, fmt.Errorf("无效的 Stripe 用户优惠券金额")
+	}
+
+	params := &stripe.CouponParams{
+		AmountOff:      stripe.Int64(amountOff),
+		Currency:       stripe.String(string(priceInfo.Currency)),
+		Duration:       stripe.String(string(stripe.CouponDurationOnce)),
+		MaxRedemptions: stripe.Int64(1),
+		Name:           stripe.String("User Discount"),
+	}
+	params.AddMetadata("UserID", strconv.Itoa(userCoupon.UserID))
+	params.AddMetadata("Username", userCoupon.Username)
+	params.AddMetadata("UserCouponId", strconv.Itoa(userCoupon.UserCouponID))
+
+	return stripecoupon.New(params)
+}
+
+func cleanupStripeCheckoutCouponByTradeNo(tradeNo string) error {
+	if tradeNo == "" {
+		return nil
+	}
+
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil || topUp.StripeCouponId == "" {
+		return nil
+	}
+
+	if err := cleanupStripeCouponByID(topUp.StripeCouponId); err != nil {
+		return err
+	}
+
+	topUp.StripeCouponId = ""
+	return model.DB.Model(&model.TopUp{}).Where("id = ?", topUp.Id).Update("stripe_coupon_id", "").Error
+}
+
+func cleanupStripeCouponByID(couponID string) error {
+	if couponID == "" {
+		return nil
+	}
+
+	stripe.Key = setting.StripeApiSecret
+	_, err := stripecoupon.Del(couponID, nil)
+	if err == nil {
+		return nil
+	}
+
+	var stripeErr *stripe.Error
+	if errors.As(err, &stripeErr) && stripeErr.Code == stripe.ErrorCodeResourceMissing {
+		return nil
+	}
+	return err
 }
 
 func GetChargedAmount(count float64, user model.User) float64 {

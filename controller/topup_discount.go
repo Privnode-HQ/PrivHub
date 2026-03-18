@@ -31,6 +31,13 @@ func applyTopupDiscount(base decimal.Decimal, originalAmount int64) decimal.Deci
 	return discounted
 }
 
+func resolveTopUpBasePayable(originalBase, discountedBase, platformDiscount decimal.Decimal, hasEligibleUserCoupon bool) (decimal.Decimal, decimal.Decimal) {
+	if hasEligibleUserCoupon {
+		return originalBase, decimal.Zero
+	}
+	return discountedBase, platformDiscount
+}
+
 func getStripeMinorUnitAmount(payMoney decimal.Decimal, stripeUnitPrice float64, stripeUnitAmount int64) int64 {
 	if !payMoney.GreaterThan(decimal.Zero) {
 		return 0

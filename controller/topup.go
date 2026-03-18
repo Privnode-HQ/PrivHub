@@ -367,7 +367,17 @@ func RequestAmount(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
+	originalPayMoney := getOriginalPayMoney(req.Amount, group)
+	minThreshold := decimal.NewFromFloat(getPayMoney(getMinTopup(), group))
+	hasUserCouponPriority, err := hasEligibleTopUpCoupon(id, originalPayMoney, minThreshold)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": "获取优惠券信息失败"})
+		return
+	}
+	payMoney := applyTopupDiscount(originalPayMoney, req.Amount).InexactFloat64()
+	if hasUserCouponPriority {
+		payMoney = originalPayMoney.InexactFloat64()
+	}
 	if payMoney <= 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -444,6 +454,9 @@ func AdminCompleteTopUp(c *gin.Context) {
 	if err := model.ManualCompleteTopUp(req.TradeNo); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if err := cleanupStripeCheckoutCouponByTradeNo(req.TradeNo); err != nil {
+		common.SysLog("cleanup stripe temp coupon failed: " + err.Error())
 	}
 	common.ApiSuccess(c, nil)
 }

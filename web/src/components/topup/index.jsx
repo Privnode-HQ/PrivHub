@@ -712,8 +712,12 @@ const TopUp = () => {
     setSelectedPreset(preset.value);
 
     // 计算实际支付金额，考虑固定减免
+    const preferUserCoupon =
+      topupInfo?.coupon_summary?.has_available_coupon === true;
     const discountAmount =
-      preset.discount ?? topupInfo.discount?.[preset.value] ?? 0;
+      preferUserCoupon
+        ? 0
+        : (preset.discount ?? topupInfo.discount?.[preset.value] ?? 0);
     const discountedAmount = Math.max(
       preset.value * priceRatio - discountAmount,
       0,

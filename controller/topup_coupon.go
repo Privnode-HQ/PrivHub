@@ -265,12 +265,14 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	}
 
 	var (
-		originalAmount   decimal.Decimal
-		basePayable      decimal.Decimal
-		platformDiscount decimal.Decimal
-		minThreshold     decimal.Decimal
-		allCoupons       []*model.TopUpCoupon
-		err              error
+		originalAmount           decimal.Decimal
+		discountedBasePayable    decimal.Decimal
+		basePayable              decimal.Decimal
+		platformDiscount         decimal.Decimal
+		resolvedPlatformDiscount decimal.Decimal
+		minThreshold             decimal.Decimal
+		allCoupons               []*model.TopUpCoupon
+		err                      error
 	)
 
 	switch req.PaymentMethod {
@@ -280,7 +282,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		}
 		originalAmount = getStripeOriginalPayMoney(req.Amount, user.Group)
 		platformDiscount = getTopupDiscountAmount(req.Amount)
-		basePayable = applyTopupDiscount(originalAmount, req.Amount)
+		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
 		minThreshold = decimal.NewFromFloat(getStripePayMoney(getStripeMinTopup(), user.Group))
 		allCoupons, err = model.GetUserAvailableTopUpCoupons(user.Id)
 	case PaymentMethodCreem:
@@ -292,7 +294,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		quote.ProductQuota = product.Quota
 		quote.CurrencyCode = product.Currency
 		originalAmount = decimal.NewFromFloat(product.Price)
-		basePayable = originalAmount
+		discountedBasePayable = originalAmount
 		minThreshold = decimal.NewFromFloat(getCreemMinimumPayable())
 		if req.CouponId != 0 {
 			quote.IneligibleReason = "当前支付方式暂不支持优惠券"
@@ -307,7 +309,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		}
 		originalAmount = getOriginalPayMoney(req.Amount, user.Group)
 		platformDiscount = getTopupDiscountAmount(req.Amount)
-		basePayable = applyTopupDiscount(originalAmount, req.Amount)
+		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
 		minThreshold = decimal.NewFromFloat(getPayMoney(getMinTopup(), user.Group))
 		allCoupons, err = model.GetUserAvailableTopUpCoupons(user.Id)
 	}
@@ -315,32 +317,20 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		return nil, err
 	}
 
+	eligibleCoupons, selectedCoupon, ineligibleReason := buildEligibleTopUpQuoteCoupons(allCoupons, originalAmount, minThreshold, req.CouponId)
+	basePayable, resolvedPlatformDiscount = resolveTopUpBasePayable(
+		originalAmount,
+		discountedBasePayable,
+		platformDiscount,
+		len(eligibleCoupons) > 0,
+	)
+
 	quote.OriginalAmount = roundMoney(originalAmount)
 	quote.BasePayableAmount = roundMoney(basePayable)
-	quote.PlatformDiscountAmount = roundMoney(platformDiscount)
+	quote.PlatformDiscountAmount = roundMoney(resolvedPlatformDiscount)
 	quote.MinPayableThreshold = roundMoney(minThreshold)
-
-	eligibleCoupons := make([]TopUpQuoteCoupon, 0, len(allCoupons))
-	selectedCoupon := (*model.TopUpCoupon)(nil)
-	for _, coupon := range allCoupons {
-		finalPayable := basePayable.Sub(decimal.NewFromFloat(coupon.DeductionAmount))
-		if finalPayable.LessThanOrEqual(minThreshold) {
-			if req.CouponId == coupon.Id {
-				quote.IneligibleReason = "使用优惠券后金额必须高于最低充值金额"
-			}
-			continue
-		}
-
-		eligibleCoupons = append(eligibleCoupons, TopUpQuoteCoupon{
-			Id:              coupon.Id,
-			Name:            coupon.Name,
-			DeductionAmount: roundMoney(decimal.NewFromFloat(coupon.DeductionAmount)),
-			Status:          coupon.Status,
-			ExpiresAt:       coupon.ExpiresAt,
-		})
-		if req.CouponId == coupon.Id {
-			selectedCoupon = coupon
-		}
+	if ineligibleReason != "" {
+		quote.IneligibleReason = ineligibleReason
 	}
 
 	if req.CouponId != 0 && selectedCoupon == nil && quote.IneligibleReason == "" {
@@ -360,6 +350,44 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		return nil, errors.New("充值金额过低")
 	}
 	return quote, nil
+}
+
+func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable, minThreshold decimal.Decimal, requestedCouponId int) ([]TopUpQuoteCoupon, *model.TopUpCoupon, string) {
+	eligibleCoupons := make([]TopUpQuoteCoupon, 0, len(allCoupons))
+	selectedCoupon := (*model.TopUpCoupon)(nil)
+	ineligibleReason := ""
+
+	for _, coupon := range allCoupons {
+		finalPayable := basePayable.Sub(decimal.NewFromFloat(coupon.DeductionAmount))
+		if finalPayable.LessThanOrEqual(minThreshold) {
+			if requestedCouponId == coupon.Id {
+				ineligibleReason = "使用优惠券后金额必须高于最低充值金额"
+			}
+			continue
+		}
+
+		eligibleCoupons = append(eligibleCoupons, TopUpQuoteCoupon{
+			Id:              coupon.Id,
+			Name:            coupon.Name,
+			DeductionAmount: roundMoney(decimal.NewFromFloat(coupon.DeductionAmount)),
+			Status:          coupon.Status,
+			ExpiresAt:       coupon.ExpiresAt,
+		})
+		if requestedCouponId == coupon.Id {
+			selectedCoupon = coupon
+		}
+	}
+
+	return eligibleCoupons, selectedCoupon, ineligibleReason
+}
+
+func hasEligibleTopUpCoupon(userId int, basePayable, minThreshold decimal.Decimal) (bool, error) {
+	allCoupons, err := model.GetUserAvailableTopUpCoupons(userId)
+	if err != nil {
+		return false, err
+	}
+	eligibleCoupons, _, _ := buildEligibleTopUpQuoteCoupons(allCoupons, basePayable, minThreshold, 0)
+	return len(eligibleCoupons) > 0, nil
 }
 
 func validateSelectedCoupon(requestedCouponId int, quote *TopUpQuoteData) error {
