@@ -104,3 +104,58 @@ func TestGetStripeMinorUnitAmount(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveStripeCheckoutAmount(t *testing.T) {
+	tests := []struct {
+		name               string
+		original           string
+		final              string
+		rule               operation_setting.AmountDiscountRule
+		hasUserCoupon      bool
+		expectedAmount     string
+		expectPresetCoupon bool
+	}{
+		{
+			name:               "preset stripe coupon keeps original line amount",
+			original:           "100",
+			final:              "95",
+			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
+			expectedAmount:     "100",
+			expectPresetCoupon: true,
+		},
+		{
+			name:               "user coupon disables preset stripe coupon",
+			original:           "100",
+			final:              "88",
+			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
+			hasUserCoupon:      true,
+			expectedAmount:     "88",
+			expectPresetCoupon: false,
+		},
+		{
+			name:               "inline discount uses final amount when no stripe coupon",
+			original:           "100",
+			final:              "95",
+			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5},
+			expectedAmount:     "95",
+			expectPresetCoupon: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotAmount, gotPresetCoupon := resolveStripeCheckoutAmount(
+				decimal.RequireFromString(tt.original),
+				decimal.RequireFromString(tt.final),
+				tt.rule,
+				tt.hasUserCoupon,
+			)
+			if gotAmount.String() != tt.expectedAmount {
+				t.Fatalf("expected amount %s, got %s", tt.expectedAmount, gotAmount.String())
+			}
+			if gotPresetCoupon != tt.expectPresetCoupon {
+				t.Fatalf("expected preset coupon %v, got %v", tt.expectPresetCoupon, gotPresetCoupon)
+			}
+		})
+	}
+}

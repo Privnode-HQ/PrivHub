@@ -265,14 +265,12 @@ func genStripeLink(
 		return "", fmt.Errorf("获取Stripe价格配置失败: %w", err)
 	}
 
-	lineAmount := finalPayMoney
-	usePresetCoupon := discountRule.CouponID != "" && discountRule.DiscountAmount > 0
-	if hasUserCoupon {
-		usePresetCoupon = false
-		lineAmount = finalPayMoney
-	} else if !usePresetCoupon {
-		lineAmount = applyTopupDiscount(originalPayMoney, amount)
-	}
+	lineAmount, usePresetCoupon := resolveStripeCheckoutAmount(
+		originalPayMoney,
+		finalPayMoney,
+		discountRule,
+		hasUserCoupon,
+	)
 
 	minorAmount := getStripeMinorUnitAmount(lineAmount, setting.StripeUnitPrice, priceInfo.UnitAmount)
 	if minorAmount <= 0 {
@@ -334,6 +332,30 @@ func genStripeLink(
 	}
 
 	return result.URL, nil
+}
+
+func resolveStripeCheckoutAmount(
+	originalPayMoney decimal.Decimal,
+	finalPayMoney decimal.Decimal,
+	discountRule operation_setting.AmountDiscountRule,
+	hasUserCoupon bool,
+) (decimal.Decimal, bool) {
+	usePresetCoupon := discountRule.CouponID != "" && discountRule.DiscountAmount > 0
+
+	switch {
+	case hasUserCoupon:
+		// User-bound coupons are not represented as Stripe coupons, so the
+		// line item must already match the final payable amount.
+		return finalPayMoney, false
+	case usePresetCoupon:
+		// Platform discount is delegated to Stripe via the preset coupon, so
+		// Stripe must receive the original price to avoid double-discounting.
+		return originalPayMoney, true
+	default:
+		// Without a Stripe-side coupon, the line item itself carries the
+		// discounted payable amount.
+		return finalPayMoney, false
+	}
 }
 
 func GetChargedAmount(count float64, user model.User) float64 {
