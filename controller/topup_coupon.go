@@ -280,10 +280,21 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		if req.Amount < getStripeMinTopup() {
 			return nil, fmt.Errorf("充值数量不能小于 %d", getStripeMinTopup())
 		}
-		originalAmount = getStripeOriginalPayMoney(req.Amount, user.Group)
+		stripePriceInfo, priceErr := getStripePriceInfo()
+		if priceErr != nil {
+			return nil, priceErr
+		}
+		originalAmount, _, err = getStripeOriginalPayMoneyWithPrice(stripePriceInfo, req.Amount)
+		if err != nil {
+			return nil, err
+		}
 		platformDiscount = getTopupDiscountAmount(req.Amount)
 		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
-		minThreshold = decimal.NewFromFloat(getStripePayMoney(getStripeMinTopup(), user.Group))
+		stripeMinPayMoney, minErr := getStripePayMoney(getStripeMinTopup())
+		if minErr != nil {
+			return nil, minErr
+		}
+		minThreshold = decimal.NewFromFloat(stripeMinPayMoney)
 		allCoupons, err = model.GetUserAvailableTopUpCoupons(user.Id)
 	case PaymentMethodCreem:
 		product, productErr := findCreemProductById(req.ProductId)
@@ -322,7 +333,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		originalAmount,
 		discountedBasePayable,
 		platformDiscount,
-		len(eligibleCoupons) > 0,
+		selectedCoupon != nil,
 	)
 
 	quote.OriginalAmount = roundMoney(originalAmount)

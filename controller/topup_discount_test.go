@@ -3,8 +3,10 @@ package controller
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/shopspring/decimal"
+	"github.com/stripe/stripe-go/v81"
 )
 
 func TestApplyTopupDiscount(t *testing.T) {
@@ -62,42 +64,34 @@ func TestApplyTopupDiscount(t *testing.T) {
 
 func TestGetStripeMinorUnitAmount(t *testing.T) {
 	tests := []struct {
-		name             string
-		payMoney         string
-		stripeUnitPrice  float64
-		stripeUnitAmount int64
-		expected         int64
+		name     string
+		payMoney string
+		currency stripe.Currency
+		expected int64
 	}{
 		{
-			name:             "usd-like multiplier",
-			payMoney:         "19",
-			stripeUnitPrice:  8,
-			stripeUnitAmount: 800,
-			expected:         1900,
+			name:     "two-decimal currency",
+			payMoney: "19.45",
+			currency: stripe.CurrencyUSD,
+			expected: 1945,
 		},
 		{
-			name:             "zero-decimal-like multiplier",
-			payMoney:         "795",
-			stripeUnitPrice:  800,
-			stripeUnitAmount: 800,
-			expected:         795,
+			name:     "zero-decimal currency",
+			payMoney: "795",
+			currency: stripe.CurrencyJPY,
+			expected: 795,
 		},
 		{
-			name:             "fallback multiplier",
-			payMoney:         "12.34",
-			stripeUnitPrice:  0,
-			stripeUnitAmount: 0,
-			expected:         1234,
+			name:     "round half up",
+			payMoney: "12.345",
+			currency: stripe.CurrencyUSD,
+			expected: 1235,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getStripeMinorUnitAmount(
-				decimal.RequireFromString(tt.payMoney),
-				tt.stripeUnitPrice,
-				tt.stripeUnitAmount,
-			)
+			got := getStripeMinorUnitAmount(decimal.RequireFromString(tt.payMoney), tt.currency)
 			if got != tt.expected {
 				t.Fatalf("expected %d, got %d", tt.expected, got)
 			}
@@ -105,61 +99,99 @@ func TestGetStripeMinorUnitAmount(t *testing.T) {
 	}
 }
 
-func TestResolveStripeCheckoutAmount(t *testing.T) {
+func TestGetStripeMajorUnitAmount(t *testing.T) {
 	tests := []struct {
-		name               string
-		original           string
-		basePayable        string
-		final              string
-		rule               operation_setting.AmountDiscountRule
-		hasUserCoupon      bool
-		expectedAmount     string
-		expectPresetCoupon bool
+		name        string
+		minorAmount int64
+		currency    stripe.Currency
+		expected    string
 	}{
 		{
-			name:               "preset stripe coupon keeps original line amount",
-			original:           "100",
-			basePayable:        "95",
-			final:              "95",
-			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
-			expectedAmount:     "100",
-			expectPresetCoupon: true,
+			name:        "two-decimal currency",
+			minorAmount: 9500,
+			currency:    stripe.CurrencyUSD,
+			expected:    "95",
 		},
 		{
-			name:               "user coupon uses base payable line amount",
-			original:           "100",
-			basePayable:        "95",
-			final:              "88",
-			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5, CouponID: "coupon_123"},
-			hasUserCoupon:      true,
-			expectedAmount:     "95",
-			expectPresetCoupon: false,
+			name:        "zero-decimal currency",
+			minorAmount: 1898,
+			currency:    stripe.CurrencyJPY,
+			expected:    "1898",
 		},
 		{
-			name:               "inline discount uses final amount when no stripe coupon",
-			original:           "100",
-			basePayable:        "95",
-			final:              "95",
-			rule:               operation_setting.AmountDiscountRule{DiscountAmount: 5},
-			expectedAmount:     "95",
-			expectPresetCoupon: false,
+			name:        "invalid amount returns zero",
+			minorAmount: 0,
+			currency:    stripe.CurrencyUSD,
+			expected:    "0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotAmount, gotPresetCoupon := resolveStripeCheckoutAmount(
-				decimal.RequireFromString(tt.original),
-				decimal.RequireFromString(tt.basePayable),
-				decimal.RequireFromString(tt.final),
-				tt.rule,
-				tt.hasUserCoupon,
-			)
-			if gotAmount.String() != tt.expectedAmount {
-				t.Fatalf("expected amount %s, got %s", tt.expectedAmount, gotAmount.String())
+			got := getStripeMajorUnitAmount(tt.minorAmount, tt.currency)
+			if got.String() != tt.expected {
+				t.Fatalf("expected major amount %s, got %s", tt.expected, got.String())
 			}
-			if gotPresetCoupon != tt.expectPresetCoupon {
-				t.Fatalf("expected preset coupon %v, got %v", tt.expectPresetCoupon, gotPresetCoupon)
+		})
+	}
+}
+
+func TestGetStripeCheckoutQuantity(t *testing.T) {
+	originalDisplayType := operation_setting.GetQuotaDisplayType()
+	originalQuotaPerUnit := common.QuotaPerUnit
+	defer func() {
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalDisplayType
+		common.QuotaPerUnit = originalQuotaPerUnit
+	}()
+
+	tests := []struct {
+		name         string
+		displayType  string
+		quotaPerUnit float64
+		amount       int64
+		expected     int64
+		expectError  bool
+	}{
+		{
+			name:         "currency display keeps integer amount",
+			displayType:  operation_setting.QuotaDisplayTypeUSD,
+			quotaPerUnit: 500000,
+			amount:       20,
+			expected:     20,
+		},
+		{
+			name:         "tokens display converts to stripe quantity",
+			displayType:  operation_setting.QuotaDisplayTypeTokens,
+			quotaPerUnit: 500000,
+			amount:       1000000,
+			expected:     2,
+		},
+		{
+			name:         "tokens display requires whole stripe unit",
+			displayType:  operation_setting.QuotaDisplayTypeTokens,
+			quotaPerUnit: 500000,
+			amount:       750000,
+			expectError:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			operation_setting.GetGeneralSetting().QuotaDisplayType = tt.displayType
+			common.QuotaPerUnit = tt.quotaPerUnit
+
+			got, err := getStripeCheckoutQuantity(tt.amount)
+			if tt.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Fatalf("expected quantity %d, got %d", tt.expected, got)
 			}
 		})
 	}
@@ -171,7 +203,7 @@ func TestResolveTopUpBasePayable(t *testing.T) {
 		original              string
 		discounted            string
 		platformDiscount      string
-		hasEligibleUserCoupon bool
+		hasSelectedUserCoupon bool
 		expectedBase          string
 		expectedPlatform      string
 	}{
@@ -184,11 +216,11 @@ func TestResolveTopUpBasePayable(t *testing.T) {
 			expectedPlatform: "5",
 		},
 		{
-			name:                  "prefer user coupon over platform discount",
+			name:                  "selected user coupon overrides platform discount",
 			original:              "100",
 			discounted:            "95",
 			platformDiscount:      "5",
-			hasEligibleUserCoupon: true,
+			hasSelectedUserCoupon: true,
 			expectedBase:          "100",
 			expectedPlatform:      "0",
 		},
@@ -200,7 +232,7 @@ func TestResolveTopUpBasePayable(t *testing.T) {
 				decimal.RequireFromString(tt.original),
 				decimal.RequireFromString(tt.discounted),
 				decimal.RequireFromString(tt.platformDiscount),
-				tt.hasEligibleUserCoupon,
+				tt.hasSelectedUserCoupon,
 			)
 			if gotBase.String() != tt.expectedBase {
 				t.Fatalf("expected base %s, got %s", tt.expectedBase, gotBase.String())
