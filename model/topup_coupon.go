@@ -76,9 +76,6 @@ func GetTopUpCouponById(id int) (*TopUpCoupon, error) {
 	if id == 0 {
 		return nil, errors.New("缺少优惠券 ID")
 	}
-	if err := CleanupTopUpCouponStates(); err != nil {
-		return nil, err
-	}
 
 	coupon := &TopUpCoupon{}
 	if err := DB.Where("id = ?", id).First(coupon).Error; err != nil {
@@ -91,10 +88,6 @@ func GetTopUpCouponById(id int) (*TopUpCoupon, error) {
 }
 
 func GetAllTopUpCoupons(pageInfo *common.PageInfo, filter TopUpCouponFilter) ([]*TopUpCoupon, int64, error) {
-	if err := CleanupTopUpCouponStates(); err != nil {
-		return nil, 0, err
-	}
-
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -136,19 +129,39 @@ func GetUserAvailableTopUpCoupons(userId int) ([]*TopUpCoupon, error) {
 	if userId == 0 {
 		return nil, nil
 	}
-	if err := CleanupTopUpCouponStates(); err != nil {
-		return nil, err
-	}
 
 	now := common.GetTimestamp()
 	var coupons []*TopUpCoupon
-	err := DB.Where(
-		"bound_user_id = ? AND status = ? AND valid_from <= ? AND (expires_at = 0 OR expires_at >= ?)",
-		userId,
-		common.TopUpCouponStatusAvailable,
-		now,
-		now,
-	).Order("deduction_amount desc, id desc").Find(&coupons).Error
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where(
+			"bound_user_id = ? AND status IN ? AND valid_from <= ? AND (expires_at = 0 OR expires_at >= ?)",
+			userId,
+			[]string{common.TopUpCouponStatusAvailable, common.TopUpCouponStatusReserved},
+			now,
+			now,
+		).Order("deduction_amount desc, id desc").Find(&coupons).Error; err != nil {
+			return err
+		}
+
+		availableCoupons := make([]*TopUpCoupon, 0, len(coupons))
+		for _, coupon := range coupons {
+			switch coupon.Status {
+			case common.TopUpCouponStatusAvailable:
+				availableCoupons = append(availableCoupons, coupon)
+			case common.TopUpCouponStatusReserved:
+				// Read paths can surface stale reservations without mutating the linked top-up.
+				stale, _, err := isCouponReservationStaleTx(tx, coupon, now)
+				if err != nil {
+					return err
+				}
+				if stale {
+					availableCoupons = append(availableCoupons, coupon)
+				}
+			}
+		}
+		coupons = availableCoupons
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -261,9 +274,6 @@ func RevokeTopUpCoupon(id int, adminId int, reason string) (*TopUpCoupon, error)
 	if id == 0 {
 		return nil, errors.New("缺少优惠券 ID")
 	}
-	if err := CleanupTopUpCouponStates(); err != nil {
-		return nil, err
-	}
 
 	var result *TopUpCoupon
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -271,14 +281,20 @@ func RevokeTopUpCoupon(id int, adminId int, reason string) (*TopUpCoupon, error)
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", id).First(coupon).Error; err != nil {
 			return err
 		}
+		now := common.GetTimestamp()
 		if coupon.Status == common.TopUpCouponStatusUsed {
 			return errors.New("已使用的优惠券不能撤销")
 		}
 		if coupon.Status == common.TopUpCouponStatusReserved {
-			return errors.New("支付中的优惠券不能撤销")
+			stale, shouldExpireTopUp, err := isCouponReservationStaleTx(tx, coupon, now)
+			if err != nil {
+				return err
+			}
+			if !stale || shouldExpireTopUp {
+				return errors.New("支付中的优惠券不能撤销")
+			}
 		}
 
-		now := common.GetTimestamp()
 		coupon.Status = common.TopUpCouponStatusRevoked
 		coupon.RevokedAt = now
 		coupon.RevokedByAdminId = adminId
@@ -327,20 +343,8 @@ func CleanupTopUpCouponStates() error {
 				if err != nil {
 					return err
 				}
-				if !stale {
+				if !stale || shouldExpireTopUp {
 					continue
-				}
-
-				if shouldExpireTopUp && coupon.ReservedTopUpId != 0 {
-					topUp := &TopUp{}
-					if err := tx.Where("id = ?", coupon.ReservedTopUpId).First(topUp).Error; err == nil {
-						if topUp.Status == common.TopUpStatusPending {
-							topUp.Status = common.TopUpStatusExpired
-							if err := tx.Save(topUp).Error; err != nil {
-								return err
-							}
-						}
-					}
 				}
 
 				coupon.ReservedTopUpId = 0
