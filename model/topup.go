@@ -271,6 +271,7 @@ func ManualCompleteTopUp(tradeNo string) error {
 	var userId int
 	var quotaToAdd int
 	var payMoney float64
+	var processedTopUp *TopUp
 	var rebateResult *AffRebateResult
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
@@ -325,6 +326,7 @@ func ManualCompleteTopUp(tradeNo string) error {
 			return rebateErr
 		}
 
+		processedTopUp = topUp
 		userId = topUp.UserId
 		payMoney = topUp.Money
 		return nil
@@ -333,13 +335,14 @@ func ManualCompleteTopUp(tradeNo string) error {
 	if err != nil {
 		return err
 	}
+	if processedTopUp == nil {
+		return nil
+	}
 
 	// 事务外记录日志，避免阻塞
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney))
-	if tradeNo != "" {
-		if topUp := GetTopUpByTradeNo(tradeNo); topUp != nil && topUp.CouponId != 0 {
-			RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单核销优惠券 %s，抵扣金额 %.2f", topUp.CouponName, topUp.CouponDiscount))
-		}
+	if processedTopUp.CouponId != 0 {
+		RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单核销优惠券 %s，抵扣金额 %.2f", processedTopUp.CouponName, processedTopUp.CouponDiscount))
 	}
 	if rebateResult != nil {
 		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))

@@ -141,7 +141,7 @@ func updateSunoTaskAll(ctx context.Context, channelId int, taskIds []string, tas
 	}
 	if !responseItems.IsSuccess() {
 		common.SysLog(fmt.Sprintf("渠道 #%d 未完成的任务有: %d, 返回体: %s", channelId, len(taskIds), string(responseBody)))
-		return err
+		return fmt.Errorf("fetch suno task failed: code=%s, message=%s", responseItems.Code, responseItems.Message)
 	}
 
 	for _, responseItem := range responseItems.Data {

@@ -15,25 +15,25 @@ import (
 const topUpCouponReservationTTLSeconds = int64((24 * time.Hour) / time.Second)
 
 type TopUpCoupon struct {
-	Id              int     `json:"id"`
-	Name            string  `json:"name" gorm:"type:varchar(64);index"`
-	BoundUserId     int     `json:"bound_user_id" gorm:"index"`
-	BoundUsername   string  `json:"bound_username" gorm:"-"`
-	DeductionAmount float64 `json:"deduction_amount"`
-	Status          string  `json:"status" gorm:"type:varchar(16);index"`
-	ValidFrom       int64   `json:"valid_from" gorm:"index"`
-	ExpiresAt       int64   `json:"expires_at" gorm:"index"`
-	IssuedByAdminId int     `json:"issued_by_admin_id" gorm:"index"`
-	IssuedAt        int64   `json:"issued_at"`
-	ReservedTopUpId int     `json:"reserved_top_up_id" gorm:"index"`
-	ReservedAt      int64   `json:"reserved_at"`
-	UsedTopUpId     int     `json:"used_top_up_id" gorm:"index"`
-	UsedAt          int64   `json:"used_at"`
-	RevokedAt       int64   `json:"revoked_at"`
-	RevokedByAdminId int    `json:"revoked_by_admin_id" gorm:"index"`
-	RevokeReason    string  `json:"revoke_reason" gorm:"type:varchar(255)"`
-	CreatedTime     int64   `json:"created_time"`
-	UpdatedTime     int64   `json:"updated_time"`
+	Id               int     `json:"id"`
+	Name             string  `json:"name" gorm:"type:varchar(64);index"`
+	BoundUserId      int     `json:"bound_user_id" gorm:"index"`
+	BoundUsername    string  `json:"bound_username" gorm:"-"`
+	DeductionAmount  float64 `json:"deduction_amount"`
+	Status           string  `json:"status" gorm:"type:varchar(16);index"`
+	ValidFrom        int64   `json:"valid_from" gorm:"index"`
+	ExpiresAt        int64   `json:"expires_at" gorm:"index"`
+	IssuedByAdminId  int     `json:"issued_by_admin_id" gorm:"index"`
+	IssuedAt         int64   `json:"issued_at"`
+	ReservedTopUpId  int     `json:"reserved_top_up_id" gorm:"index"`
+	ReservedAt       int64   `json:"reserved_at"`
+	UsedTopUpId      int     `json:"used_top_up_id" gorm:"index"`
+	UsedAt           int64   `json:"used_at"`
+	RevokedAt        int64   `json:"revoked_at"`
+	RevokedByAdminId int     `json:"revoked_by_admin_id" gorm:"index"`
+	RevokeReason     string  `json:"revoke_reason" gorm:"type:varchar(255)"`
+	CreatedTime      int64   `json:"created_time"`
+	UpdatedTime      int64   `json:"updated_time"`
 }
 
 type TopUpCouponFilter struct {
@@ -43,10 +43,10 @@ type TopUpCouponFilter struct {
 }
 
 type UserTopUpCouponSummary struct {
-	HasAvailableCoupon    bool    `json:"has_available_coupon"`
-	AvailableCount        int     `json:"available_count"`
+	HasAvailableCoupon      bool    `json:"has_available_coupon"`
+	AvailableCount          int     `json:"available_count"`
 	StrongestDiscountAmount float64 `json:"strongest_discount_amount"`
-	BannerMessage         string  `json:"banner_message"`
+	BannerMessage           string  `json:"banner_message"`
 }
 
 func (coupon *TopUpCoupon) Insert() error {
@@ -258,26 +258,47 @@ func ReleaseTopUpCouponReservationTx(tx *gorm.DB, topUp *TopUp) error {
 }
 
 func RevokeTopUpCoupon(id int, adminId int, reason string) (*TopUpCoupon, error) {
-	coupon, err := GetTopUpCouponById(id)
+	if id == 0 {
+		return nil, errors.New("缺少优惠券 ID")
+	}
+	if err := CleanupTopUpCouponStates(); err != nil {
+		return nil, err
+	}
+
+	var result *TopUpCoupon
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		coupon := &TopUpCoupon{}
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").Where("id = ?", id).First(coupon).Error; err != nil {
+			return err
+		}
+		if coupon.Status == common.TopUpCouponStatusUsed {
+			return errors.New("已使用的优惠券不能撤销")
+		}
+		if coupon.Status == common.TopUpCouponStatusReserved {
+			return errors.New("支付中的优惠券不能撤销")
+		}
+
+		now := common.GetTimestamp()
+		coupon.Status = common.TopUpCouponStatusRevoked
+		coupon.RevokedAt = now
+		coupon.RevokedByAdminId = adminId
+		coupon.RevokeReason = strings.TrimSpace(reason)
+		coupon.ReservedTopUpId = 0
+		coupon.ReservedAt = 0
+		coupon.UpdatedTime = now
+		if err := tx.Save(coupon).Error; err != nil {
+			return err
+		}
+		result = coupon
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if coupon.Status == common.TopUpCouponStatusUsed {
-		return nil, errors.New("已使用的优惠券不能撤销")
+	if err := fillCouponUsernames([]*TopUpCoupon{result}); err != nil {
+		return nil, err
 	}
-	if coupon.Status == common.TopUpCouponStatusReserved {
-		return nil, errors.New("支付中的优惠券不能撤销")
-	}
-
-	now := common.GetTimestamp()
-	coupon.Status = common.TopUpCouponStatusRevoked
-	coupon.RevokedAt = now
-	coupon.RevokedByAdminId = adminId
-	coupon.RevokeReason = strings.TrimSpace(reason)
-	coupon.ReservedTopUpId = 0
-	coupon.ReservedAt = 0
-	coupon.UpdatedTime = now
-	return coupon, coupon.Update()
+	return result, nil
 }
 
 func CleanupTopUpCouponStates() error {
