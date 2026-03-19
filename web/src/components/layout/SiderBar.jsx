@@ -36,6 +36,7 @@ const routerMap = {
   token: '/console/token',
   usage: '/console/usage',
   redemption: '/console/redemption',
+  topup_coupon: '/console/topup-coupon',
   topup: '/console/topup',
   user: '/console/user',
   log: '/console/log',
@@ -174,6 +175,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('兑换码管理'),
         itemKey: 'redemption',
         to: '/redemption',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('折扣中心'),
+        itemKey: 'topup_coupon',
+        to: '/topup-coupon',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

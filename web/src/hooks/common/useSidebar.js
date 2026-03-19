@@ -64,6 +64,7 @@ export const useSidebar = () => {
       channel: true,
       models: true,
       redemption: true,
+      topup_coupon: true,
       user: true,
       setting: true,
     },

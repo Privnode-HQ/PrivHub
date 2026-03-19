@@ -202,3 +202,11 @@ const (
 	TopUpStatusSuccess = "success"
 	TopUpStatusExpired = "expired"
 )
+
+const (
+	TopUpCouponStatusAvailable = "available"
+	TopUpCouponStatusReserved  = "reserved"
+	TopUpCouponStatusUsed      = "used"
+	TopUpCouponStatusExpired   = "expired"
+	TopUpCouponStatusRevoked   = "revoked"
+)

@@ -84,6 +84,7 @@ const RechargeCard = ({
   statusLoading,
   topupInfo,
   onOpenHistory,
+  onCouponBannerClick,
   turnstileEnabled,
   turnstileSiteKey,
   setTurnstileToken,
@@ -91,7 +92,6 @@ const RechargeCard = ({
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
   const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
-  console.log(' enabled screem ?', enableCreemTopUp, ' products ?', creemProducts);
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
@@ -117,6 +117,34 @@ const RechargeCard = ({
       </div>
 
       <Space vertical style={{ width: '100%' }}>
+        {topupInfo?.coupon_summary?.has_available_coupon && (
+          <Banner
+            type='success'
+            description={
+              <div className='flex flex-col gap-2'>
+                <span>
+                  {t('您有')} {topupInfo.coupon_summary.available_count}{' '}
+                  {t('张可用优惠券')}
+                  {topupInfo.coupon_summary.strongest_discount_amount > 0 &&
+                    `，${t('最高可减')} ${Number(topupInfo.coupon_summary.strongest_discount_amount).toFixed(2)} ${t('元')}`}
+                </span>
+                <div>
+                  <Button
+                    size='small'
+                    type='primary'
+                    theme='solid'
+                    onClick={onCouponBannerClick}
+                  >
+                    {t('立即充值')}
+                  </Button>
+                </div>
+              </div>
+            }
+            className='!rounded-xl'
+            closeIcon={null}
+          />
+        )}
+
         {/* 统计数据 */}
         <Card
           className='!rounded-xl w-full'

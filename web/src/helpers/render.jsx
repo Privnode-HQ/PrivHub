@@ -70,6 +70,7 @@ import {
   CreditCard,
   Layers,
   Gift,
+  TicketPercent,
   User,
   Settings,
   CircleUser,
@@ -113,6 +114,8 @@ export function getLucideIcon(key, selected = false) {
       return <Layers {...commonProps} color={iconColor} />;
     case 'redemption':
       return <Gift {...commonProps} color={iconColor} />;
+    case 'topup_coupon':
+      return <TicketPercent {...commonProps} color={iconColor} />;
     case 'user':
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
