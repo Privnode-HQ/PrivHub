@@ -95,6 +95,7 @@ func main() {
 	// Subscription quota reset (only on master)
 	if common.IsMasterNode {
 		model.StartSubscriptionQuotaResetLoop()
+		model.StartTopUpCouponCleanupLoop()
 	}
 
 	if os.Getenv("CHANNEL_UPDATE_FREQUENCY") != "" {

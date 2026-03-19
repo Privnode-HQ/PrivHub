@@ -168,7 +168,8 @@ export const useTopupCouponsData = () => {
   };
 
   const handleRow = (record) => {
-    if (record.status !== 'available') {
+    const displayStatus = record?.effective_status || record?.status;
+    if (displayStatus !== 'available') {
       return {
         style: {
           background: 'var(--semi-color-disabled-border)',

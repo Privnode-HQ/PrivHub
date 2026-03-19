@@ -22,6 +22,10 @@ import { Button, Space, Tag } from '@douyinfe/semi-ui';
 import { timestamp2string } from '../../../helpers';
 import { TOPUP_COUPON_STATUS_MAP } from '../../../constants/topup-coupon.constants';
 
+const getDisplayStatus = (record) => {
+  return record?.effective_status || record?.status || '';
+};
+
 const renderStatus = (status, t) => {
   const statusConfig = TOPUP_COUPON_STATUS_MAP[status];
   if (!statusConfig) {
@@ -81,7 +85,7 @@ export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
     {
       title: t('状态'),
       dataIndex: 'status',
-      render: (text) => renderStatus(text, t),
+      render: (text, record) => renderStatus(getDisplayStatus(record), t),
     },
     {
       title: t('生效时间'),
@@ -104,8 +108,10 @@ export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
       fixed: 'right',
       width: 180,
       render: (text, record) => {
-        const canEdit = record.status !== 'used' && record.status !== 'reserved';
-        const canRevoke = record.status === 'available' || record.status === 'expired';
+        const displayStatus = getDisplayStatus(record);
+        const canEdit = displayStatus !== 'used' && displayStatus !== 'reserved';
+        const canRevoke =
+          displayStatus === 'available' || displayStatus === 'expired';
 
         return (
           <Space>

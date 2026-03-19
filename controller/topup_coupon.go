@@ -178,16 +178,16 @@ func UpdateTopUpCoupon(c *gin.Context) {
 		return
 	}
 
-	coupon, err := model.GetTopUpCouponById(req.Id)
+	coupon, err := model.RefreshTopUpCouponState(req.Id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if coupon.Status == common.TopUpCouponStatusUsed {
+	if coupon.GetEffectiveStatus() == common.TopUpCouponStatusUsed {
 		common.ApiErrorMsg(c, "已使用的优惠券不能编辑")
 		return
 	}
-	if coupon.Status == common.TopUpCouponStatusReserved {
+	if coupon.GetEffectiveStatus() == common.TopUpCouponStatusReserved {
 		common.ApiErrorMsg(c, "支付中的优惠券不能编辑")
 		return
 	}
@@ -381,7 +381,7 @@ func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable
 			Id:              coupon.Id,
 			Name:            coupon.Name,
 			DeductionAmount: roundMoney(decimal.NewFromFloat(coupon.DeductionAmount)),
-			Status:          coupon.Status,
+			Status:          coupon.GetEffectiveStatus(),
 			ExpiresAt:       coupon.ExpiresAt,
 		})
 		if requestedCouponId == coupon.Id {
