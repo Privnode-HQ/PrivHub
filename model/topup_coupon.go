@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"gorm.io/gorm"
 )
@@ -20,6 +21,7 @@ type TopUpCoupon struct {
 	BoundUserId      int     `json:"bound_user_id" gorm:"index"`
 	BoundUsername    string  `json:"bound_username" gorm:"-"`
 	DeductionAmount  float64 `json:"deduction_amount"`
+	CurrencyCode     string  `json:"currency_code" gorm:"type:varchar(16);index"`
 	Status           string  `json:"status" gorm:"type:varchar(16);index"`
 	EffectiveStatus  string  `json:"effective_status" gorm:"-"`
 	ValidFrom        int64   `json:"valid_from" gorm:"index"`
@@ -47,7 +49,60 @@ type UserTopUpCouponSummary struct {
 	HasAvailableCoupon      bool    `json:"has_available_coupon"`
 	AvailableCount          int     `json:"available_count"`
 	StrongestDiscountAmount float64 `json:"strongest_discount_amount"`
+	StrongestCurrencyCode   string  `json:"strongest_currency_code,omitempty"`
+	HasMixedCurrency        bool    `json:"has_mixed_currency"`
 	BannerMessage           string  `json:"banner_message"`
+}
+
+func NormalizeTopUpCouponCurrencyCode(code string) string {
+	return strings.ToUpper(strings.TrimSpace(code))
+}
+
+func DefaultTopUpCouponCurrencyCode() string {
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		return "CNY"
+	case operation_setting.QuotaDisplayTypeCustom:
+		return "CUSTOM"
+	default:
+		return "USD"
+	}
+}
+
+func isValidTopUpCouponCurrencyCode(code string) bool {
+	if len(code) < 2 || len(code) > 16 {
+		return false
+	}
+	for _, r := range code {
+		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func (coupon *TopUpCoupon) GetCurrencyCode() string {
+	if coupon == nil {
+		return ""
+	}
+	return NormalizeTopUpCouponCurrencyCode(coupon.CurrencyCode)
+}
+
+func (coupon *TopUpCoupon) GetDisplayCurrencyCode(fallback string) string {
+	couponCurrency := coupon.GetCurrencyCode()
+	if couponCurrency != "" {
+		return couponCurrency
+	}
+	return NormalizeTopUpCouponCurrencyCode(fallback)
+}
+
+func (coupon *TopUpCoupon) IsCurrencyCompatible(currencyCode string) bool {
+	couponCurrency := coupon.GetCurrencyCode()
+	paymentCurrency := NormalizeTopUpCouponCurrencyCode(currencyCode)
+	if couponCurrency == "" || paymentCurrency == "" {
+		return true
+	}
+	return couponCurrency == paymentCurrency
 }
 
 func (coupon *TopUpCoupon) Insert() error {
@@ -65,11 +120,13 @@ func (coupon *TopUpCoupon) Insert() error {
 	if coupon.Status == "" {
 		coupon.Status = common.TopUpCouponStatusAvailable
 	}
+	coupon.CurrencyCode = NormalizeTopUpCouponCurrencyCode(coupon.CurrencyCode)
 	return DB.Create(coupon).Error
 }
 
 func (coupon *TopUpCoupon) Update() error {
 	coupon.UpdatedTime = common.GetTimestamp()
+	coupon.CurrencyCode = NormalizeTopUpCouponCurrencyCode(coupon.CurrencyCode)
 	return DB.Save(coupon).Error
 }
 
@@ -176,10 +233,19 @@ func GetUserTopUpCouponSummary(userId int) (*UserTopUpCouponSummary, error) {
 		AvailableCount:     len(coupons),
 		BannerMessage:      "您有可用于充值的优惠券",
 	}
+	currencySet := make(map[string]struct{})
 	for _, coupon := range coupons {
 		if coupon.DeductionAmount > summary.StrongestDiscountAmount {
 			summary.StrongestDiscountAmount = coupon.DeductionAmount
+			summary.StrongestCurrencyCode = coupon.GetDisplayCurrencyCode(DefaultTopUpCouponCurrencyCode())
 		}
+		currencyCode := coupon.GetDisplayCurrencyCode(DefaultTopUpCouponCurrencyCode())
+		if currencyCode != "" {
+			currencySet[currencyCode] = struct{}{}
+		}
+	}
+	if len(currencySet) > 1 {
+		summary.HasMixedCurrency = true
 	}
 	return summary, nil
 }
@@ -594,6 +660,10 @@ func (coupon *TopUpCoupon) Validate() error {
 	}
 	if coupon.DeductionAmount <= 0 {
 		return errors.New("优惠金额必须大于 0")
+	}
+	coupon.CurrencyCode = NormalizeTopUpCouponCurrencyCode(coupon.CurrencyCode)
+	if coupon.CurrencyCode != "" && !isValidTopUpCouponCurrencyCode(coupon.CurrencyCode) {
+		return errors.New("优惠货币格式不正确")
 	}
 	if coupon.ExpiresAt != 0 && coupon.ValidFrom != 0 && coupon.ExpiresAt <= coupon.ValidFrom {
 		return errors.New("过期时间必须晚于生效时间")

@@ -24,6 +24,7 @@ type TopUpCouponRequest struct {
 	Name            string  `json:"name"`
 	BoundUserId     int     `json:"bound_user_id"`
 	DeductionAmount float64 `json:"deduction_amount"`
+	CurrencyCode    string  `json:"currency_code"`
 	ValidFrom       int64   `json:"valid_from"`
 	ExpiresAt       int64   `json:"expires_at"`
 	Action          string  `json:"action"`
@@ -41,6 +42,7 @@ type TopUpQuoteCoupon struct {
 	Id              int     `json:"id"`
 	Name            string  `json:"name"`
 	DeductionAmount float64 `json:"deduction_amount"`
+	CurrencyCode    string  `json:"currency_code,omitempty"`
 	Status          string  `json:"status"`
 	ExpiresAt       int64   `json:"expires_at"`
 }
@@ -120,12 +122,18 @@ func AddTopUpCoupon(c *gin.Context) {
 		common.ApiErrorMsg(c, "目标用户不存在")
 		return
 	}
+	currencyCode := model.NormalizeTopUpCouponCurrencyCode(req.CurrencyCode)
+	if currencyCode == "" {
+		common.ApiErrorMsg(c, "请选择优惠货币")
+		return
+	}
 
 	now := common.GetTimestamp()
 	coupon := &model.TopUpCoupon{
 		Name:            req.Name,
 		BoundUserId:     req.BoundUserId,
 		DeductionAmount: req.DeductionAmount,
+		CurrencyCode:    currencyCode,
 		ValidFrom:       req.ValidFrom,
 		ExpiresAt:       req.ExpiresAt,
 		IssuedByAdminId: c.GetInt("id"),
@@ -145,7 +153,7 @@ func AddTopUpCoupon(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("管理员向用户 #%d 发放优惠券 %s，优惠金额 %.2f", coupon.BoundUserId, coupon.Name, coupon.DeductionAmount))
+	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("管理员向用户 #%d 发放优惠券 %s，优惠金额 %.2f %s", coupon.BoundUserId, coupon.Name, coupon.DeductionAmount, coupon.GetDisplayCurrencyCode(model.DefaultTopUpCouponCurrencyCode())))
 	result, err := model.GetTopUpCouponById(coupon.Id)
 	if err != nil {
 		common.ApiError(c, err)
@@ -204,6 +212,9 @@ func UpdateTopUpCoupon(c *gin.Context) {
 	}
 	if req.DeductionAmount > 0 {
 		coupon.DeductionAmount = req.DeductionAmount
+	}
+	if normalizedCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(req.CurrencyCode); normalizedCurrencyCode != "" {
+		coupon.CurrencyCode = normalizedCurrencyCode
 	}
 	if req.ValidFrom > 0 {
 		coupon.ValidFrom = req.ValidFrom
@@ -288,6 +299,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		if err != nil {
 			return nil, err
 		}
+		quote.CurrencyCode = model.NormalizeTopUpCouponCurrencyCode(string(stripePriceInfo.Currency))
 		platformDiscount = getTopupDiscountAmount(req.Amount)
 		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
 		stripeMinPayMoney, minErr := getStripePayMoney(getStripeMinTopup())
@@ -303,7 +315,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		}
 		quote.ProductName = product.Name
 		quote.ProductQuota = product.Quota
-		quote.CurrencyCode = product.Currency
+		quote.CurrencyCode = model.NormalizeTopUpCouponCurrencyCode(product.Currency)
 		originalAmount = decimal.NewFromFloat(product.Price)
 		discountedBasePayable = originalAmount
 		minThreshold = decimal.NewFromFloat(getCreemMinimumPayable())
@@ -322,13 +334,14 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		platformDiscount = getTopupDiscountAmount(req.Amount)
 		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
 		minThreshold = decimal.NewFromFloat(getPayMoney(getMinTopup(), user.Group))
+		quote.CurrencyCode = model.DefaultTopUpCouponCurrencyCode()
 		allCoupons, err = model.GetUserAvailableTopUpCoupons(user.Id)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	eligibleCoupons, selectedCoupon, ineligibleReason := buildEligibleTopUpQuoteCoupons(allCoupons, originalAmount, minThreshold, req.CouponId)
+	eligibleCoupons, selectedCoupon, ineligibleReason := buildEligibleTopUpQuoteCoupons(allCoupons, originalAmount, minThreshold, req.CouponId, quote.CurrencyCode)
 	basePayable, resolvedPlatformDiscount = resolveTopUpBasePayable(
 		originalAmount,
 		discountedBasePayable,
@@ -363,12 +376,20 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	return quote, nil
 }
 
-func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable, minThreshold decimal.Decimal, requestedCouponId int) ([]TopUpQuoteCoupon, *model.TopUpCoupon, string) {
+func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable, minThreshold decimal.Decimal, requestedCouponId int, quoteCurrencyCode string) ([]TopUpQuoteCoupon, *model.TopUpCoupon, string) {
 	eligibleCoupons := make([]TopUpQuoteCoupon, 0, len(allCoupons))
 	selectedCoupon := (*model.TopUpCoupon)(nil)
 	ineligibleReason := ""
+	normalizedQuoteCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(quoteCurrencyCode)
 
 	for _, coupon := range allCoupons {
+		if !coupon.IsCurrencyCompatible(normalizedQuoteCurrencyCode) {
+			if requestedCouponId == coupon.Id {
+				ineligibleReason = "优惠券币种与当前支付方式不匹配"
+			}
+			continue
+		}
+
 		finalPayable := basePayable.Sub(decimal.NewFromFloat(coupon.DeductionAmount))
 		if finalPayable.LessThanOrEqual(minThreshold) {
 			if requestedCouponId == coupon.Id {
@@ -381,6 +402,7 @@ func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable
 			Id:              coupon.Id,
 			Name:            coupon.Name,
 			DeductionAmount: roundMoney(decimal.NewFromFloat(coupon.DeductionAmount)),
+			CurrencyCode:    coupon.GetDisplayCurrencyCode(normalizedQuoteCurrencyCode),
 			Status:          coupon.GetEffectiveStatus(),
 			ExpiresAt:       coupon.ExpiresAt,
 		})
@@ -392,12 +414,12 @@ func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable
 	return eligibleCoupons, selectedCoupon, ineligibleReason
 }
 
-func hasEligibleTopUpCoupon(userId int, basePayable, minThreshold decimal.Decimal) (bool, error) {
+func hasEligibleTopUpCoupon(userId int, basePayable, minThreshold decimal.Decimal, quoteCurrencyCode string) (bool, error) {
 	allCoupons, err := model.GetUserAvailableTopUpCoupons(userId)
 	if err != nil {
 		return false, err
 	}
-	eligibleCoupons, _, _ := buildEligibleTopUpQuoteCoupons(allCoupons, basePayable, minThreshold, 0)
+	eligibleCoupons, _, _ := buildEligibleTopUpQuoteCoupons(allCoupons, basePayable, minThreshold, 0, quoteCurrencyCode)
 	return len(eligibleCoupons) > 0, nil
 }
 

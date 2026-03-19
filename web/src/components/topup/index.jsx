@@ -23,6 +23,7 @@ import {
   showError,
   showInfo,
   showSuccess,
+  formatCurrencyAmountByCode,
   renderQuota,
   renderQuotaWithAmount,
   copy,
@@ -41,6 +42,7 @@ import TopupHistoryModal from './modals/TopupHistoryModal';
 
 const emptyTopupQuote = {
   available_coupons: [],
+  currency_code: '',
   original_amount: 0,
   base_payable_amount: 0,
   platform_discount_amount: 0,
@@ -118,6 +120,13 @@ const TopUp = () => {
     amount_options: [],
     discount: {},
   });
+
+  const getDefaultTopupCurrencyCode = () => {
+    const quotaDisplayType = (localStorage.getItem('quota_display_type') || 'USD')
+      .trim()
+      .toUpperCase();
+    return quotaDisplayType === 'TOKENS' ? 'USD' : quotaDisplayType;
+  };
 
   const topUp = async () => {
     if (redemptionCode === '') {
@@ -612,7 +621,7 @@ const TopUp = () => {
   }, [statusState?.status]);
 
   const renderAmount = () => {
-    return amount + ' ' + t('元');
+    return formatCurrencyAmountByCode(amount, getDefaultTopupCurrencyCode());
   };
 
   const getAmount = async (value) => {
@@ -761,6 +770,7 @@ const TopUp = () => {
         amountLoading={quoteLoading}
         payWay={payWay}
         payMethods={payMethods}
+        currencyCode={topupQuote.currency_code || getDefaultTopupCurrencyCode()}
         originalAmount={topupQuote.original_amount || amount}
         platformDiscountAmount={topupQuote.platform_discount_amount || 0}
         couponDiscountAmount={topupQuote.coupon_discount_amount || 0}

@@ -21,6 +21,7 @@ import React from 'react';
 import { Modal, Typography, Card, Select, Skeleton } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
+import { formatCurrencyAmountByCode } from '../../../helpers';
 
 const { Text } = Typography;
 
@@ -35,6 +36,7 @@ const PaymentConfirmModal = ({
   amountLoading,
   payWay,
   payMethods,
+  currencyCode,
   originalAmount,
   platformDiscountAmount,
   couponDiscountAmount,
@@ -94,7 +96,7 @@ const PaymentConfirmModal = ({
                 <Skeleton.Title style={{ width: '60px', height: '16px' }} />
               ) : (
                 <Text strong className='font-bold' style={{ color: 'red' }}>
-                  {`${normalizedFinalAmount.toFixed(2)} ${t('元')}`}
+                  {formatCurrencyAmountByCode(normalizedFinalAmount, currencyCode)}
                 </Text>
               )}
             </div>
@@ -114,7 +116,10 @@ const PaymentConfirmModal = ({
                   </Select.Option>
                   {availableCoupons.map((coupon) => (
                     <Select.Option value={coupon.id} key={coupon.id}>
-                      {`${coupon.name} (-${Number(coupon.deduction_amount || 0).toFixed(2)} ${t('元')})`}
+                      {`${coupon.name} (-${formatCurrencyAmountByCode(
+                        coupon.deduction_amount,
+                        coupon.currency_code || currencyCode,
+                      )})`}
                     </Select.Option>
                   ))}
                 </Select>
@@ -130,7 +135,7 @@ const PaymentConfirmModal = ({
                     {t('原价')}：
                   </Text>
                   <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {`${normalizedOriginalAmount.toFixed(2)} ${t('元')}`}
+                    {formatCurrencyAmountByCode(normalizedOriginalAmount, currencyCode)}
                   </Text>
                 </div>
                 {normalizedPlatformDiscount > 0 && (
@@ -139,7 +144,11 @@ const PaymentConfirmModal = ({
                       {t('平台优惠')}：
                     </Text>
                     <Text className='text-emerald-600 dark:text-emerald-400'>
-                      {`- ${normalizedPlatformDiscount.toFixed(2)} ${t('元')}`}
+                      -{' '}
+                      {formatCurrencyAmountByCode(
+                        normalizedPlatformDiscount,
+                        currencyCode,
+                      )}
                     </Text>
                   </div>
                 )}
@@ -149,7 +158,11 @@ const PaymentConfirmModal = ({
                       {t('优惠券抵扣')}：
                     </Text>
                     <Text className='text-emerald-600 dark:text-emerald-400'>
-                      {`- ${normalizedCouponDiscount.toFixed(2)} ${t('元')}`}
+                      -{' '}
+                      {formatCurrencyAmountByCode(
+                        normalizedCouponDiscount,
+                        currencyCode,
+                      )}
                     </Text>
                   </div>
                 )}

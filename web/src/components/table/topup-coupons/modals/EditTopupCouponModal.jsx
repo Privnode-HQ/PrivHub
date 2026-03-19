@@ -38,10 +38,18 @@ import { IconClose, IconGift, IconSave } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
 
+const getDefaultCouponCurrencyCode = () => {
+  const quotaDisplayType = (localStorage.getItem('quota_display_type') || 'USD')
+    .trim()
+    .toUpperCase();
+  return quotaDisplayType === 'TOKENS' ? 'USD' : quotaDisplayType;
+};
+
 const getInitValues = () => ({
   name: '',
   bound_user_id: undefined,
   deduction_amount: 1,
+  currency_code: getDefaultCouponCurrencyCode(),
   valid_from: new Date(),
   expires_at: null,
 });
@@ -68,6 +76,7 @@ const EditTopupCouponModal = ({
         formApiRef.current?.setValues({
           ...getInitValues(),
           ...data,
+          currency_code: data.currency_code || '',
           valid_from: data.valid_from
             ? new Date(data.valid_from * 1000)
             : new Date(),
@@ -103,6 +112,7 @@ const EditTopupCouponModal = ({
         name: values.name,
         bound_user_id: parseInt(values.bound_user_id),
         deduction_amount: Number(values.deduction_amount),
+        currency_code: (values.currency_code || '').trim().toUpperCase(),
         valid_from: values.valid_from
           ? Math.floor(values.valid_from.getTime() / 1000)
           : 0,
@@ -192,7 +202,7 @@ const EditTopupCouponModal = ({
                 <div>
                   <Text className='text-lg font-medium'>{t('基本信息')}</Text>
                   <div className='text-xs text-gray-600'>
-                    {t('配置用户、金额和生效时间')}
+                    {t('配置用户、金额、币种和生效时间')}
                   </div>
                 </div>
               </div>
@@ -229,6 +239,17 @@ const EditTopupCouponModal = ({
                     rules={[
                       { required: true, message: t('请输入优惠金额') },
                     ]}
+                  />
+                </Col>
+                <Col span={24}>
+                  <Form.Input
+                    field='currency_code'
+                    label={t('优惠货币')}
+                    placeholder={t('例如 USD、CNY、EUR')}
+                    maxLength={16}
+                    rules={[{ required: true, message: t('请输入优惠货币') }]}
+                    showClear
+                    extraText={t('请输入实际结算使用的货币代码')}
                   />
                 </Col>
                 <Col span={24}>

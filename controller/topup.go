@@ -219,7 +219,7 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 	if req.CouponId != 0 {
-		model.RecordLog(id, model.LogTypeTopup, fmt.Sprintf("创建充值订单并使用优惠券 %s，抵扣 %.2f", topUp.CouponName, topUp.CouponDiscount))
+		model.RecordLog(id, model.LogTypeTopup, fmt.Sprintf("创建充值订单并使用优惠券 %s，抵扣 %.2f %s", topUp.CouponName, topUp.CouponDiscount, quote.CurrencyCode))
 	}
 	c.JSON(200, gin.H{"message": "success", "data": params, "url": uri})
 }

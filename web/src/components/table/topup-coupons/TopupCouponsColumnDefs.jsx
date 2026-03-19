@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Button, Space, Tag } from '@douyinfe/semi-ui';
-import { timestamp2string } from '../../../helpers';
+import { formatCurrencyAmountByCode, timestamp2string } from '../../../helpers';
 import { TOPUP_COUPON_STATUS_MAP } from '../../../constants/topup-coupon.constants';
 
 const getDisplayStatus = (record) => {
@@ -74,10 +74,10 @@ export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
     {
       title: t('优惠金额'),
       dataIndex: 'deduction_amount',
-      render: (text) => {
+      render: (text, record) => {
         return (
           <Tag color='green' shape='circle'>
-            - {Number(text || 0).toFixed(2)}
+            - {formatCurrencyAmountByCode(text, record.currency_code)}
           </Tag>
         );
       },

@@ -960,6 +960,73 @@ export function renderQuotaWithAmount(amount) {
   return '$' + amount;
 }
 
+export function normalizeCurrencyCode(code) {
+  if (typeof code !== 'string') {
+    return '';
+  }
+  return code.trim().toUpperCase();
+}
+
+export function getCurrencySymbolByCode(currencyCode) {
+  const normalizedCode = normalizeCurrencyCode(currencyCode);
+  switch (normalizedCode) {
+    case 'USD':
+      return '$';
+    case 'CNY':
+      return '¥';
+    case 'EUR':
+      return '€';
+    case 'GBP':
+      return '£';
+    case 'JPY':
+      return '¥';
+    case 'HKD':
+      return 'HK$';
+    case 'SGD':
+      return 'S$';
+    case 'AUD':
+      return 'A$';
+    case 'CAD':
+      return 'C$';
+    case 'CUSTOM': {
+      const statusStr = localStorage.getItem('status');
+      try {
+        if (statusStr) {
+          const s = JSON.parse(statusStr);
+          return s?.custom_currency_symbol || '¤';
+        }
+      } catch (e) {}
+      return '¤';
+    }
+    default:
+      return '';
+  }
+}
+
+export function formatCurrencyAmountByCode(
+  amount,
+  currencyCode,
+  digits = 2,
+  { includeCode = true } = {},
+) {
+  const numericAmount = Number(amount || 0);
+  const normalizedCode = normalizeCurrencyCode(currencyCode);
+  const fixedAmount = numericAmount.toFixed(digits);
+
+  if (!normalizedCode) {
+    return fixedAmount;
+  }
+
+  const symbol = getCurrencySymbolByCode(normalizedCode);
+  const formattedAmount = symbol ? `${symbol}${fixedAmount}` : fixedAmount;
+  if (!includeCode) {
+    return formattedAmount;
+  }
+  return symbol
+    ? `${formattedAmount} ${normalizedCode}`
+    : `${fixedAmount} ${normalizedCode}`;
+}
+
 /**
  * 获取当前货币配置信息
  * @returns {Object} - { symbol, rate, type }

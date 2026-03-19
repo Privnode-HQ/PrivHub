@@ -45,7 +45,7 @@ import {
 import { IconGift } from '@douyinfe/semi-icons';
 import Turnstile from 'react-turnstile';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { getCurrencyConfig } from '../../helpers/render';
+import { formatCurrencyAmountByCode, getCurrencyConfig } from '../../helpers/render';
 
 const { Text } = Typography;
 
@@ -126,7 +126,11 @@ const RechargeCard = ({
                   {t('您有')} {topupInfo.coupon_summary.available_count}{' '}
                   {t('张可用优惠券')}
                   {topupInfo.coupon_summary.strongest_discount_amount > 0 &&
-                    `，${t('最高可减')} ${Number(topupInfo.coupon_summary.strongest_discount_amount).toFixed(2)} ${t('元')}`}
+                    !topupInfo.coupon_summary.has_mixed_currency &&
+                    `，${t('最高可减')} ${formatCurrencyAmountByCode(
+                      topupInfo.coupon_summary.strongest_discount_amount,
+                      topupInfo.coupon_summary.strongest_currency_code,
+                    )}`}
                 </span>
                 <div>
                   <Button

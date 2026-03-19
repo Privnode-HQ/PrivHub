@@ -2746,10 +2746,16 @@
     "绑定用户 ID": "Bound User ID",
     "刷新": "Refresh",
     "配置用户、金额和生效时间": "Configure user, amount, and validity time",
+    "配置用户、金额、币种和生效时间": "Configure user, amount, currency, and validity time",
     "生效时间": "Valid From",
     "立即生效": "Effective Immediately",
     "请输入用户 ID": "Please enter a user ID",
     "请输入优惠金额": "Please enter a discount amount",
+    "优惠货币": "Coupon Currency",
+    "请输入优惠货币": "Please enter a coupon currency",
+    "例如 USD、CNY、EUR": "For example: USD, CNY, EUR",
+    "请输入实际结算使用的货币代码": "Enter the currency code used for settlement",
+    "请选择优惠货币": "Please select a coupon currency",
     "留空为永不过期": "Leave blank for no expiry",
     "优惠券发放成功": "Coupon issued successfully",
     "优惠券更新成功": "Coupon updated successfully",
@@ -2765,6 +2771,7 @@
     "您有": "You have",
     "最高可减": "up to",
     "立即充值": "Recharge Now",
-    "当前支付方式暂不支持优惠券": "This payment method does not support coupons yet"
+    "当前支付方式暂不支持优惠券": "This payment method does not support coupons yet",
+    "优惠券币种与当前支付方式不匹配": "The coupon currency does not match the current payment method"
   }
 }
