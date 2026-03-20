@@ -253,6 +253,7 @@ func migrateDB() error {
 		&Token{},
 		&User{},
 		&AffRebateLog{},
+		&AdminAuditLog{},
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
@@ -290,6 +291,7 @@ func migrateDBFast() error {
 		{&Token{}, "Token"},
 		{&User{}, "User"},
 		{&AffRebateLog{}, "AffRebateLog"},
+		{&AdminAuditLog{}, "AdminAuditLog"},
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
 		{&Redemption{}, "Redemption"},
@@ -338,7 +340,7 @@ func migrateDBFast() error {
 
 func migrateLOGDB() error {
 	var err error
-	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
+	if err = LOG_DB.AutoMigrate(&Log{}, &AdminAuditLog{}); err != nil {
 		return err
 	}
 	return nil

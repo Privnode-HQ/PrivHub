@@ -52,4 +52,7 @@ const (
 	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"
 
 	ContextKeySystemPromptOverride ContextKey = "system_prompt_override"
+
+	ContextKeyAdminAuditMeta ContextKey = "admin_audit_meta"
+	ContextKeyAdminAuditSkip ContextKey = "admin_audit_skip"
 )

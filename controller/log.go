@@ -20,6 +20,17 @@ func GetAllLogs(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
+	if logType == model.LogTypeManage {
+		auditLogs, total, err := model.GetAllAdminAuditLogs(startTimestamp, endTimestamp, username, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		pageInfo.SetTotal(int(total))
+		pageInfo.SetItems(model.ConvertAdminAuditLogsToLogs(auditLogs))
+		common.ApiSuccess(c, pageInfo)
+		return
+	}
 	logs, total, err := model.GetAllLogs(logType, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group)
 	if err != nil {
 		common.ApiError(c, err)
@@ -53,6 +64,20 @@ func GetUserLogs(c *gin.Context) {
 
 func SearchAllLogs(c *gin.Context) {
 	keyword := c.Query("keyword")
+	logType, _ := strconv.Atoi(c.Query("type"))
+	if logType == model.LogTypeManage {
+		auditLogs, err := model.SearchAdminAuditLogs(keyword)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    model.ConvertAdminAuditLogsToLogs(auditLogs),
+		})
+		return
+	}
 	logs, err := model.SearchAllLogs(keyword)
 	if err != nil {
 		common.ApiError(c, err)
@@ -101,6 +126,18 @@ func GetLogByKey(c *gin.Context) {
 
 func GetLogsStat(c *gin.Context) {
 	logType, _ := strconv.Atoi(c.Query("type"))
+	if logType == model.LogTypeManage {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data": gin.H{
+				"quota": 0,
+				"rpm":   0,
+				"tpm":   0,
+			},
+		})
+		return
+	}
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	tokenName := c.Query("token_name")
@@ -160,6 +197,12 @@ func DeleteHistoryLogs(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	auditCount, err := model.DeleteOldAdminAuditLog(c.Request.Context(), targetTimestamp, 100)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	count += auditCount
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
