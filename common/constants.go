@@ -29,7 +29,7 @@ var DataExportInterval = 5         // unit: minute
 var DataExportDefaultTime = "hour" // unit: minute
 var DefaultCollapseSidebar = false // default value of collapse sidebar
 
-// Any options with "Secret", "Token" in its key won't be return by GetOptions
+// Any options with "Secret", "Token", "Key" in its key won't be returned by GetOptions
 
 var SessionSecret = uuid.New().String()
 var CryptoSecret = uuid.New().String()
@@ -63,22 +63,14 @@ var EmailDomainWhitelist = []string{
 	"yahoo.com",
 	"foxmail.com",
 }
-var EmailLoginAuthServerList = []string{
-	"smtp.sendcloud.net",
-	"smtp.azurecomm.net",
-}
-
 var DebugEnabled bool
 var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
-var SMTPServer = ""
-var SMTPPort = 587
-var SMTPSSLEnabled = false
-var SMTPAccount = ""
-var SMTPFrom = ""
-var SMTPToken = ""
+var SendGridSenderName = ""
+var SendGridSenderEmail = ""
+var SendGridAPIKey = ""
 
 var GitHubClientId = ""
 var GitHubClientSecret = ""

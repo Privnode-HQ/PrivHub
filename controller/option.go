@@ -63,6 +63,14 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
+	case "EmailVerificationEnabled":
+		if option.Value == "true" && (strings.TrimSpace(common.SendGridAPIKey) == "" || strings.TrimSpace(common.SendGridSenderEmail) == "") {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "无法启用邮箱验证，请先配置 SendGrid API Key 和发件人邮箱！",
+			})
+			return
+		}
 	case "GitHubOAuthEnabled":
 		if option.Value == "true" && common.GitHubClientId == "" {
 			c.JSON(http.StatusOK, gin.H{

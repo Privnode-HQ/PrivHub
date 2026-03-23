@@ -55,12 +55,9 @@ func InitOptionMap() {
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
 	common.OptionMap["EmailDomainWhitelist"] = strings.Join(common.EmailDomainWhitelist, ",")
-	common.OptionMap["SMTPServer"] = ""
-	common.OptionMap["SMTPFrom"] = ""
-	common.OptionMap["SMTPPort"] = strconv.Itoa(common.SMTPPort)
-	common.OptionMap["SMTPAccount"] = ""
-	common.OptionMap["SMTPToken"] = ""
-	common.OptionMap["SMTPSSLEnabled"] = strconv.FormatBool(common.SMTPSSLEnabled)
+	common.OptionMap["SendGridSenderName"] = ""
+	common.OptionMap["SendGridSenderEmail"] = ""
+	common.OptionMap["SendGridAPIKey"] = ""
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
@@ -286,8 +283,6 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.ModelRequestRateLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
 			setting.StopOnSensitiveEnabled = boolValue
-		case "SMTPSSLEnabled":
-			common.SMTPSSLEnabled = boolValue
 		case "WorkerAllowHttpImageRequestEnabled":
 			system_setting.WorkerAllowHttpImageRequestEnabled = boolValue
 		case "DefaultUseAutoGroup":
@@ -299,17 +294,12 @@ func updateOptionMap(key string, value string) (err error) {
 	switch key {
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
-	case "SMTPServer":
-		common.SMTPServer = value
-	case "SMTPPort":
-		intValue, _ := strconv.Atoi(value)
-		common.SMTPPort = intValue
-	case "SMTPAccount":
-		common.SMTPAccount = value
-	case "SMTPFrom":
-		common.SMTPFrom = value
-	case "SMTPToken":
-		common.SMTPToken = value
+	case "SendGridSenderName":
+		common.SendGridSenderName = value
+	case "SendGridSenderEmail":
+		common.SendGridSenderEmail = value
+	case "SendGridAPIKey":
+		common.SendGridAPIKey = value
 	case "ServerAddress":
 		system_setting.ServerAddress = value
 	case "WorkerUrl":

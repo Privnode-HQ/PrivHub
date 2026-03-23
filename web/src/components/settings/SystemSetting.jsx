@@ -63,11 +63,9 @@ const SystemSetting = () => {
     'oidc.token_endpoint': '',
     'oidc.user_info_endpoint': '',
     Notice: '',
-    SMTPServer: '',
-    SMTPPort: '',
-    SMTPAccount: '',
-    SMTPFrom: '',
-    SMTPToken: '',
+    SendGridSenderName: '',
+    SendGridSenderEmail: '',
+    SendGridAPIKey: '',
     WorkerUrl: '',
     WorkerValidKey: '',
     WorkerAllowHttpImageRequestEnabled: '',
@@ -89,7 +87,6 @@ const SystemSetting = () => {
     'passkey.attachment_preference': '',
     EmailDomainRestrictionEnabled: '',
     EmailAliasRestrictionEnabled: '',
-    SMTPSSLEnabled: '',
     EmailDomainWhitelist: [],
     TelegramOAuthEnabled: '',
     TelegramBotToken: '',
@@ -180,7 +177,6 @@ const SystemSetting = () => {
           case 'TurnstileCheckEnabled':
           case 'EmailDomainRestrictionEnabled':
           case 'EmailAliasRestrictionEnabled':
-          case 'SMTPSSLEnabled':
           case 'LinuxDOOAuthEnabled':
           case 'discord.enabled':
           case 'oidc.enabled':
@@ -316,29 +312,33 @@ const SystemSetting = () => {
     await updateOptions([{ key: 'ServerAddress', value: ServerAddress }]);
   };
 
-  const submitSMTP = async () => {
+  const submitSendGrid = async () => {
     const options = [];
 
-    if (originInputs['SMTPServer'] !== inputs.SMTPServer) {
-      options.push({ key: 'SMTPServer', value: inputs.SMTPServer });
-    }
-    if (originInputs['SMTPAccount'] !== inputs.SMTPAccount) {
-      options.push({ key: 'SMTPAccount', value: inputs.SMTPAccount });
-    }
-    if (originInputs['SMTPFrom'] !== inputs.SMTPFrom) {
-      options.push({ key: 'SMTPFrom', value: inputs.SMTPFrom });
+    if (
+      originInputs['SendGridSenderName'] !== inputs.SendGridSenderName
+    ) {
+      options.push({
+        key: 'SendGridSenderName',
+        value: inputs.SendGridSenderName,
+      });
     }
     if (
-      originInputs['SMTPPort'] !== inputs.SMTPPort &&
-      inputs.SMTPPort !== ''
+      originInputs['SendGridSenderEmail'] !== inputs.SendGridSenderEmail
     ) {
-      options.push({ key: 'SMTPPort', value: inputs.SMTPPort });
+      options.push({
+        key: 'SendGridSenderEmail',
+        value: inputs.SendGridSenderEmail,
+      });
     }
     if (
-      originInputs['SMTPToken'] !== inputs.SMTPToken &&
-      inputs.SMTPToken !== ''
+      originInputs['SendGridAPIKey'] !== inputs.SendGridAPIKey &&
+      inputs.SendGridAPIKey !== ''
     ) {
-      options.push({ key: 'SMTPToken', value: inputs.SMTPToken });
+      options.push({
+        key: 'SendGridAPIKey',
+        value: inputs.SendGridAPIKey,
+      });
     }
 
     if (options.length > 0) {
@@ -1284,55 +1284,35 @@ const SystemSetting = () => {
                 </Form.Section>
               </Card>
               <Card>
-                <Form.Section text={t('配置 SMTP')}>
-                  <Text>{t('用以支持系统的邮件发送')}</Text>
+                <Form.Section text={t('配置 SendGrid')}>
+                  <Text>{t('通过 SendGrid Web API 发送系统邮件')}</Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
                   >
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='SMTPServer'
-                        label={t('SMTP 服务器地址')}
-                      />
-                    </Col>
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Input field='SMTPPort' label={t('SMTP 端口')} />
-                    </Col>
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Input field='SMTPAccount' label={t('SMTP 账户')} />
-                    </Col>
-                  </Row>
-                  <Row
-                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
-                    style={{ marginTop: 16 }}
-                  >
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Input
-                        field='SMTPFrom'
-                        label={t('SMTP 发送者邮箱')}
+                        field='SendGridSenderName'
+                        label={t('SendGrid 发件人名称')}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='SMTPToken'
-                        label={t('SMTP 访问凭证')}
+                        field='SendGridSenderEmail'
+                        label={t('SendGrid 发件人邮箱')}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.Input
+                        field='SendGridAPIKey'
+                        label={t('SendGrid API Key')}
                         type='password'
                         placeholder='敏感信息不会发送到前端显示'
                       />
                     </Col>
-                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
-                      <Form.Checkbox
-                        field='SMTPSSLEnabled'
-                        noLabel
-                        onChange={(e) =>
-                          handleCheckboxChange('SMTPSSLEnabled', e)
-                        }
-                      >
-                        {t('启用SMTP SSL')}
-                      </Form.Checkbox>
-                    </Col>
                   </Row>
-                  <Button onClick={submitSMTP}>{t('保存 SMTP 设置')}</Button>
+                  <Button onClick={submitSendGrid}>
+                    {t('保存 SendGrid 设置')}
+                  </Button>
                 </Form.Section>
               </Card>
               <Card>
