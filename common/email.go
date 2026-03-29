@@ -1,13 +1,16 @@
 package common
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html"
+	"net/mail"
 	"regexp"
 	"strings"
 
-	"github.com/sendgrid/sendgrid-go"
-	sendgridmail "github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/resend/resend-go/v3"
 )
 
 var htmlTagPattern = regexp.MustCompile(`<[^>]+>`)
@@ -38,12 +41,63 @@ func htmlToPlainText(content string) string {
 	return text
 }
 
-func SendEmail(subject string, receiver string, content string) error {
-	if SendGridAPIKey == "" {
-		return fmt.Errorf("SendGrid API Key 未配置")
+func shortEmailKeyHash(values ...string) string {
+	hasher := sha256.New()
+	for _, value := range values {
+		_, _ = hasher.Write([]byte(strings.TrimSpace(value)))
+		_, _ = hasher.Write([]byte{0})
 	}
-	if SendGridSenderEmail == "" {
-		return fmt.Errorf("SendGrid 发件人邮箱未配置")
+	return hex.EncodeToString(hasher.Sum(nil)[:16])
+}
+
+func normalizeEmailIdempotencyKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 256 {
+		return key
+	}
+	return fmt.Sprintf("system-email/%s", shortEmailKeyHash(key))
+}
+
+func scopeEmailIdempotencyKey(baseKey string, recipient string) string {
+	if strings.TrimSpace(baseKey) == "" {
+		return ""
+	}
+	return normalizeEmailIdempotencyKey(fmt.Sprintf("%s/%s", baseKey, shortEmailKeyHash(recipient)))
+}
+
+func formatEmailSender(name string, address string) string {
+	sender := mail.Address{
+		Name:    strings.TrimSpace(name),
+		Address: strings.TrimSpace(address),
+	}
+	return sender.String()
+}
+
+func GenerateEmailIdempotencyKey(eventType string, values ...string) string {
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		eventType = "system-email"
+	}
+	return normalizeEmailIdempotencyKey(fmt.Sprintf("%s/%s", eventType, shortEmailKeyHash(values...)))
+}
+
+func SendEmail(subject string, receiver string, content string) error {
+	return sendEmail(subject, receiver, content, "")
+}
+
+func SendEmailWithIdempotencyKey(subject string, receiver string, content string, idempotencyKey string) error {
+	return sendEmail(subject, receiver, content, idempotencyKey)
+}
+
+func sendEmail(subject string, receiver string, content string, idempotencyKey string) error {
+	if ResendAPIKey == "" {
+		return fmt.Errorf("Resend API Key 未配置")
+	}
+	if ResendSenderEmail == "" {
+		return fmt.Errorf("Resend 发件人邮箱未配置")
 	}
 
 	receivers := splitEmailReceivers(receiver)
@@ -51,30 +105,35 @@ func SendEmail(subject string, receiver string, content string) error {
 		return fmt.Errorf("收件人邮箱未配置")
 	}
 
-	senderName := strings.TrimSpace(SendGridSenderName)
+	senderName := strings.TrimSpace(ResendSenderName)
 	if senderName == "" {
 		senderName = SystemName
 	}
-	from := sendgridmail.NewEmail(senderName, SendGridSenderEmail)
+	from := formatEmailSender(senderName, ResendSenderEmail)
 	plainTextContent := htmlToPlainText(content)
-	client := sendgrid.NewSendClient(SendGridAPIKey)
+	client := resend.NewClient(ResendAPIKey)
 
 	for _, recipient := range receivers {
-		to := sendgridmail.NewEmail("", recipient)
-		message := sendgridmail.NewSingleEmail(from, subject, to, plainTextContent, content)
-		response, err := client.Send(message)
+		message := &resend.SendEmailRequest{
+			From:    from,
+			To:      []string{recipient},
+			Subject: subject,
+			Html:    content,
+			Text:    plainTextContent,
+		}
+		options := &resend.SendEmailOptions{}
+		if scopedKey := scopeEmailIdempotencyKey(idempotencyKey, recipient); scopedKey != "" {
+			options.IdempotencyKey = scopedKey
+		}
+		response, err := client.Emails.SendWithOptions(context.Background(), message, options)
 		if err != nil {
-			SysError(fmt.Sprintf("failed to send email to %s via SendGrid: %v", recipient, err))
+			err = fmt.Errorf("Resend 邮件发送失败: %w", err)
+			SysError(fmt.Sprintf("failed to send email to %s via Resend: %v", recipient, err))
 			return err
 		}
-		if response == nil {
-			err = fmt.Errorf("SendGrid 返回空响应")
-			SysError(fmt.Sprintf("failed to send email to %s via SendGrid: %v", recipient, err))
-			return err
-		}
-		if response.StatusCode < 200 || response.StatusCode >= 300 {
-			err = fmt.Errorf("SendGrid 邮件发送失败，状态码 %d: %s", response.StatusCode, response.Body)
-			SysError(fmt.Sprintf("failed to send email to %s via SendGrid: %v", recipient, err))
+		if response == nil || response.Id == "" {
+			err = fmt.Errorf("Resend 返回空响应")
+			SysError(fmt.Sprintf("failed to send email to %s via Resend: %v", recipient, err))
 			return err
 		}
 	}

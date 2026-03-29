@@ -63,9 +63,9 @@ const SystemSetting = () => {
     'oidc.token_endpoint': '',
     'oidc.user_info_endpoint': '',
     Notice: '',
-    SendGridSenderName: '',
-    SendGridSenderEmail: '',
-    SendGridAPIKey: '',
+    ResendSenderName: '',
+    ResendSenderEmail: '',
+    ResendAPIKey: '',
     WorkerUrl: '',
     WorkerValidKey: '',
     WorkerAllowHttpImageRequestEnabled: '',
@@ -312,32 +312,28 @@ const SystemSetting = () => {
     await updateOptions([{ key: 'ServerAddress', value: ServerAddress }]);
   };
 
-  const submitSendGrid = async () => {
+  const submitResend = async () => {
     const options = [];
 
-    if (
-      originInputs['SendGridSenderName'] !== inputs.SendGridSenderName
-    ) {
+    if (originInputs['ResendSenderName'] !== inputs.ResendSenderName) {
       options.push({
-        key: 'SendGridSenderName',
-        value: inputs.SendGridSenderName,
+        key: 'ResendSenderName',
+        value: inputs.ResendSenderName,
+      });
+    }
+    if (originInputs['ResendSenderEmail'] !== inputs.ResendSenderEmail) {
+      options.push({
+        key: 'ResendSenderEmail',
+        value: inputs.ResendSenderEmail,
       });
     }
     if (
-      originInputs['SendGridSenderEmail'] !== inputs.SendGridSenderEmail
+      originInputs['ResendAPIKey'] !== inputs.ResendAPIKey &&
+      inputs.ResendAPIKey !== ''
     ) {
       options.push({
-        key: 'SendGridSenderEmail',
-        value: inputs.SendGridSenderEmail,
-      });
-    }
-    if (
-      originInputs['SendGridAPIKey'] !== inputs.SendGridAPIKey &&
-      inputs.SendGridAPIKey !== ''
-    ) {
-      options.push({
-        key: 'SendGridAPIKey',
-        value: inputs.SendGridAPIKey,
+        key: 'ResendAPIKey',
+        value: inputs.ResendAPIKey,
       });
     }
 
@@ -481,10 +477,14 @@ const SystemSetting = () => {
     const options = [];
 
     if (originInputs['discord.client_id'] !== inputs['discord.client_id']) {
-      options.push({ key: 'discord.client_id', value: inputs['discord.client_id'] });
+      options.push({
+        key: 'discord.client_id',
+        value: inputs['discord.client_id'],
+      });
     }
     if (
-      originInputs['discord.client_secret'] !== inputs['discord.client_secret'] &&
+      originInputs['discord.client_secret'] !==
+        inputs['discord.client_secret'] &&
       inputs['discord.client_secret'] !== ''
     ) {
       options.push({
@@ -745,8 +745,8 @@ const SystemSetting = () => {
                       rel='noreferrer'
                     >
                       new-api-worker
-                    </a>
-                    {' '}{t('或其兼容new-api-worker格式的其他版本')}
+                    </a>{' '}
+                    {t('或其兼容new-api-worker格式的其他版本')}
                   </Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
@@ -1284,34 +1284,34 @@ const SystemSetting = () => {
                 </Form.Section>
               </Card>
               <Card>
-                <Form.Section text={t('配置 SendGrid')}>
-                  <Text>{t('通过 SendGrid Web API 发送系统邮件')}</Text>
+                <Form.Section text={t('配置 Resend')}>
+                  <Text>{t('通过 Resend API 发送系统邮件')}</Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
                   >
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='SendGridSenderName'
-                        label={t('SendGrid 发件人名称')}
+                        field='ResendSenderName'
+                        label={t('Resend 发件人名称')}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='SendGridSenderEmail'
-                        label={t('SendGrid 发件人邮箱')}
+                        field='ResendSenderEmail'
+                        label={t('Resend 发件人邮箱')}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='SendGridAPIKey'
-                        label={t('SendGrid API Key')}
+                        field='ResendAPIKey'
+                        label={t('Resend API Key')}
                         type='password'
                         placeholder='敏感信息不会发送到前端显示'
                       />
                     </Col>
                   </Row>
-                  <Button onClick={submitSendGrid}>
-                    {t('保存 SendGrid 设置')}
+                  <Button onClick={submitResend}>
+                    {t('保存 Resend 设置')}
                   </Button>
                 </Form.Section>
               </Card>

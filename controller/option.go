@@ -64,10 +64,10 @@ func UpdateOption(c *gin.Context) {
 	}
 	switch option.Key {
 	case "EmailVerificationEnabled":
-		if option.Value == "true" && (strings.TrimSpace(common.SendGridAPIKey) == "" || strings.TrimSpace(common.SendGridSenderEmail) == "") {
+		if option.Value == "true" && (strings.TrimSpace(common.ResendAPIKey) == "" || strings.TrimSpace(common.ResendSenderEmail) == "") {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "无法启用邮箱验证，请先配置 SendGrid API Key 和发件人邮箱！",
+				"message": "无法启用邮箱验证，请先配置 Resend API Key 和发件人邮箱！",
 			})
 			return
 		}

@@ -18,6 +18,19 @@ type Option struct {
 	Value string `json:"value"`
 }
 
+func normalizeOptionKey(key string) string {
+	switch key {
+	case "SendGridSenderName":
+		return "ResendSenderName"
+	case "SendGridSenderEmail":
+		return "ResendSenderEmail"
+	case "SendGridAPIKey":
+		return "ResendAPIKey"
+	default:
+		return key
+	}
+}
+
 func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
@@ -55,9 +68,9 @@ func InitOptionMap() {
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
 	common.OptionMap["EmailDomainWhitelist"] = strings.Join(common.EmailDomainWhitelist, ",")
-	common.OptionMap["SendGridSenderName"] = ""
-	common.OptionMap["SendGridSenderEmail"] = ""
-	common.OptionMap["SendGridAPIKey"] = ""
+	common.OptionMap["ResendSenderName"] = ""
+	common.OptionMap["ResendSenderEmail"] = ""
+	common.OptionMap["ResendAPIKey"] = ""
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
@@ -154,8 +167,25 @@ func InitOptionMap() {
 
 func loadOptionsFromDatabase() {
 	options, _ := AllOption()
+	normalizedOptions := make(map[string]string, len(options))
+	legacyOptions := make(map[string]string)
 	for _, option := range options {
-		err := updateOptionMap(option.Key, option.Value)
+		normalizedKey := normalizeOptionKey(option.Key)
+		if normalizedKey == option.Key {
+			normalizedOptions[normalizedKey] = option.Value
+			continue
+		}
+		if _, exists := normalizedOptions[normalizedKey]; !exists {
+			legacyOptions[normalizedKey] = option.Value
+		}
+	}
+	for key, value := range legacyOptions {
+		if _, exists := normalizedOptions[key]; !exists {
+			normalizedOptions[key] = value
+		}
+	}
+	for key, value := range normalizedOptions {
+		err := updateOptionMap(key, value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
@@ -171,6 +201,7 @@ func SyncOptions(frequency int) {
 }
 
 func UpdateOption(key string, value string) error {
+	key = normalizeOptionKey(key)
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -187,6 +218,7 @@ func UpdateOption(key string, value string) error {
 }
 
 func updateOptionMap(key string, value string) (err error) {
+	key = normalizeOptionKey(key)
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
 	common.OptionMap[key] = value
@@ -294,12 +326,12 @@ func updateOptionMap(key string, value string) (err error) {
 	switch key {
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
-	case "SendGridSenderName":
-		common.SendGridSenderName = value
-	case "SendGridSenderEmail":
-		common.SendGridSenderEmail = value
-	case "SendGridAPIKey":
-		common.SendGridAPIKey = value
+	case "ResendSenderName":
+		common.ResendSenderName = value
+	case "ResendSenderEmail":
+		common.ResendSenderEmail = value
+	case "ResendAPIKey":
+		common.ResendAPIKey = value
 	case "ServerAddress":
 		system_setting.ServerAddress = value
 	case "WorkerUrl":

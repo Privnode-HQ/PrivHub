@@ -256,7 +256,7 @@ func SendEmailVerification(c *gin.Context) {
 	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
 		"<p>您的验证码为: <strong>%s</strong></p>"+
 		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
-	err := common.SendEmail(subject, email, content)
+	err := common.SendEmailWithIdempotencyKey(subject, email, content, common.GenerateEmailIdempotencyKey("email-verification", email, code))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -292,7 +292,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 		"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
 		"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
 		"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
-	err := common.SendEmail(subject, email, content)
+	err := common.SendEmailWithIdempotencyKey(subject, email, content, common.GenerateEmailIdempotencyKey("password-reset", email, code))
 	if err != nil {
 		common.ApiError(c, err)
 		return

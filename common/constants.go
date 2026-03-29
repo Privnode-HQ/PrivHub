@@ -68,9 +68,9 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
-var SendGridSenderName = ""
-var SendGridSenderEmail = ""
-var SendGridAPIKey = ""
+var ResendSenderName = ""
+var ResendSenderEmail = ""
+var ResendAPIKey = ""
 
 var GitHubClientId = ""
 var GitHubClientSecret = ""
