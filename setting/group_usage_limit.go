@@ -18,6 +18,8 @@ type GroupUsageLimitPolicy struct {
 	RPD     *int64 `json:"rpd"`
 	TPM     *int64 `json:"tpm"`
 	TPD     *int64 `json:"tpd"`
+	Hourly  *int64 `json:"hourly"`
+	Daily   *int64 `json:"daily"`
 	Monthly *int64 `json:"monthly"`
 }
 
@@ -26,6 +28,8 @@ type groupUsageLimitPolicyInput struct {
 	RPD     *int64 `json:"rpd"`
 	TPM     *int64 `json:"tpm"`
 	TPD     *int64 `json:"tpd"`
+	Hourly  *int64 `json:"hourly"`
+	Daily   *int64 `json:"daily"`
 	Monthly *int64 `json:"monthly"`
 }
 
@@ -46,13 +50,15 @@ func cloneGroupUsageLimitPolicy(policy GroupUsageLimitPolicy) GroupUsageLimitPol
 		RPD:     cloneNullableInt64(policy.RPD),
 		TPM:     cloneNullableInt64(policy.TPM),
 		TPD:     cloneNullableInt64(policy.TPD),
+		Hourly:  cloneNullableInt64(policy.Hourly),
+		Daily:   cloneNullableInt64(policy.Daily),
 		Monthly: cloneNullableInt64(policy.Monthly),
 	}
 }
 
-func normalizeMonthlyDisplayValue(value int64) (int64, error) {
+func normalizeBudgetDisplayValue(value int64, field string) (int64, error) {
 	if value < 0 {
-		return 0, fmt.Errorf("monthly must be null or a non-negative integer")
+		return 0, fmt.Errorf("%s must be null or a non-negative integer", field)
 	}
 	switch operation_setting.GetQuotaDisplayType() {
 	case operation_setting.QuotaDisplayTypeTokens:
@@ -85,7 +91,7 @@ func normalizeMonthlyDisplayValue(value int64) (int64, error) {
 	}
 }
 
-func normalizeMonthlyQuotaForDisplay(value int64) int64 {
+func normalizeBudgetQuotaForDisplay(value int64) int64 {
 	if value <= 0 {
 		return 0
 	}
@@ -164,6 +170,12 @@ func parseGroupUsageLimitPolicies(jsonStr string) (map[string]GroupUsageLimitPol
 		if err := validateNonNegativeNullableInt(policyInput.TPD, fmt.Sprintf("group %s tpd", groupName)); err != nil {
 			return nil, err
 		}
+		if err := validateNonNegativeNullableInt(policyInput.Hourly, fmt.Sprintf("group %s hourly", groupName)); err != nil {
+			return nil, err
+		}
+		if err := validateNonNegativeNullableInt(policyInput.Daily, fmt.Sprintf("group %s daily", groupName)); err != nil {
+			return nil, err
+		}
 		if err := validateNonNegativeNullableInt(policyInput.Monthly, fmt.Sprintf("group %s monthly", groupName)); err != nil {
 			return nil, err
 		}
@@ -174,8 +186,22 @@ func parseGroupUsageLimitPolicies(jsonStr string) (map[string]GroupUsageLimitPol
 			TPM: cloneNullableInt64(policyInput.TPM),
 			TPD: cloneNullableInt64(policyInput.TPD),
 		}
+		if policyInput.Hourly != nil {
+			normalizedHourly, err := normalizeBudgetDisplayValue(*policyInput.Hourly, "hourly")
+			if err != nil {
+				return nil, fmt.Errorf("group %s hourly is invalid: %w", groupName, err)
+			}
+			policy.Hourly = &normalizedHourly
+		}
+		if policyInput.Daily != nil {
+			normalizedDaily, err := normalizeBudgetDisplayValue(*policyInput.Daily, "daily")
+			if err != nil {
+				return nil, fmt.Errorf("group %s daily is invalid: %w", groupName, err)
+			}
+			policy.Daily = &normalizedDaily
+		}
 		if policyInput.Monthly != nil {
-			normalizedMonthly, err := normalizeMonthlyDisplayValue(*policyInput.Monthly)
+			normalizedMonthly, err := normalizeBudgetDisplayValue(*policyInput.Monthly, "monthly")
 			if err != nil {
 				return nil, fmt.Errorf("group %s monthly is invalid: %w", groupName, err)
 			}
@@ -199,8 +225,16 @@ func UserGroupUsageLimits2JSONString() string {
 			TPM: cloneNullableInt64(policy.TPM),
 			TPD: cloneNullableInt64(policy.TPD),
 		}
+		if policy.Hourly != nil {
+			displayHourly := normalizeBudgetQuotaForDisplay(*policy.Hourly)
+			displayPolicy.Hourly = &displayHourly
+		}
+		if policy.Daily != nil {
+			displayDaily := normalizeBudgetQuotaForDisplay(*policy.Daily)
+			displayPolicy.Daily = &displayDaily
+		}
 		if policy.Monthly != nil {
-			displayMonthly := normalizeMonthlyQuotaForDisplay(*policy.Monthly)
+			displayMonthly := normalizeBudgetQuotaForDisplay(*policy.Monthly)
 			displayPolicy.Monthly = &displayMonthly
 		}
 		serialized[groupName] = displayPolicy

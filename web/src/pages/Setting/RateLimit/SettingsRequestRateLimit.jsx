@@ -102,7 +102,7 @@ export default function RequestRateLimit(props) {
                 <Form.TextArea
                   label={t('用户分组使用限制')}
                   placeholder={t(
-                    '{\n  "default": {\n    "rpm": 5,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "monthly": null\n  }\n}',
+                    '{\n  "default": {\n    "rpm": 5,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "hourly": 5000,\n    "daily": 20000,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "hourly": null,\n    "daily": null,\n    "monthly": null\n  }\n}',
                   )}
                   field={'UserGroupUsageLimits'}
                   autosize={{ minRows: 5, maxRows: 15 }}
@@ -120,7 +120,7 @@ export default function RequestRateLimit(props) {
                       <ul>
                         <li>
                           {t(
-                            '使用 JSON 对象格式，外层键为用户分组名称，值为包含 rpm、rpd、tpm、tpd、monthly 的对象。',
+                            '使用 JSON 对象格式，外层键为用户分组名称，值为包含 rpm、rpd、tpm、tpd、hourly、daily、monthly 的对象。',
                           )}
                         </li>
                         <li>
@@ -130,12 +130,12 @@ export default function RequestRateLimit(props) {
                         </li>
                         <li>
                           {t(
-                            'rpm 和 rpd 表示请求次数限制，tpm 和 tpd 表示 Token 限制，monthly 表示月度预算限制。',
+                            'rpm 和 rpd 表示请求次数限制，tpm 和 tpd 表示 Token 限制，hourly、daily、monthly 表示预算限制。',
                           )}
                         </li>
                         <li>
                           {t(
-                            'monthly 使用当前站点额度展示单位进行配置，并会在新的“使用限制”页面展示给用户。',
+                            'hourly、daily、monthly 使用当前站点额度展示单位进行配置，并会在新的“使用限制”页面展示给用户。',
                           )}
                         </li>
                         <li>{t('该配置会替代旧的分组速率限制配置。')}</li>

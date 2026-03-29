@@ -3,7 +3,7 @@ package model
 import "time"
 
 // UserUsageWindow stores aggregated counters for one user within a specific
-// minute/day/month window so live checks only touch the active rows.
+// minute/hour/day/month window so live checks only touch the active rows.
 type UserUsageWindow struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
 	UserID          int       `json:"user_id" gorm:"index:idx_user_usage_window,unique"`
@@ -27,6 +27,7 @@ type UserUsageReservation struct {
 	UserID            int       `json:"user_id" gorm:"index:idx_user_usage_reservation_status"`
 	GroupName         string    `json:"group_name" gorm:"size:64"`
 	MinuteWindowStart int64     `json:"minute_window_start" gorm:"bigint"`
+	HourWindowStart   int64     `json:"hour_window_start" gorm:"bigint"`
 	DayWindowStart    int64     `json:"day_window_start" gorm:"bigint"`
 	MonthWindowStart  int64     `json:"month_window_start" gorm:"bigint"`
 	ReservedRequests  int64     `json:"reserved_requests" gorm:"default:0"`

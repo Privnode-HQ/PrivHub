@@ -29,6 +29,8 @@ const metricDefinitions = [
   { key: 'rpd', titleKey: '每日请求数' },
   { key: 'tpm', titleKey: '每分钟 Token' },
   { key: 'tpd', titleKey: '每日 Token' },
+  { key: 'hourly', titleKey: '每小时预算' },
+  { key: 'daily', titleKey: '每日预算' },
   { key: 'monthly', titleKey: '月度预算' },
 ];
 
@@ -84,7 +86,7 @@ export default function Usage() {
                 {t('使用限制')}
               </Typography.Title>
               <Typography.Text type='secondary'>
-                {t('查看当前分组的请求数、Token 和月度预算限制。')}
+                {t('查看当前分组的请求数、Token 以及每小时、每日、月度预算限制。')}
               </Typography.Text>
               {data && (
                 <div className='flex flex-wrap gap-2 pt-1'>
