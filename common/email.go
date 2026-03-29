@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/resend/resend-go/v3"
 )
@@ -84,15 +85,29 @@ func GenerateEmailIdempotencyKey(eventType string, values ...string) string {
 	return normalizeEmailIdempotencyKey(fmt.Sprintf("%s/%s", eventType, shortEmailKeyHash(values...)))
 }
 
+type EmailRecipientContext struct {
+	Username    string
+	Email       string
+	PublishedAt time.Time
+}
+
 func SendEmail(subject string, receiver string, content string) error {
-	return sendEmail(subject, receiver, content, "")
+	return sendEmail(subject, receiver, content, "", EmailRecipientContext{})
 }
 
 func SendEmailWithIdempotencyKey(subject string, receiver string, content string, idempotencyKey string) error {
-	return sendEmail(subject, receiver, content, idempotencyKey)
+	return sendEmail(subject, receiver, content, idempotencyKey, EmailRecipientContext{})
 }
 
-func sendEmail(subject string, receiver string, content string, idempotencyKey string) error {
+func SendEmailWithContext(subject string, receiver string, content string, ctx EmailRecipientContext) error {
+	return sendEmail(subject, receiver, content, "", ctx)
+}
+
+func SendEmailWithIdempotencyKeyAndContext(subject string, receiver string, content string, idempotencyKey string, ctx EmailRecipientContext) error {
+	return sendEmail(subject, receiver, content, idempotencyKey, ctx)
+}
+
+func sendEmail(subject string, receiver string, content string, idempotencyKey string, ctx EmailRecipientContext) error {
 	if ResendAPIKey == "" {
 		return fmt.Errorf("Resend API Key 未配置")
 	}
@@ -110,15 +125,29 @@ func sendEmail(subject string, receiver string, content string, idempotencyKey s
 		senderName = SystemName
 	}
 	from := formatEmailSender(senderName, ResendSenderEmail)
-	plainTextContent := htmlToPlainText(content)
 	client := resend.NewClient(ResendAPIKey)
 
 	for _, recipient := range receivers {
+		recipientCtx := ctx
+		if strings.TrimSpace(recipientCtx.Email) == "" {
+			recipientCtx.Email = recipient
+		}
+
+		renderedHTML, err := RenderMessageHTML(subject, content, MessageTemplateContext{
+			RecipientName:  resolveEmailRecipientName(recipientCtx.Username),
+			RecipientEmail: recipientCtx.Email,
+			PublishedAt:    recipientCtx.PublishedAt,
+		})
+		if err != nil {
+			return err
+		}
+
+		plainTextContent := htmlToPlainText(renderedHTML)
 		message := &resend.SendEmailRequest{
 			From:    from,
 			To:      []string{recipient},
-			Subject: subject,
-			Html:    content,
+			Subject: formatEmailSubject(subject, recipientCtx),
+			Html:    renderedHTML,
 			Text:    plainTextContent,
 		}
 		options := &resend.SendEmailOptions{}
@@ -139,4 +168,25 @@ func sendEmail(subject string, receiver string, content string, idempotencyKey s
 	}
 
 	return nil
+}
+
+func resolveEmailRecipientName(username string) string {
+	username = strings.TrimSpace(username)
+	if username != "" {
+		return username
+	}
+	return "there"
+}
+
+func formatEmailSubject(subject string, ctx EmailRecipientContext) string {
+	username := strings.TrimSpace(ctx.Username)
+	if username == "" {
+		username = "guest"
+	}
+
+	email := strings.TrimSpace(ctx.Email)
+	if email == "" {
+		return fmt.Sprintf("[%s] %s", username, subject)
+	}
+	return fmt.Sprintf("[%s %s] %s", username, email, subject)
 }

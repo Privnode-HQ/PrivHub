@@ -74,18 +74,10 @@ const PersonalSetting = () => {
   const [passkeyRegisterLoading, setPasskeyRegisterLoading] = useState(false);
   const [passkeyDeleteLoading, setPasskeyDeleteLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
-  const [backToPayAsYouGoLoading, setBackToPayAsYouGoLoading] =
-    useState(false);
+  const [backToPayAsYouGoLoading, setBackToPayAsYouGoLoading] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
-    warningType: 'email',
     warningThreshold: 100000,
-    webhookUrl: '',
-    webhookSecret: '',
     notificationEmail: '',
-    barkUrl: '',
-    gotifyUrl: '',
-    gotifyToken: '',
-    gotifyPriority: 5,
     acceptUnsetModelRatioModel: false,
     recordIpLog: false,
   });
@@ -148,16 +140,8 @@ const PersonalSetting = () => {
     if (userState?.user?.setting) {
       const settings = JSON.parse(userState.user.setting);
       setNotificationSettings({
-        warningType: settings.notify_type || 'email',
         warningThreshold: settings.quota_warning_threshold || 500000,
-        webhookUrl: settings.webhook_url || '',
-        webhookSecret: settings.webhook_secret || '',
         notificationEmail: settings.notification_email || '',
-        barkUrl: settings.bark_url || '',
-        gotifyUrl: settings.gotify_url || '',
-        gotifyToken: settings.gotify_token || '',
-        gotifyPriority:
-          settings.gotify_priority !== undefined ? settings.gotify_priority : 5,
         acceptUnsetModelRatioModel:
           settings.accept_unset_model_ratio_model || false,
         recordIpLog: settings.record_ip_log || false,
@@ -412,20 +396,11 @@ const PersonalSetting = () => {
   const saveNotificationSettings = async () => {
     try {
       const res = await API.put('/api/user/setting', {
-        notify_type: notificationSettings.warningType,
+        notify_type: 'email',
         quota_warning_threshold: parseFloat(
           notificationSettings.warningThreshold,
         ),
-        webhook_url: notificationSettings.webhookUrl,
-        webhook_secret: notificationSettings.webhookSecret,
         notification_email: notificationSettings.notificationEmail,
-        bark_url: notificationSettings.barkUrl,
-        gotify_url: notificationSettings.gotifyUrl,
-        gotify_token: notificationSettings.gotifyToken,
-        gotify_priority: (() => {
-          const parsed = parseInt(notificationSettings.gotifyPriority);
-          return isNaN(parsed) ? 5 : parsed;
-        })(),
         accept_unset_model_ratio_model:
           notificationSettings.acceptUnsetModelRatioModel,
         record_ip_log: notificationSettings.recordIpLog,

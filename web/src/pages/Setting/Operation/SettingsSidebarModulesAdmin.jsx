@@ -58,11 +58,13 @@ export default function SettingsSidebarModulesAdmin(props) {
       enabled: true,
       topup: true,
       personal: true,
+      message: true,
       support: true,
     },
     admin: {
       enabled: true,
       channel: true,
+      message_manage: true,
       models: true,
       redemption: true,
       topup_coupon: true,
@@ -92,12 +94,14 @@ export default function SettingsSidebarModulesAdmin(props) {
       enabled: true,
       topup: true,
       personal: true,
+      message: true,
       support: true,
       ...(config?.personal || {}),
     },
     admin: {
       enabled: true,
       channel: true,
+      message_manage: true,
       models: true,
       redemption: true,
       topup_coupon: true,
@@ -156,11 +160,13 @@ export default function SettingsSidebarModulesAdmin(props) {
         enabled: true,
         topup: true,
         personal: true,
+        message: true,
         support: true,
       },
       admin: {
         enabled: true,
         channel: true,
+        message_manage: true,
         models: true,
         redemption: true,
         topup_coupon: true,
@@ -268,6 +274,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           description: t('个人信息设置'),
         },
         {
+          key: 'message',
+          title: t('我的信息'),
+          description: t('站内消息收件箱'),
+        },
+        {
           key: 'support',
           title: t('联系支持'),
           description: t('获取技术支持'),
@@ -280,6 +291,11 @@ export default function SettingsSidebarModulesAdmin(props) {
       description: t('系统管理功能'),
       modules: [
         { key: 'channel', title: t('渠道管理'), description: t('API渠道配置') },
+        {
+          key: 'message_manage',
+          title: t('信息管理'),
+          description: t('系统消息发布与模板编辑'),
+        },
         { key: 'models', title: t('模型管理'), description: t('AI模型配置') },
         {
           key: 'redemption',

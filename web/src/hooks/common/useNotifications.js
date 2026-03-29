@@ -17,78 +17,53 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { API } from '../../helpers';
 
-export const useNotifications = (statusState) => {
-  const [noticeVisible, setNoticeVisible] = useState(false);
+export const MESSAGE_UNREAD_REFRESH_EVENT = 'message-unread-refresh';
+
+export const refreshUnreadMessages = () => {
+  window.dispatchEvent(new Event(MESSAGE_UNREAD_REFRESH_EVENT));
+};
+
+export const useNotifications = (enabled) => {
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const announcements = statusState?.status?.announcements || [];
-
-  // Helper functions
-  const getAnnouncementKey = (a) =>
-    `${a?.publishDate || ''}-${(a?.content || '').slice(0, 30)}`;
-
-  const calculateUnreadCount = () => {
-    if (!announcements.length) return 0;
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
-    return announcements.filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .length;
-  };
-
-  const getUnreadKeys = () => {
-    if (!announcements.length) return [];
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
-    return announcements
-      .filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .map(getAnnouncementKey);
-  };
-
-  // Effects
   useEffect(() => {
-    setUnreadCount(calculateUnreadCount());
-  }, [announcements]);
-
-  // Actions
-  const handleNoticeOpen = () => {
-    setNoticeVisible(true);
-  };
-
-  const handleNoticeClose = () => {
-    setNoticeVisible(false);
-    if (announcements.length) {
-      let readKeys = [];
-      try {
-        readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-      } catch (_) {
-        readKeys = [];
+    const loadUnreadCount = async () => {
+      if (!enabled) {
+        setUnreadCount(0);
+        return;
       }
-      const mergedKeys = Array.from(
-        new Set([...readKeys, ...announcements.map(getAnnouncementKey)]),
-      );
-      localStorage.setItem('notice_read_keys', JSON.stringify(mergedKeys));
-    }
-    setUnreadCount(0);
-  };
+
+      try {
+        const res = await API.get('/api/message/self/unread', {
+          disableDuplicate: true,
+          skipErrorHandler: true,
+        });
+        if (res.data.success) {
+          setUnreadCount(res.data.data || 0);
+        }
+      } catch (error) {
+        setUnreadCount(0);
+      }
+    };
+
+    loadUnreadCount();
+    const intervalId = window.setInterval(loadUnreadCount, 60000);
+
+    const handleRefresh = () => {
+      loadUnreadCount();
+    };
+
+    window.addEventListener(MESSAGE_UNREAD_REFRESH_EVENT, handleRefresh);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener(MESSAGE_UNREAD_REFRESH_EVENT, handleRefresh);
+    };
+  }, [enabled]);
 
   return {
-    noticeVisible,
     unreadCount,
-    announcements,
-    handleNoticeOpen,
-    handleNoticeClose,
-    getUnreadKeys,
   };
 };

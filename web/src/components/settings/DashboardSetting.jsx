@@ -21,7 +21,6 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { Card, Spin, Button, Modal } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import SettingsAPIInfo from '../../pages/Setting/Dashboard/SettingsAPIInfo';
-import SettingsAnnouncements from '../../pages/Setting/Dashboard/SettingsAnnouncements';
 import SettingsFAQ from '../../pages/Setting/Dashboard/SettingsFAQ';
 import SettingsUptimeKuma from '../../pages/Setting/Dashboard/SettingsUptimeKuma';
 import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDashboard';
@@ -29,17 +28,14 @@ import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDas
 const DashboardSetting = () => {
   let [inputs, setInputs] = useState({
     'console_setting.api_info': '',
-    'console_setting.announcements': '',
     'console_setting.faq': '',
     'console_setting.uptime_kuma_groups': '',
     'console_setting.api_info_enabled': '',
-    'console_setting.announcements_enabled': '',
     'console_setting.faq_enabled': '',
     'console_setting.uptime_kuma_enabled': '',
 
     // 用于迁移检测的旧键，下个版本会删除
     ApiInfo: '',
-    Announcements: '',
     FAQ: '',
     UptimeKumaUrl: '',
     UptimeKumaSlug: '',
@@ -90,13 +86,7 @@ const DashboardSetting = () => {
 
   // 用于迁移检测的旧键，下个版本会删除
   const hasLegacyData = useMemo(() => {
-    const legacyKeys = [
-      'ApiInfo',
-      'Announcements',
-      'FAQ',
-      'UptimeKumaUrl',
-      'UptimeKumaSlug',
-    ];
+    const legacyKeys = ['ApiInfo', 'FAQ', 'UptimeKumaUrl', 'UptimeKumaSlug'];
     return legacyKeys.some((k) => inputs[k]);
   }, [inputs]);
 
@@ -144,11 +134,6 @@ const DashboardSetting = () => {
         {/* 数据看板设置 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsDataDashboard options={inputs} refresh={onRefresh} />
-        </Card>
-
-        {/* 系统公告管理 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsAnnouncements options={inputs} refresh={onRefresh} />
         </Card>
 
         {/* API信息管理 */}

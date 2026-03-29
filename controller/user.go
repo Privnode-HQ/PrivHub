@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -537,6 +536,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 		"enabled":  true,
 		"topup":    true,
 		"personal": true,
+		"message":  true,
 		"support":  true,
 	}
 
@@ -544,24 +544,26 @@ func generateDefaultSidebarConfig(userRole int) string {
 	if userRole == common.RoleAdminUser {
 		// 管理员可以访问管理员区域，但不能访问系统设置
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":      true,
-			"channel":      true,
-			"models":       true,
-			"redemption":   true,
-			"topup_coupon": true,
-			"user":         true,
-			"setting":      false, // 管理员不能访问系统设置
+			"enabled":        true,
+			"channel":        true,
+			"message_manage": true,
+			"models":         true,
+			"redemption":     true,
+			"topup_coupon":   true,
+			"user":           true,
+			"setting":        false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":      true,
-			"channel":      true,
-			"models":       true,
-			"redemption":   true,
-			"topup_coupon": true,
-			"user":         true,
-			"setting":      true,
+			"enabled":        true,
+			"channel":        true,
+			"message_manage": true,
+			"models":         true,
+			"redemption":     true,
+			"topup_coupon":   true,
+			"user":           true,
+			"setting":        true,
 		}
 	}
 	// 普通用户不包含admin区域
@@ -1168,11 +1170,11 @@ func UpdateUserSetting(c *gin.Context) {
 		return
 	}
 
-	// 验证预警类型
-	if req.QuotaWarningType != dto.NotifyTypeEmail && req.QuotaWarningType != dto.NotifyTypeWebhook && req.QuotaWarningType != dto.NotifyTypeBark && req.QuotaWarningType != dto.NotifyTypeGotify {
+	// 验证预警类型，仅保留邮件通知
+	if req.QuotaWarningType != "" && req.QuotaWarningType != dto.NotifyTypeEmail {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "无效的预警类型",
+			"message": "当前仅支持邮件通知",
 		})
 		return
 	}
@@ -1186,93 +1188,13 @@ func UpdateUserSetting(c *gin.Context) {
 		return
 	}
 
-	// 如果是webhook类型,验证webhook地址
-	if req.QuotaWarningType == dto.NotifyTypeWebhook {
-		if req.WebhookUrl == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Webhook地址不能为空",
-			})
-			return
-		}
-		// 验证URL格式
-		if _, err := url.ParseRequestURI(req.WebhookUrl); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的Webhook地址",
-			})
-			return
-		}
-	}
-
-	// 如果是邮件类型，验证邮箱地址
-	if req.QuotaWarningType == dto.NotifyTypeEmail && req.NotificationEmail != "" {
+	// 验证邮箱地址
+	if req.NotificationEmail != "" {
 		// 验证邮箱格式
 		if !strings.Contains(req.NotificationEmail, "@") {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "无效的邮箱地址",
-			})
-			return
-		}
-	}
-
-	// 如果是Bark类型，验证Bark URL
-	if req.QuotaWarningType == dto.NotifyTypeBark {
-		if req.BarkUrl == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Bark推送URL不能为空",
-			})
-			return
-		}
-		// 验证URL格式
-		if _, err := url.ParseRequestURI(req.BarkUrl); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的Bark推送URL",
-			})
-			return
-		}
-		// 检查是否是HTTP或HTTPS
-		if !strings.HasPrefix(req.BarkUrl, "https://") && !strings.HasPrefix(req.BarkUrl, "http://") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Bark推送URL必须以http://或https://开头",
-			})
-			return
-		}
-	}
-
-	// 如果是Gotify类型，验证Gotify URL和Token
-	if req.QuotaWarningType == dto.NotifyTypeGotify {
-		if req.GotifyUrl == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Gotify服务器地址不能为空",
-			})
-			return
-		}
-		if req.GotifyToken == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Gotify令牌不能为空",
-			})
-			return
-		}
-		// 验证URL格式
-		if _, err := url.ParseRequestURI(req.GotifyUrl); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "无效的Gotify服务器地址",
-			})
-			return
-		}
-		// 检查是否是HTTP或HTTPS
-		if !strings.HasPrefix(req.GotifyUrl, "https://") && !strings.HasPrefix(req.GotifyUrl, "http://") {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "Gotify服务器地址必须以http://或https://开头",
 			})
 			return
 		}
@@ -1287,40 +1209,15 @@ func UpdateUserSetting(c *gin.Context) {
 
 	// 构建设置
 	settings := dto.UserSetting{
-		NotifyType:            req.QuotaWarningType,
+		NotifyType:            dto.NotifyTypeEmail,
 		QuotaWarningThreshold: req.QuotaWarningThreshold,
 		AcceptUnsetRatioModel: req.AcceptUnsetModelRatioModel,
 		RecordIpLog:           req.RecordIpLog,
 	}
 
-	// 如果是webhook类型,添加webhook相关设置
-	if req.QuotaWarningType == dto.NotifyTypeWebhook {
-		settings.WebhookUrl = req.WebhookUrl
-		if req.WebhookSecret != "" {
-			settings.WebhookSecret = req.WebhookSecret
-		}
-	}
-
 	// 如果提供了通知邮箱，添加到设置中
-	if req.QuotaWarningType == dto.NotifyTypeEmail && req.NotificationEmail != "" {
+	if req.NotificationEmail != "" {
 		settings.NotificationEmail = req.NotificationEmail
-	}
-
-	// 如果是Bark类型，添加Bark URL到设置中
-	if req.QuotaWarningType == dto.NotifyTypeBark {
-		settings.BarkUrl = req.BarkUrl
-	}
-
-	// 如果是Gotify类型，添加Gotify配置到设置中
-	if req.QuotaWarningType == dto.NotifyTypeGotify {
-		settings.GotifyUrl = req.GotifyUrl
-		settings.GotifyToken = req.GotifyToken
-		// Gotify优先级范围0-10，超出范围则使用默认值5
-		if req.GotifyPriority < 0 || req.GotifyPriority > 10 {
-			settings.GotifyPriority = 5
-		} else {
-			settings.GotifyPriority = req.GotifyPriority
-		}
 	}
 
 	// 更新用户设置

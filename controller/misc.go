@@ -94,7 +94,7 @@ func GetStatus(c *gin.Context) {
 		// 面板启用开关
 		"api_info_enabled":      cs.ApiInfoEnabled,
 		"uptime_kuma_enabled":   cs.UptimeKumaEnabled,
-		"announcements_enabled": cs.AnnouncementsEnabled,
+		"announcements_enabled": false,
 		"faq_enabled":           cs.FAQEnabled,
 
 		// 模块管理配置
@@ -120,9 +120,6 @@ func GetStatus(c *gin.Context) {
 	if cs.ApiInfoEnabled {
 		data["api_info"] = console_setting.GetApiInfo()
 	}
-	if cs.AnnouncementsEnabled {
-		data["announcements"] = console_setting.GetAnnouncements()
-	}
 	if cs.FAQEnabled {
 		data["faq"] = console_setting.GetFAQ()
 	}
@@ -136,12 +133,10 @@ func GetStatus(c *gin.Context) {
 }
 
 func GetNotice(c *gin.Context) {
-	common.OptionMapRWMutex.RLock()
-	defer common.OptionMapRWMutex.RUnlock()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    common.OptionMap["Notice"],
+		"data":    "",
 	})
 	return
 }
@@ -253,10 +248,17 @@ func SendEmailVerification(c *gin.Context) {
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
 	subject := fmt.Sprintf("%s邮箱验证邮件", common.SystemName)
-	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
-		"<p>您的验证码为: <strong>%s</strong></p>"+
-		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
-	err := common.SendEmailWithIdempotencyKey(subject, email, content, common.GenerateEmailIdempotencyKey("email-verification", email, code))
+	content := fmt.Sprintf("您正在进行 **%s** 邮箱验证。\n\n## 验证码\n\n`%s`\n\n验证码将在 %d 分钟内失效。如果不是本人操作，请忽略本邮件。", common.SystemName, code, common.VerificationValidMinutes)
+	err := common.SendEmailWithIdempotencyKeyAndContext(
+		subject,
+		email,
+		content,
+		common.GenerateEmailIdempotencyKey("email-verification", email, code),
+		common.EmailRecipientContext{
+			Username: "guest",
+			Email:    email,
+		},
+	)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -288,11 +290,21 @@ func SendPasswordResetEmail(c *gin.Context) {
 	common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
 	link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
 	subject := fmt.Sprintf("%s密码重置", common.SystemName)
-	content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
-		"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
-		"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
-		"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
-	err := common.SendEmailWithIdempotencyKey(subject, email, content, common.GenerateEmailIdempotencyKey("password-reset", email, code))
+	content := fmt.Sprintf("您正在进行 **%s** 密码重置。\n\n请点击下方链接完成密码重置：\n\n[%s](%s)\n\n如果链接无法直接点击，请将以下地址复制到浏览器打开：\n\n`%s`\n\n重置链接将在 %d 分钟后失效。如果不是本人操作，请忽略本邮件。", common.SystemName, link, link, link, common.VerificationValidMinutes)
+	username := "guest"
+	if user, userErr := model.GetUserByEmailAddress(email); userErr == nil && user != nil {
+		username = user.Username
+	}
+	err := common.SendEmailWithIdempotencyKeyAndContext(
+		subject,
+		email,
+		content,
+		common.GenerateEmailIdempotencyKey("password-reset", email, code),
+		common.EmailRecipientContext{
+			Username: username,
+			Email:    email,
+		},
+	)
 	if err != nil {
 		common.ApiError(c, err)
 		return

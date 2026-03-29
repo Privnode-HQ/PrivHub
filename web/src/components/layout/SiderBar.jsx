@@ -34,11 +34,13 @@ const routerMap = {
   home: '/',
   channel: '/console/channel',
   token: '/console/token',
+  message: '/console/messages',
   usage: '/console/usage',
   redemption: '/console/redemption',
   topup_coupon: '/console/topup-coupon',
   topup: '/console/topup',
   user: '/console/user',
+  message_manage: '/console/message-management',
   log: '/console/log',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
@@ -141,6 +143,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/personal',
       },
       {
+        text: t('我的信息'),
+        itemKey: 'message',
+        to: '/messages',
+      },
+      {
         text: t('联系支持'),
         itemKey: 'support',
         to: '/support',
@@ -163,6 +170,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('渠道管理'),
         itemKey: 'channel',
         to: '/channel',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('信息管理'),
+        itemKey: 'message_manage',
+        to: '/message-management',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

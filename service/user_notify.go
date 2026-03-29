@@ -23,11 +23,6 @@ func NotifyRootUser(t string, subject string, content string) {
 }
 
 func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data dto.Notify) error {
-	notifyType := userSetting.NotifyType
-	if notifyType == "" {
-		notifyType = dto.NotifyTypeEmail
-	}
-
 	// Check notification limit
 	canSend, err := CheckNotificationLimit(userId, data.Type)
 	if err != nil {
@@ -35,48 +30,20 @@ func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data 
 		return err
 	}
 	if !canSend {
-		return fmt.Errorf("notification limit exceeded for user %d with type %s", userId, notifyType)
+		return fmt.Errorf("notification limit exceeded for user %d", userId)
 	}
 
-	switch notifyType {
-	case dto.NotifyTypeEmail:
-		// 优先使用设置中的通知邮箱，如果为空则使用用户的默认邮箱
-		emailToUse := userSetting.NotificationEmail
-		if emailToUse == "" {
-			emailToUse = userEmail
-		}
-		if emailToUse == "" {
-			common.SysLog(fmt.Sprintf("user %d has no email, skip sending email", userId))
-			return nil
-		}
-		return sendEmailNotify(emailToUse, data)
-	case dto.NotifyTypeWebhook:
-		webhookURLStr := userSetting.WebhookUrl
-		if webhookURLStr == "" {
-			common.SysLog(fmt.Sprintf("user %d has no webhook url, skip sending webhook", userId))
-			return nil
-		}
-
-		// 获取 webhook secret
-		webhookSecret := userSetting.WebhookSecret
-		return SendWebhookNotify(webhookURLStr, webhookSecret, data)
-	case dto.NotifyTypeBark:
-		barkURL := userSetting.BarkUrl
-		if barkURL == "" {
-			common.SysLog(fmt.Sprintf("user %d has no bark url, skip sending bark", userId))
-			return nil
-		}
-		return sendBarkNotify(barkURL, data)
-	case dto.NotifyTypeGotify:
-		gotifyUrl := userSetting.GotifyUrl
-		gotifyToken := userSetting.GotifyToken
-		if gotifyUrl == "" || gotifyToken == "" {
-			common.SysLog(fmt.Sprintf("user %d has no gotify url or token, skip sending gotify", userId))
-			return nil
-		}
-		return sendGotifyNotify(gotifyUrl, gotifyToken, userSetting.GotifyPriority, data)
+	emailToUse := strings.TrimSpace(userSetting.NotificationEmail)
+	if emailToUse == "" {
+		emailToUse = strings.TrimSpace(userEmail)
 	}
-	return nil
+
+	username := ""
+	if userCache, cacheErr := model.GetUserCache(userId); cacheErr == nil && userCache != nil {
+		username = userCache.Username
+	}
+
+	return DeliverSystemMessageToUser(userId, username, emailToUse, data.Title, renderNotifyContent(data))
 }
 
 func sendEmailNotify(userEmail string, data dto.Notify) error {
@@ -86,7 +53,17 @@ func sendEmailNotify(userEmail string, data dto.Notify) error {
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
-	return common.SendEmail(data.Title, userEmail, content)
+	return common.SendEmailWithContext(data.Title, userEmail, content, common.EmailRecipientContext{
+		Email: userEmail,
+	})
+}
+
+func renderNotifyContent(data dto.Notify) string {
+	content := data.Content
+	for _, value := range data.Values {
+		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
+	}
+	return content
 }
 
 func sendBarkNotify(barkURL string, data dto.Notify) error {

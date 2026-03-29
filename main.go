@@ -247,6 +247,7 @@ func InitResources() error {
 
 	// Initialize options, should after model.InitDB()
 	model.InitOptionMap()
+	service.MigrateLegacyNoticesToMessages()
 
 	// 初始化模型
 	model.GetPricing()

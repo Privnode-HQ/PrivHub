@@ -57,11 +57,13 @@ export const useSidebar = () => {
       enabled: true,
       topup: true,
       personal: true,
+      message: true,
       support: true,
     },
     admin: {
       enabled: true,
       channel: true,
+      message_manage: true,
       models: true,
       redemption: true,
       topup_coupon: true,
