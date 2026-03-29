@@ -124,6 +124,29 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 		}
+		messageRoute := apiRouter.Group("/message")
+		{
+			selfMessageRoute := messageRoute.Group("/self")
+			selfMessageRoute.Use(middleware.UserAuth())
+			{
+				selfMessageRoute.GET("/", controller.GetMyMessages)
+				selfMessageRoute.GET("/unread", controller.GetMyUnreadMessageCount)
+				selfMessageRoute.POST("/:id/read", controller.ReadMyMessage)
+			}
+
+			adminMessageRoute := messageRoute.Group("/")
+			adminMessageRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
+			{
+				adminMessageRoute.GET("/", controller.GetAdminMessages)
+				adminMessageRoute.GET("/template", controller.GetMessageTemplate)
+				adminMessageRoute.PUT("/template", controller.UpdateMessageTemplate)
+				adminMessageRoute.POST("/", controller.CreateMessage)
+				adminMessageRoute.PUT("/:id", controller.UpdateMessage)
+				adminMessageRoute.POST("/:id/publish", controller.PublishMessage)
+				adminMessageRoute.POST("/:id/copy", controller.CopyMessage)
+				adminMessageRoute.DELETE("/:id", controller.DeleteMessage)
+			}
+		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.RootAuth(), middleware.AdminAudit())
 		{

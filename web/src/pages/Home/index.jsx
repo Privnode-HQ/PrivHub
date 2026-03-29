@@ -39,7 +39,6 @@ import {
   IconCopy,
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
-import NoticeModal from '../../components/layout/NoticeModal';
 import {
   Moonshot,
   OpenAI,
@@ -71,7 +70,6 @@ const Home = () => {
   const actualTheme = useActualTheme();
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
-  const [noticeVisible, setNoticeVisible] = useState(false);
   const isMobile = useIsMobile();
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
   const docsLink = statusState?.status?.docs_link || '';
@@ -108,25 +106,40 @@ const Home = () => {
           if (iframe) {
             iframe.onload = () => {
               // 发送主题和语言信息
-              iframe.contentWindow.postMessage({
-                msgType: 'theme',
-                data: { themeMode: actualTheme }
-              }, '*');
-              iframe.contentWindow.postMessage({
-                msgType: 'language',
-                data: { lang: i18n.language }
-              }, '*');
+              iframe.contentWindow.postMessage(
+                {
+                  msgType: 'theme',
+                  data: { themeMode: actualTheme },
+                },
+                '*',
+              );
+              iframe.contentWindow.postMessage(
+                {
+                  msgType: 'language',
+                  data: { lang: i18n.language },
+                },
+                '*',
+              );
             };
             // 如果 iframe 已经加载完成，立即发送消息
-            if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
-              iframe.contentWindow.postMessage({
-                msgType: 'theme',
-                data: { themeMode: actualTheme }
-              }, '*');
-              iframe.contentWindow.postMessage({
-                msgType: 'language',
-                data: { lang: i18n.language }
-              }, '*');
+            if (
+              iframe.contentDocument &&
+              iframe.contentDocument.readyState === 'complete'
+            ) {
+              iframe.contentWindow.postMessage(
+                {
+                  msgType: 'theme',
+                  data: { themeMode: actualTheme },
+                },
+                '*',
+              );
+              iframe.contentWindow.postMessage(
+                {
+                  msgType: 'language',
+                  data: { lang: i18n.language },
+                },
+                '*',
+              );
             }
           }
         }, 0);
@@ -146,26 +159,6 @@ const Home = () => {
   };
 
   useEffect(() => {
-    const checkNoticeAndShow = async () => {
-      const lastCloseDate = localStorage.getItem('notice_close_date');
-      const today = new Date().toDateString();
-      if (lastCloseDate !== today) {
-        try {
-          const res = await API.get('/api/notice');
-          const { success, data } = res.data;
-          if (success && data && data.trim() !== '') {
-            setNoticeVisible(true);
-          }
-        } catch (error) {
-          console.error('获取公告失败:', error);
-        }
-      }
-    };
-
-    checkNoticeAndShow();
-  }, []);
-
-  useEffect(() => {
     displayHomePageContent().then();
   }, []);
 
@@ -181,10 +174,13 @@ const Home = () => {
     if (homePageContent.startsWith('https://')) {
       const iframe = document.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({
-          msgType: 'theme',
-          data: { themeMode: actualTheme }
-        }, '*');
+        iframe.contentWindow.postMessage(
+          {
+            msgType: 'theme',
+            data: { themeMode: actualTheme },
+          },
+          '*',
+        );
       }
     }
   }, [actualTheme, homePageContent]);
@@ -194,21 +190,19 @@ const Home = () => {
     if (homePageContent.startsWith('https://')) {
       const iframe = document.querySelector('iframe');
       if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({
-          msgType: 'language',
-          data: { lang: i18n.language }
-        }, '*');
+        iframe.contentWindow.postMessage(
+          {
+            msgType: 'language',
+            data: { lang: i18n.language },
+          },
+          '*',
+        );
       }
     }
   }, [i18n.language, homePageContent]);
 
   return (
     <div className='w-full overflow-x-hidden'>
-      <NoticeModal
-        visible={noticeVisible}
-        onClose={() => setNoticeVisible(false)}
-        isMobile={isMobile}
-      />
       {homePageContentLoaded && homePageContent === '' ? (
         <div className='w-full overflow-x-hidden'>
           {/* Banner 部分 */}
@@ -396,14 +390,20 @@ const Home = () => {
               className='w-full h-screen border-none'
               onLoad={(e) => {
                 // iframe 加载完成后发送主题和语言信息
-                e.target.contentWindow.postMessage({
-                  msgType: 'theme',
-                  data: { themeMode: actualTheme }
-                }, '*');
-                e.target.contentWindow.postMessage({
-                  msgType: 'language',
-                  data: { lang: i18n.language }
-                }, '*');
+                e.target.contentWindow.postMessage(
+                  {
+                    msgType: 'theme',
+                    data: { themeMode: actualTheme },
+                  },
+                  '*',
+                );
+                e.target.contentWindow.postMessage(
+                  {
+                    msgType: 'language',
+                    data: { lang: i18n.language },
+                  },
+                  '*',
+                );
               }}
             />
           ) : (

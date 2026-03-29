@@ -51,6 +51,8 @@ import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 import ReferralRedirect from './pages/Referral';
 import SSOAuthorize from './pages/SSOAuthorize';
+import Messages from './pages/Messages';
+import AdminMessages from './pages/AdminMessages';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -104,6 +106,22 @@ function App() {
           }
         />
         <Route path='/forbidden' element={<Forbidden />} />
+        <Route
+          path='/console/messages'
+          element={
+            <PrivateRoute>
+              <Messages />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/message-management'
+          element={
+            <AdminRoute>
+              <AdminMessages />
+            </AdminRoute>
+          }
+        />
         <Route
           path='/console/models'
           element={

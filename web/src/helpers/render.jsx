@@ -76,6 +76,7 @@ import {
   CircleUser,
   Package,
   Headphones,
+  Inbox,
 } from 'lucide-react';
 
 // 获取侧边栏Lucide图标组件
@@ -110,6 +111,9 @@ export function getLucideIcon(key, selected = false) {
       return <CheckSquare {...commonProps} color={iconColor} />;
     case 'topup':
       return <CreditCard {...commonProps} color={iconColor} />;
+    case 'message':
+    case 'message_manage':
+      return <Inbox {...commonProps} color={iconColor} />;
     case 'channel':
       return <Layers {...commonProps} color={iconColor} />;
     case 'redemption':

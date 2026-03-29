@@ -72,6 +72,8 @@ func InitOptionMap() {
 	common.OptionMap["ResendSenderEmail"] = ""
 	common.OptionMap["ResendAPIKey"] = ""
 	common.OptionMap["Notice"] = ""
+	common.OptionMap[common.MessageTemplateOptionKey] = ""
+	common.OptionMap["LegacyMessagesMigrated"] = "false"
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
 	common.OptionMap["Footer"] = common.Footer
