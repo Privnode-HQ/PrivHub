@@ -113,6 +113,7 @@ func GetAdminMessages(c *gin.Context) {
 			"delivery_total":      messageStats["total"],
 			"read_total":          messageStats["read_total"],
 			"email_sent":          messageStats["email_sent"],
+			"email_failed":        messageStats["email_failed"],
 		})
 	}
 
@@ -210,6 +211,25 @@ func CopyMessage(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "草稿已复制", "data": message})
 }
 
+func RetryMessageDelivery(c *gin.Context) {
+	messageID, err := parseMessageID(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的消息ID"})
+		return
+	}
+
+	count, err := service.RetryFailedMessageEmailDelivery(messageID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "重试任务已提交",
+		"data":    count,
+	})
+}
+
 func DeleteMessage(c *gin.Context) {
 	messageID, err := parseMessageID(c)
 	if err != nil {
@@ -292,6 +312,31 @@ func ReadMyMessage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "消息已标记为已读"})
+}
+
+func BatchReadMyMessages(c *gin.Context) {
+	var req struct {
+		Ids []uint `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	if len(req.Ids) == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请选择至少一条消息"})
+		return
+	}
+
+	affected, err := model.MarkUserMessagesRead(c.GetInt("id"), req.Ids)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "批量已读成功",
+		"data":    affected,
+	})
 }
 
 func parseMessageID(c *gin.Context) (uint, error) {

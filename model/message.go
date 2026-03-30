@@ -312,6 +312,18 @@ func UpdateUserMessageEmailStatus(userID int, messageID uint, emailSentAt *time.
 		}).Error
 }
 
+func ListFailedEmailRecipientsForMessage(messageID uint) ([]MessageRecipient, error) {
+	recipients := make([]MessageRecipient, 0)
+	err := DB.Table("user_messages").
+		Joins("JOIN users ON users.id = user_messages.user_id").
+		Where("user_messages.message_id = ? AND user_messages.email_sent_at IS NULL AND user_messages.email_error <> ''", messageID).
+		Where("users.status = ?", common.UserStatusEnabled).
+		Where("users.email <> ''").
+		Select(fmt.Sprintf("users.id as user_id, users.username, users.email, %s as group_name", commonGroupCol)).
+		Find(&recipients).Error
+	return recipients, err
+}
+
 func GetMessageDeliveryStats(messageIDs []uint) (map[uint]map[string]int64, error) {
 	stats := make(map[uint]map[string]int64)
 	if len(messageIDs) == 0 {
@@ -319,15 +331,16 @@ func GetMessageDeliveryStats(messageIDs []uint) (map[uint]map[string]int64, erro
 	}
 
 	type statRow struct {
-		MessageId uint
-		Total     int64
-		ReadTotal int64
-		EmailSent int64
+		MessageId   uint
+		Total       int64
+		ReadTotal   int64
+		EmailSent   int64
+		EmailFailed int64
 	}
 
 	rows := make([]statRow, 0, len(messageIDs))
 	err := DB.Model(&UserMessage{}).
-		Select("message_id, COUNT(*) AS total, SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END) AS read_total, SUM(CASE WHEN email_sent_at IS NOT NULL THEN 1 ELSE 0 END) AS email_sent").
+		Select("message_id, COUNT(*) AS total, SUM(CASE WHEN read_at IS NOT NULL THEN 1 ELSE 0 END) AS read_total, SUM(CASE WHEN email_sent_at IS NOT NULL THEN 1 ELSE 0 END) AS email_sent, SUM(CASE WHEN email_error <> '' AND email_sent_at IS NULL THEN 1 ELSE 0 END) AS email_failed").
 		Where("message_id IN ?", messageIDs).
 		Group("message_id").
 		Scan(&rows).Error
@@ -337,9 +350,10 @@ func GetMessageDeliveryStats(messageIDs []uint) (map[uint]map[string]int64, erro
 
 	for _, row := range rows {
 		stats[row.MessageId] = map[string]int64{
-			"total":      row.Total,
-			"read_total": row.ReadTotal,
-			"email_sent": row.EmailSent,
+			"total":        row.Total,
+			"read_total":   row.ReadTotal,
+			"email_sent":   row.EmailSent,
+			"email_failed": row.EmailFailed,
 		}
 	}
 	return stats, nil
@@ -396,6 +410,18 @@ func EnsureMessageEditable(message *Message) error {
 		return errors.New("已上线的消息不可编辑")
 	}
 	return nil
+}
+
+func MarkUserMessagesRead(userID int, messageIDs []uint) (int64, error) {
+	if len(messageIDs) == 0 {
+		return 0, nil
+	}
+	now := time.Now()
+	result := DB.Model(&UserMessage{}).
+		Where("user_id = ? AND message_id IN ?", userID, messageIDs).
+		Where("read_at IS NULL").
+		Update("read_at", &now)
+	return result.RowsAffected, result.Error
 }
 
 func normalizeTargetGroups(groups []string) []string {

@@ -120,7 +120,7 @@ func PublishAdminMessage(id uint) (*model.Message, error) {
 		return nil, err
 	}
 
-	dispatchMessageEmailsAsync(*message, recipients)
+	dispatchMessageEmailsAsync(*message, recipients, common.GenerateEmailIdempotencyKey("message-delivery-batch", fmt.Sprintf("%d", message.Id), now.Format(time.RFC3339Nano)))
 	return message, nil
 }
 
@@ -168,49 +168,99 @@ func DeliverSystemMessageToUser(userID int, username string, email string, title
 			UserId:   userID,
 			Username: username,
 			Email:    email,
-		})
+		}, common.GenerateEmailIdempotencyKey("message-delivery", fmt.Sprintf("%d", message.Id), fmt.Sprintf("%d", userID), now.Format(time.RFC3339Nano)))
 	}
 	return nil
 }
 
-func dispatchMessageEmailsAsync(message model.Message, recipients []model.MessageRecipient) {
-	gopool.Go(func() {
-		for _, recipient := range recipients {
-			dispatchSingleMessageEmail(message, recipient)
-		}
-	})
-}
-
-func dispatchSingleMessageEmailAsync(message model.Message, recipient model.MessageRecipient) {
-	gopool.Go(func() {
-		dispatchSingleMessageEmail(message, recipient)
-	})
-}
-
-func dispatchSingleMessageEmail(message model.Message, recipient model.MessageRecipient) {
-	if strings.TrimSpace(recipient.Email) == "" {
-		return
-	}
-
-	err := common.SendEmailWithIdempotencyKeyAndContext(
-		message.Title,
-		recipient.Email,
-		message.Content,
-		common.GenerateEmailIdempotencyKey("message-delivery", fmt.Sprintf("%d", message.Id), fmt.Sprintf("%d", recipient.UserId)),
-		common.EmailRecipientContext{
-			Username:    recipient.Username,
-			Email:       recipient.Email,
-			PublishedAt: messagePublishedAt(message),
-		},
-	)
+func RetryFailedMessageEmailDelivery(messageID uint) (int, error) {
+	message, err := model.GetMessageByID(messageID)
 	if err != nil {
-		common.SysError(fmt.Sprintf("failed to send message email %d to user %d: %v", message.Id, recipient.UserId, err))
-		_ = model.UpdateUserMessageEmailStatus(recipient.UserId, message.Id, nil, err.Error())
+		return 0, err
+	}
+	if message.Status != model.MessageStatusOnline {
+		return 0, errors.New("仅支持重试已上线消息")
+	}
+
+	recipients, err := model.ListFailedEmailRecipientsForMessage(messageID)
+	if err != nil {
+		return 0, err
+	}
+	if len(recipients) == 0 {
+		return 0, errors.New("没有可重试的失败邮件")
+	}
+
+	dispatchMessageEmailsAsync(*message, recipients, common.GenerateEmailIdempotencyKey("message-retry-batch", fmt.Sprintf("%d", message.Id), time.Now().Format(time.RFC3339Nano)))
+	return len(recipients), nil
+}
+
+func dispatchMessageEmailsAsync(message model.Message, recipients []model.MessageRecipient, idempotencyKey string) {
+	gopool.Go(func() {
+		sendMessageEmailBatch(message, recipients, idempotencyKey)
+	})
+}
+
+func dispatchSingleMessageEmailAsync(message model.Message, recipient model.MessageRecipient, idempotencyKey string) {
+	gopool.Go(func() {
+		sendMessageEmailBatch(message, []model.MessageRecipient{recipient}, idempotencyKey)
+	})
+}
+
+func sendMessageEmailBatch(message model.Message, recipients []model.MessageRecipient, idempotencyKey string) {
+	emailEntries := make([]common.BatchEmailEntry, 0, len(recipients))
+	emailRecipients := make([]model.MessageRecipient, 0, len(recipients))
+	for _, recipient := range recipients {
+		if strings.TrimSpace(recipient.Email) == "" {
+			continue
+		}
+		trimmedEmail := strings.TrimSpace(recipient.Email)
+		emailEntries = append(emailEntries, common.BatchEmailEntry{
+			Recipient: trimmedEmail,
+			Subject:   message.Title,
+			Content:   message.Content,
+			Context: common.EmailRecipientContext{
+				Username:    recipient.Username,
+				Email:       trimmedEmail,
+				PublishedAt: messagePublishedAt(message),
+			},
+		})
+		emailRecipients = append(emailRecipients, recipient)
+	}
+	if len(emailEntries) == 0 {
 		return
 	}
 
-	now := time.Now()
-	_ = model.UpdateUserMessageEmailStatus(recipient.UserId, message.Id, &now, "")
+	results, err := common.SendBatchEmailsWithIdempotencyKey(emailEntries, idempotencyKey)
+	if err != nil {
+		common.SysError(fmt.Sprintf("failed to send message email batch %d: %v", message.Id, err))
+		for _, recipient := range recipients {
+			if strings.TrimSpace(recipient.Email) == "" {
+				continue
+			}
+			_ = model.UpdateUserMessageEmailStatus(recipient.UserId, message.Id, nil, err.Error())
+		}
+		return
+	}
+
+	for idx, result := range results {
+		if idx >= len(emailRecipients) {
+			continue
+		}
+		recipient := emailRecipients[idx]
+
+		if result.Success {
+			now := time.Now()
+			_ = model.UpdateUserMessageEmailStatus(recipient.UserId, message.Id, &now, "")
+			continue
+		}
+
+		errorMessage := strings.TrimSpace(result.Error)
+		if errorMessage == "" {
+			errorMessage = "邮件发送失败"
+		}
+		common.SysError(fmt.Sprintf("failed to send message email %d to user %d: %s", message.Id, recipient.UserId, errorMessage))
+		_ = model.UpdateUserMessageEmailStatus(recipient.UserId, message.Id, nil, errorMessage)
+	}
 }
 
 func messagePublishedAt(message model.Message) time.Time {

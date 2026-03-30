@@ -55,6 +55,7 @@ const Messages = () => {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
   const loadMessages = async (targetPage = page) => {
     setLoading(true);
@@ -117,6 +118,37 @@ const Messages = () => {
       } catch (error) {
         showError(error.message);
       }
+    }
+  };
+
+  const handleBatchRead = async () => {
+    if (selectedRowKeys.length === 0) {
+      return;
+    }
+
+    try {
+      const res = await API.post('/api/message/self/read/batch', {
+        ids: selectedRowKeys,
+      });
+      if (res.data.success) {
+        const now = new Date().toISOString();
+        setMessages((prev) =>
+          prev.map((item) =>
+            selectedRowKeys.includes(item.id)
+              ? {
+                  ...item,
+                  read_at: item.read_at || now,
+                }
+              : item,
+          ),
+        );
+        setSelectedRowKeys([]);
+        refreshUnreadMessages();
+      } else {
+        showError(res.data.message);
+      }
+    } catch (error) {
+      showError(error.message);
     }
   };
 
@@ -222,9 +254,18 @@ const Messages = () => {
           style={{ marginTop: 16 }}
           title={t('我的信息')}
           headerExtraContent={
-            <Button theme='light' onClick={() => loadMessages(page)}>
-              {t('刷新')}
-            </Button>
+            <Space>
+              <Button
+                theme='light'
+                disabled={selectedRowKeys.length === 0}
+                onClick={handleBatchRead}
+              >
+                {t('批量已读')}
+              </Button>
+              <Button theme='light' onClick={() => loadMessages(page)}>
+                {t('刷新')}
+              </Button>
+            </Space>
           }
         >
           <Table
@@ -232,6 +273,13 @@ const Messages = () => {
             dataSource={messages}
             rowKey='id'
             loading={loading}
+            rowSelection={{
+              selectedRowKeys,
+              onChange: (keys) => setSelectedRowKeys(keys),
+              getCheckboxProps: (record) => ({
+                disabled: Boolean(record.read_at),
+              }),
+            }}
             pagination={{
               currentPage: page,
               pageSize: PAGE_SIZE,

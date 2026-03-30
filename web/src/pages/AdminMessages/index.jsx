@@ -39,6 +39,7 @@ import {
   Copy,
   Eye,
   FilePlus2,
+  RefreshCw,
   Rocket,
   Save,
   Search,
@@ -294,6 +295,25 @@ const AdminMessages = () => {
     }
   };
 
+  const retryDelivery = async (record) => {
+    setSubmitting(true);
+    try {
+      const res = await API.post(`/api/message/${record.id}/retry`);
+      if (res.data.success) {
+        showSuccess(
+          `${t('重试任务已提交')} (${res.data.data || 0} ${t('封邮件')})`,
+        );
+        await loadMessages(page);
+      } else {
+        showError(res.data.message);
+      }
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const deleteMessage = async (record) => {
     setSubmitting(true);
     try {
@@ -410,6 +430,11 @@ const AdminMessages = () => {
               {t('邮件')}: {record.email_sent || 0}
             </Text>
           </div>
+          <div>
+            <Text type='secondary'>
+              {t('失败')}: {record.email_failed || 0}
+            </Text>
+          </div>
         </div>
       ),
     },
@@ -433,6 +458,18 @@ const AdminMessages = () => {
           >
             {t('复制')}
           </Button>
+
+          {record.status === 'online' && (
+            <Button
+              icon={<RefreshCw size={14} />}
+              theme='light'
+              loading={submitting}
+              disabled={!record.email_failed}
+              onClick={() => retryDelivery(record)}
+            >
+              {t('重试投递')}
+            </Button>
+          )}
 
           {record.status === 'draft' && (
             <>

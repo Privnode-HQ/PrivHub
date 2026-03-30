@@ -132,6 +132,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfMessageRoute.GET("/", controller.GetMyMessages)
 				selfMessageRoute.GET("/unread", controller.GetMyUnreadMessageCount)
 				selfMessageRoute.POST("/:id/read", controller.ReadMyMessage)
+				selfMessageRoute.POST("/read/batch", controller.BatchReadMyMessages)
 			}
 
 			adminMessageRoute := messageRoute.Group("/")
@@ -144,6 +145,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminMessageRoute.PUT("/:id", controller.UpdateMessage)
 				adminMessageRoute.POST("/:id/publish", controller.PublishMessage)
 				adminMessageRoute.POST("/:id/copy", controller.CopyMessage)
+				adminMessageRoute.POST("/:id/retry", controller.RetryMessageDelivery)
 				adminMessageRoute.DELETE("/:id", controller.DeleteMessage)
 			}
 		}
