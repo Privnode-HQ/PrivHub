@@ -26,6 +26,21 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+func buildAuthenticatedUserResponseData(user *model.User) gin.H {
+	return gin.H{
+		"cah_id":               user.CAHID,
+		"username":             user.Username,
+		"display_name":         user.DisplayName,
+		"role":                 user.Role,
+		"status":               user.Status,
+		"group":                user.Group,
+		"email":                user.Email,
+		"force_password_reset": user.ForcePasswordReset,
+		"force_email_bind":     user.ForceEmailBind,
+		"required_actions":     user.GetRequiredActions(),
+	}
+}
+
 func Login(c *gin.Context) {
 	if !common.PasswordLoginEnabled {
 		c.JSON(http.StatusOK, gin.H{
@@ -98,9 +113,12 @@ func setupLogin(user *model.User, c *gin.Context) {
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
+	session.Set("cah_id", user.CAHID)
 	session.Set("role", user.Role)
 	session.Set("status", user.Status)
 	session.Set("group", user.Group)
+	session.Set("session_version", user.WebSessionVersion)
+	session.Set("global_session_version", common.GlobalWebSessionVersion)
 	err := session.Save()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -109,18 +127,10 @@ func setupLogin(user *model.User, c *gin.Context) {
 		})
 		return
 	}
-	cleanUser := model.User{
-		Id:          user.Id,
-		Username:    user.Username,
-		DisplayName: user.DisplayName,
-		Role:        user.Role,
-		Status:      user.Status,
-		Group:       user.Group,
-	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
-		"data":    cleanUser,
+		"data":    buildAuthenticatedUserResponseData(user),
 	})
 }
 
@@ -446,31 +456,40 @@ func GetSelf(c *gin.Context) {
 
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,                // 新增权限字段
+		"cah_id":                        user.CAHID,
+		"username":                      user.Username,
+		"display_name":                  user.DisplayName,
+		"role":                          user.Role,
+		"status":                        user.Status,
+		"email":                         user.Email,
+		"github_id":                     user.GitHubId,
+		"discord_id":                    user.DiscordId,
+		"oidc_id":                       user.OidcId,
+		"wechat_id":                     user.WeChatId,
+		"telegram_id":                   user.TelegramId,
+		"group":                         user.Group,
+		"quota":                         user.Quota,
+		"used_quota":                    user.UsedQuota,
+		"request_count":                 user.RequestCount,
+		"aff_code":                      user.AffCode,
+		"aff_count":                     user.AffCount,
+		"aff_quota":                     user.AffQuota,
+		"aff_history_quota":             user.AffHistoryQuota,
+		"linux_do_id":                   user.LinuxDOId,
+		"setting":                       user.Setting,
+		"stripe_customer":               user.StripeCustomer,
+		"sidebar_modules":               userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":                   permissions,                // 新增权限字段
+		"force_password_reset":          user.ForcePasswordReset,
+		"force_email_bind":              user.ForceEmailBind,
+		"required_actions":              user.GetRequiredActions(),
+		"require_display_name_enabled":  common.RequireUserDisplayNameEnabled,
+		"require_email_binding_enabled": common.RequireUserEmailBindingEnabled,
+	}
+	if user.InviterId != 0 {
+		if inviterCAHID, inviterErr := model.GetUserCAHIDById(user.InviterId); inviterErr == nil {
+			responseData["inviter_cah_id"] = inviterCAHID
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -653,6 +672,13 @@ func UpdateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if updatePassword {
+		originUser.WebSessionVersion++
+		if err := originUser.UpdateSelected("WebSessionVersion"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", logger.LogQuota(int64(originUser.Quota)), logger.LogQuota(int64(updatedUser.Quota))))
 	}
@@ -757,6 +783,30 @@ func UpdateSelf(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if updatePassword {
+		currentUser, err := model.GetUserById(cleanUser.Id, false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		currentUser.ForcePasswordReset = false
+		currentUser.WebSessionVersion++
+		if err := currentUser.UpdateSelected("ForcePasswordReset", "WebSessionVersion"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if !c.GetBool("use_access_token") {
+			session := sessions.Default(c)
+			session.Set("session_version", currentUser.WebSessionVersion)
+			if err := session.Save(); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "无法保存会话信息，请重试",
+				})
+				return
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -799,6 +849,9 @@ func BackToPayAsYouGo(c *gin.Context) {
 }
 
 func checkUpdatePassword(originalPassword string, newPassword string, userId int) (updatePassword bool, err error) {
+	if newPassword == "" {
+		return false, nil
+	}
 	var currentUser *model.User
 	currentUser, err = model.GetUserById(userId, true)
 	if err != nil {
@@ -1014,10 +1067,31 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleCommonUser
+	case "logout":
+		user.WebSessionVersion++
+	case "require_password_reset":
+		user.ForcePasswordReset = true
+	case "require_email_bind":
+		user.ForceEmailBind = true
 	}
 
 	if req.Action == "disable" || req.Action == "enable" {
 		if err := user.UpdateSelected("Status", "BanReason"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if req.Action == "logout" {
+		if err := user.UpdateSelected("WebSessionVersion"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if req.Action == "require_password_reset" {
+		if err := user.UpdateSelected("ForcePasswordReset"); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if req.Action == "require_email_bind" {
+		if err := user.UpdateSelected("ForceEmailBind"); err != nil {
 			common.ApiError(c, err)
 			return
 		}
@@ -1026,9 +1100,11 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 	clearUser := model.User{
-		Role:      user.Role,
-		Status:    user.Status,
-		BanReason: user.BanReason,
+		Role:               user.Role,
+		Status:             user.Status,
+		BanReason:          user.BanReason,
+		ForcePasswordReset: user.ForcePasswordReset,
+		ForceEmailBind:     user.ForceEmailBind,
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -1036,6 +1112,31 @@ func ManageUser(c *gin.Context) {
 		"data":    clearUser,
 	})
 	return
+}
+
+func LogoutAllUsers(c *gin.Context) {
+	nextVersion := common.GlobalWebSessionVersion + 1
+	if err := model.UpdateOption("GlobalWebSessionVersion", strconv.Itoa(nextVersion)); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	if !c.GetBool("use_access_token") {
+		session := sessions.Default(c)
+		session.Set("global_session_version", common.GlobalWebSessionVersion)
+		if err := session.Save(); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "无法保存会话信息，请重试",
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 func EmailBind(c *gin.Context) {
@@ -1048,19 +1149,25 @@ func EmailBind(c *gin.Context) {
 		})
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
-	user := model.User{
-		Id: id.(int),
+	id, err := getValidatedSessionUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
-	err := user.FillUserById()
+	user := model.User{
+		Id: id,
+	}
+	err = user.FillUserById()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	user.Email = email
-	// no need to check if this email already taken, because we have used verification code to check it
-	err = user.Update(false)
+	user.ForceEmailBind = false
+	err = user.UpdateSelected("Email", "ForceEmailBind")
 	if err != nil {
 		common.ApiError(c, err)
 		return

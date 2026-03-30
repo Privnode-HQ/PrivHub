@@ -235,8 +235,8 @@ const EditUserModal = (props) => {
                     <Col span={24}>
                       <Form.Input
                         field='display_name'
-                        label={t('显示名称')}
-                        placeholder={t('请输入新的显示名称')}
+                        label={t('用户名称')}
+                        placeholder={t('请输入新的用户名称')}
                         showClear
                       />
                     </Col>

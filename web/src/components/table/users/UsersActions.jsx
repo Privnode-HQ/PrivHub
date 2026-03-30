@@ -18,18 +18,36 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button } from '@douyinfe/semi-ui';
+import { Button, Modal } from '@douyinfe/semi-ui';
 
-const UsersActions = ({ setShowAddUser, t }) => {
+const UsersActions = ({ setShowAddUser, logoutAllUsers, t }) => {
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);
+  };
+
+  const handleLogoutAllUsers = () => {
+    Modal.confirm({
+      title: t('一键退出所有登录用户'),
+      content: t('执行后，其余用户的 Web 登录会话会立即失效，需要重新登录。'),
+      okText: t('确认退出'),
+      cancelText: t('取消'),
+      onOk: logoutAllUsers,
+    });
   };
 
   return (
     <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>
       <Button className='w-full md:w-auto' onClick={handleAddUser} size='small'>
         {t('添加用户')}
+      </Button>
+      <Button
+        className='w-full md:w-auto'
+        type='warning'
+        onClick={handleLogoutAllUsers}
+        size='small'
+      >
+        {t('一键退出登录')}
       </Button>
     </div>
   );

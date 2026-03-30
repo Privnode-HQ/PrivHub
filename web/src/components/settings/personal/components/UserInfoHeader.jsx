@@ -35,6 +35,13 @@ import {
 import { Coins, BarChart2, Users } from 'lucide-react';
 
 const UserInfoHeader = ({ t, userState }) => {
+  const getUserLabel = () => {
+    if (userState.user) {
+      return userState.user.display_name || userState.user.username;
+    }
+    return 'null';
+  };
+
   const getUsername = () => {
     if (userState.user) {
       return userState.user.username;
@@ -44,9 +51,9 @@ const UserInfoHeader = ({ t, userState }) => {
   };
 
   const getAvatarText = () => {
-    const username = getUsername();
-    if (username && username.length > 0) {
-      return username.slice(0, 2).toUpperCase();
+    const userLabel = getUserLabel();
+    if (userLabel && userLabel.length > 0) {
+      return userLabel.slice(0, 2).toUpperCase();
     }
     return 'NA';
   };
@@ -77,8 +84,13 @@ const UserInfoHeader = ({ t, userState }) => {
                     className='text-3xl font-bold truncate'
                     style={{ color: 'white' }}
                   >
-                    {getUsername()}
+                    {getUserLabel()}
                   </div>
+                  {userState?.user?.display_name ? (
+                    <div className='text-sm text-white/80 truncate'>
+                      @{getUsername()}
+                    </div>
+                  ) : null}
                   <div className='flex flex-wrap items-center gap-2'>
                     {isRoot() ? (
                       <Tag
@@ -106,7 +118,7 @@ const UserInfoHeader = ({ t, userState }) => {
                       </Tag>
                     )}
                     <Tag size='large' shape='circle' style={{ color: 'white' }}>
-                      ID: {userState?.user?.id}
+                      CAH: {userState?.user?.cah_id || '-'}
                     </Tag>
                   </div>
                 </div>

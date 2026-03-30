@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { history } from './history';
 
 export function authHeader() {
@@ -42,14 +42,42 @@ export const AuthRedirect = ({ children }) => {
   return children;
 };
 
+export function getRequiredUserActions(user) {
+  if (!user || !Array.isArray(user.required_actions)) {
+    return [];
+  }
+  return user.required_actions.filter(Boolean);
+}
+
+function shouldRedirectToPersonal(user, pathname) {
+  const actions = getRequiredUserActions(user);
+  if (actions.length === 0) {
+    return false;
+  }
+  return pathname !== '/console/personal';
+}
+
 function PrivateRoute({ children }) {
-  if (!localStorage.getItem('user')) {
+  const location = useLocation();
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (shouldRedirectToPersonal(user, location.pathname)) {
+      return (
+        <Navigate to='/console/personal' replace state={{ from: location }} />
+      );
+    }
+  } catch (e) {
     return <Navigate to='/login' state={{ from: history.location }} />;
   }
   return children;
 }
 
 export function AdminRoute({ children }) {
+  const location = useLocation();
   const raw = localStorage.getItem('user');
   if (!raw) {
     return <Navigate to='/login' state={{ from: history.location }} />;
@@ -57,6 +85,11 @@ export function AdminRoute({ children }) {
   try {
     const user = JSON.parse(raw);
     if (user && typeof user.role === 'number' && user.role >= 10) {
+      if (shouldRedirectToPersonal(user, location.pathname)) {
+        return (
+          <Navigate to='/console/personal' replace state={{ from: location }} />
+        );
+      }
       return children;
     }
   } catch (e) {

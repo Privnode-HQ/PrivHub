@@ -78,6 +78,8 @@ const SystemSetting = () => {
     TurnstileSiteKey: '',
     TurnstileSecretKey: '',
     RegisterEnabled: '',
+    RequireUserDisplayNameEnabled: '',
+    RequireUserEmailBindingEnabled: '',
     'passkey.enabled': '',
     'passkey.rp_display_name': '',
     'passkey.rp_id': '',
@@ -174,6 +176,8 @@ const SystemSetting = () => {
           case 'WeChatAuthEnabled':
           case 'TelegramOAuthEnabled':
           case 'RegisterEnabled':
+          case 'RequireUserDisplayNameEnabled':
+          case 'RequireUserEmailBindingEnabled':
           case 'TurnstileCheckEnabled':
           case 'EmailDomainRestrictionEnabled':
           case 'EmailAliasRestrictionEnabled':
@@ -1018,6 +1022,30 @@ const SystemSetting = () => {
                         }
                       >
                         {t('允许新用户注册')}
+                      </Form.Checkbox>
+                      <Form.Checkbox
+                        field='RequireUserDisplayNameEnabled'
+                        noLabel
+                        onChange={(e) =>
+                          handleCheckboxChange(
+                            'RequireUserDisplayNameEnabled',
+                            e,
+                          )
+                        }
+                      >
+                        {t('要求所有用户必须填写用户名称')}
+                      </Form.Checkbox>
+                      <Form.Checkbox
+                        field='RequireUserEmailBindingEnabled'
+                        noLabel
+                        onChange={(e) =>
+                          handleCheckboxChange(
+                            'RequireUserEmailBindingEnabled',
+                            e,
+                          )
+                        }
+                      >
+                        {t('要求所有用户必须绑定邮箱')}
                       </Form.Checkbox>
                       <Form.Checkbox
                         field='TurnstileCheckEnabled'

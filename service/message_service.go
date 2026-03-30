@@ -143,7 +143,7 @@ func CopyAdminMessage(id uint) (*model.Message, error) {
 	return CreateAdminDraftMessage(input)
 }
 
-func DeliverSystemMessageToUser(userID int, username string, email string, title string, content string) error {
+func DeliverSystemMessageToUser(userID int, cahID string, username string, displayName string, email string, title string, content string) error {
 	now := time.Now()
 	message := &model.Message{
 		Title:       strings.TrimSpace(title),
@@ -165,9 +165,11 @@ func DeliverSystemMessageToUser(userID int, username string, email string, title
 
 	if strings.TrimSpace(email) != "" {
 		dispatchSingleMessageEmailAsync(*message, model.MessageRecipient{
-			UserId:   userID,
-			Username: username,
-			Email:    email,
+			UserId:      userID,
+			CAHID:       cahID,
+			Username:    username,
+			DisplayName: displayName,
+			Email:       email,
 		}, common.GenerateEmailIdempotencyKey("message-delivery", fmt.Sprintf("%d", message.Id), fmt.Sprintf("%d", userID), now.Format(time.RFC3339Nano)))
 	}
 	return nil
@@ -219,9 +221,11 @@ func sendMessageEmailBatch(message model.Message, recipients []model.MessageReci
 			Subject:   message.Title,
 			Content:   message.Content,
 			Context: common.EmailRecipientContext{
-				Username:    recipient.Username,
-				Email:       trimmedEmail,
-				PublishedAt: messagePublishedAt(message),
+				Username:      recipient.Username,
+				RecipientName: strings.TrimSpace(recipient.DisplayName),
+				CAHID:         recipient.CAHID,
+				Email:         trimmedEmail,
+				PublishedAt:   messagePublishedAt(message),
 			},
 		})
 		emailRecipients = append(emailRecipients, recipient)

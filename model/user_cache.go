@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,14 +16,19 @@ import (
 
 // UserBase struct remains the same as it represents the cached data structure
 type UserBase struct {
-	Id        int    `json:"id"`
-	Group     string `json:"group"`
-	Email     string `json:"email"`
-	Quota     int    `json:"quota"`
-	Status    int    `json:"status"`
-	Username  string `json:"username"`
-	Setting   string `json:"setting"`
-	BanReason string `json:"ban_reason"`
+	Id                 int    `json:"id"`
+	CAHID              string `json:"cah_id"`
+	Group              string `json:"group"`
+	Email              string `json:"email"`
+	Quota              int    `json:"quota"`
+	Status             int    `json:"status"`
+	Username           string `json:"username"`
+	DisplayName        string `json:"display_name"`
+	Setting            string `json:"setting"`
+	ForcePasswordReset bool   `json:"force_password_reset"`
+	ForceEmailBind     bool   `json:"force_email_bind"`
+	WebSessionVersion  int    `json:"web_session_version"`
+	BanReason          string `json:"ban_reason"`
 }
 
 func (user *UserBase) WriteContext(c *gin.Context) {
@@ -43,6 +49,40 @@ func (user *UserBase) GetSetting() dto.UserSetting {
 		}
 	}
 	return setting
+}
+
+func (user *UserBase) HasDisplayName() bool {
+	return strings.TrimSpace(user.DisplayName) != ""
+}
+
+func (user *UserBase) HasBoundEmail() bool {
+	return strings.TrimSpace(user.Email) != ""
+}
+
+func (user *UserBase) RequiresPasswordReset() bool {
+	return user.ForcePasswordReset
+}
+
+func (user *UserBase) RequiresEmailBinding() bool {
+	return user.ForceEmailBind || (common.RequireUserEmailBindingEnabled && !user.HasBoundEmail())
+}
+
+func (user *UserBase) RequiresDisplayName() bool {
+	return common.RequireUserDisplayNameEnabled && !user.HasDisplayName()
+}
+
+func (user *UserBase) GetRequiredActions() []string {
+	actions := make([]string, 0, 3)
+	if user.RequiresPasswordReset() {
+		actions = append(actions, "change_password")
+	}
+	if user.RequiresEmailBinding() {
+		actions = append(actions, "bind_email")
+	}
+	if user.RequiresDisplayName() {
+		actions = append(actions, "update_display_name")
+	}
+	return actions
 }
 
 // getUserCacheKey returns the key for user cache
@@ -101,14 +141,19 @@ func GetUserCache(userId int) (userCache *UserBase, err error) {
 
 	// Create cache object from user data
 	userCache = &UserBase{
-		Id:        user.Id,
-		Group:     user.Group,
-		Quota:     user.Quota,
-		Status:    user.Status,
-		Username:  user.Username,
-		Setting:   user.Setting,
-		Email:     user.Email,
-		BanReason: user.BanReason,
+		Id:                 user.Id,
+		CAHID:              user.CAHID,
+		Group:              user.Group,
+		Quota:              user.Quota,
+		Status:             user.Status,
+		Username:           user.Username,
+		DisplayName:        user.DisplayName,
+		Setting:            user.Setting,
+		Email:              user.Email,
+		ForcePasswordReset: user.ForcePasswordReset,
+		ForceEmailBind:     user.ForceEmailBind,
+		WebSessionVersion:  user.WebSessionVersion,
+		BanReason:          user.BanReason,
 	}
 
 	return userCache, nil

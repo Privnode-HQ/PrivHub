@@ -11,7 +11,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -40,9 +39,15 @@ func TelegramBind(c *gin.Context) {
 		return
 	}
 
-	session := sessions.Default(c)
-	id := session.Get("id")
-	user := model.User{Id: id.(int)}
+	id, err := getValidatedSessionUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"message": err.Error(),
+			"success": false,
+		})
+		return
+	}
+	user := model.User{Id: id}
 	if err := user.FillUserById(); err != nil {
 		c.JSON(200, gin.H{
 			"message": err.Error(),

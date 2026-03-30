@@ -292,8 +292,12 @@ func SendPasswordResetEmail(c *gin.Context) {
 	subject := fmt.Sprintf("%s密码重置", common.SystemName)
 	content := fmt.Sprintf("您正在进行 **%s** 密码重置。\n\n请点击下方链接完成密码重置：\n\n[%s](%s)\n\n如果链接无法直接点击，请将以下地址复制到浏览器打开：\n\n`%s`\n\n重置链接将在 %d 分钟后失效。如果不是本人操作，请忽略本邮件。", common.SystemName, link, link, link, common.VerificationValidMinutes)
 	username := "guest"
+	displayName := ""
+	cahID := ""
 	if user, userErr := model.GetUserByEmailAddress(email); userErr == nil && user != nil {
 		username = user.Username
+		displayName = user.DisplayName
+		cahID = user.CAHID
 	}
 	err := common.SendEmailWithIdempotencyKeyAndContext(
 		subject,
@@ -301,8 +305,10 @@ func SendPasswordResetEmail(c *gin.Context) {
 		content,
 		common.GenerateEmailIdempotencyKey("password-reset", email, code),
 		common.EmailRecipientContext{
-			Username: username,
-			Email:    email,
+			Username:      username,
+			RecipientName: displayName,
+			CAHID:         cahID,
+			Email:         email,
 		},
 	)
 	if err != nil {

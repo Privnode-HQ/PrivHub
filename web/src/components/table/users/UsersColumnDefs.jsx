@@ -66,29 +66,56 @@ const renderRole = (role, t) => {
 /**
  * Render username with remark
  */
-const renderUsername = (text, record) => {
+const renderUsername = (text, record, t) => {
   const remark = record.remark;
-  if (!remark) {
-    return <span>{text}</span>;
-  }
   const maxLen = 10;
   const displayRemark =
-    remark.length > maxLen ? remark.slice(0, maxLen) + '…' : remark;
+    remark && remark.length > maxLen ? remark.slice(0, maxLen) + '…' : remark;
   return (
-    <Space spacing={2}>
-      <span>{text}</span>
-      <Tooltip content={remark} position='top' showArrow>
-        <Tag color='white' shape='circle' className='!text-xs'>
-          <div className='flex items-center gap-1'>
-            <div
-              className='w-2 h-2 flex-shrink-0 rounded-full'
-              style={{ backgroundColor: '#10b981' }}
-            />
-            {displayRemark}
-          </div>
-        </Tag>
-      </Tooltip>
-    </Space>
+    <div className='flex flex-col gap-1'>
+      <Space spacing={2}>
+        <span>{text}</span>
+        {remark ? (
+          <Tooltip content={remark} position='top' showArrow>
+            <Tag color='white' shape='circle' className='!text-xs'>
+              <div className='flex items-center gap-1'>
+                <div
+                  className='w-2 h-2 flex-shrink-0 rounded-full'
+                  style={{ backgroundColor: '#10b981' }}
+                />
+                {displayRemark}
+              </div>
+            </Tag>
+          </Tooltip>
+        ) : null}
+      </Space>
+      <div className='flex flex-wrap gap-1'>
+        {record.cah_id ? (
+          <Tag color='white' shape='circle'>
+            CAH: {record.cah_id}
+          </Tag>
+        ) : null}
+        {record.display_name ? (
+          <Tag color='white' shape='circle'>
+            {t('名称')}: {record.display_name}
+          </Tag>
+        ) : (
+          <Tag color='grey' shape='circle'>
+            {t('未设置用户名称')}
+          </Tag>
+        )}
+        {record.force_password_reset ? (
+          <Tag color='orange' shape='circle'>
+            {t('需改密')}
+          </Tag>
+        ) : null}
+        {record.force_email_bind ? (
+          <Tag color='blue' shape='circle'>
+            {t('需绑邮箱')}
+          </Tag>
+        ) : null}
+      </div>
+    </div>
   );
 };
 
@@ -208,6 +235,9 @@ const renderOperations = (
     showDeleteModal,
     showResetPasskeyModal,
     showResetTwoFAModal,
+    showForceLogoutConfirm,
+    showRequirePasswordResetConfirm,
+    showRequireEmailBindConfirm,
     t,
   },
 ) => {
@@ -216,6 +246,24 @@ const renderOperations = (
   }
 
   const moreMenu = [
+    {
+      node: 'item',
+      name: t('强制退出登录'),
+      onClick: () => showForceLogoutConfirm(record),
+    },
+    {
+      node: 'item',
+      name: t('要求修改密码'),
+      onClick: () => showRequirePasswordResetConfirm(record),
+    },
+    {
+      node: 'item',
+      name: t('要求绑定邮箱'),
+      onClick: () => showRequireEmailBindConfirm(record),
+    },
+    {
+      node: 'divider',
+    },
     {
       node: 'item',
       name: t('重置 Passkey'),
@@ -299,6 +347,9 @@ export const getUsersColumns = ({
   showDeleteModal,
   showResetPasskeyModal,
   showResetTwoFAModal,
+  showForceLogoutConfirm,
+  showRequirePasswordResetConfirm,
+  showRequireEmailBindConfirm,
 }) => {
   return [
     {
@@ -308,7 +359,7 @@ export const getUsersColumns = ({
     {
       title: t('用户名'),
       dataIndex: 'username',
-      render: (text, record) => renderUsername(text, record),
+      render: (text, record) => renderUsername(text, record, t),
     },
     {
       title: t('状态'),
@@ -355,6 +406,9 @@ export const getUsersColumns = ({
           showDeleteModal,
           showResetPasskeyModal,
           showResetTwoFAModal,
+          showForceLogoutConfirm,
+          showRequirePasswordResetConfirm,
+          showRequireEmailBindConfirm,
           t,
         }),
     },

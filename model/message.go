@@ -51,17 +51,21 @@ type UserMessage struct {
 }
 
 type MessageRecipient struct {
-	UserId   int
-	Username string
-	Email    string
-	Group    string `gorm:"column:group_name"`
+	UserId      int
+	CAHID       string `gorm:"column:cah_id"`
+	Username    string
+	DisplayName string `gorm:"column:display_name"`
+	Email       string
+	Group       string `gorm:"column:group_name"`
 }
 
 type MessageTargetUserOption struct {
-	Id       int    `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email,omitempty"`
-	Group    string `json:"group,omitempty" gorm:"column:group_name"`
+	Id          int    `json:"id"`
+	CAHID       string `json:"cah_id,omitempty" gorm:"column:cah_id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name,omitempty" gorm:"column:display_name"`
+	Email       string `json:"email,omitempty"`
+	Group       string `json:"group,omitempty" gorm:"column:group_name"`
 }
 
 type UserMessageView struct {
@@ -184,7 +188,7 @@ func ListEnabledUserRecipients() ([]MessageRecipient, error) {
 	recipients := make([]MessageRecipient, 0)
 	err := DB.Model(&User{}).
 		Where("status = ?", common.UserStatusEnabled).
-		Select(fmt.Sprintf("id as user_id, username, email, %s as group_name", commonGroupCol)).
+		Select(fmt.Sprintf("id as user_id, cah_id, username, display_name, email, %s as group_name", commonGroupCol)).
 		Find(&recipients).Error
 	return recipients, err
 }
@@ -213,7 +217,7 @@ func ListEnabledUserRecipientsByScope(targetType string, groups []string, userID
 		return nil, errors.New("无效的消息发送范围")
 	}
 
-	err := query.Select(fmt.Sprintf("id as user_id, username, email, %s as group_name", commonGroupCol)).
+	err := query.Select(fmt.Sprintf("id as user_id, cah_id, username, display_name, email, %s as group_name", commonGroupCol)).
 		Order("id desc").
 		Find(&recipients).Error
 	return recipients, err
@@ -319,7 +323,7 @@ func ListFailedEmailRecipientsForMessage(messageID uint) ([]MessageRecipient, er
 		Where("user_messages.message_id = ? AND user_messages.email_sent_at IS NULL AND user_messages.email_error <> ''", messageID).
 		Where("users.status = ?", common.UserStatusEnabled).
 		Where("users.email <> ''").
-		Select(fmt.Sprintf("users.id as user_id, users.username, users.email, %s as group_name", commonGroupCol)).
+		Select(fmt.Sprintf("users.id as user_id, users.cah_id, users.username, users.display_name, users.email, %s as group_name", commonGroupCol)).
 		Find(&recipients).Error
 	return recipients, err
 }
@@ -367,7 +371,7 @@ func GetMessageTargetUserOptions(userIDs []int) ([]MessageTargetUserOption, erro
 
 	options := make([]MessageTargetUserOption, 0, len(normalizedUserIDs))
 	if err := DB.Model(&User{}).
-		Select(fmt.Sprintf("id, username, email, %s as group_name", commonGroupCol)).
+		Select(fmt.Sprintf("id, cah_id, username, display_name, email, %s as group_name", commonGroupCol)).
 		Where("id IN ?", normalizedUserIDs).
 		Scan(&options).Error; err != nil {
 		return nil, err

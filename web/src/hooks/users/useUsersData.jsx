@@ -148,6 +148,14 @@ export const useUsersData = () => {
             status: user.status,
             role: user.role,
             ban_reason: user.ban_reason,
+            force_password_reset:
+              typeof user.force_password_reset === 'boolean'
+                ? user.force_password_reset
+                : u.force_password_reset,
+            force_email_bind:
+              typeof user.force_email_bind === 'boolean'
+                ? user.force_email_bind
+                : u.force_email_bind,
           };
         }
         return u;
@@ -159,6 +167,23 @@ export const useUsersData = () => {
     }
 
     setLoading(false);
+  };
+
+  const logoutAllUsers = async () => {
+    try {
+      setLoading(true);
+      const res = await API.post('/api/user/logout_all');
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('已强制退出所有用户登录'));
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetUserPasskey = async (user) => {
@@ -312,6 +337,7 @@ export const useUsersData = () => {
     loadUsers,
     searchUsers,
     manageUser,
+    logoutAllUsers,
     resetUserPasskey,
     resetUserTwoFA,
     handlePageChange,

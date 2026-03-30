@@ -1,9 +1,11 @@
 package model
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -18,51 +20,151 @@ import (
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id               int            `json:"id"`
-	Username         string         `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password         string         `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	OriginalPassword string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName      string         `json:"display_name" gorm:"index" validate:"max=20"`
-	Role             int            `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status           int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	BanReason        string         `json:"ban_reason,omitempty" gorm:"type:varchar(255);column:ban_reason" validate:"max=255"`
-	Email            string         `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId         string         `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId        string         `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId           string         `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId         string         `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId       string         `json:"telegram_id" gorm:"column:telegram_id;index"`
-	VerificationCode string         `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
-	AccessToken      *string        `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota            int            `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota        int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount     int            `json:"request_count" gorm:"type:int;default:0;"`               // request number
-	Group            string         `json:"group" gorm:"type:varchar(64);default:'default'"`
-	AffCode          string         `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	AffCount         int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota         int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota  int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	DeletedAt        gorm.DeletedAt `gorm:"index"`
-	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
-	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	SubscriptionData string         `json:"subscription_data" gorm:"type:text;column:subscription_data"`
+	Id                 int            `json:"id"`
+	CAHID              string         `json:"cah_id" gorm:"column:cah_id;size:6;uniqueIndex"`
+	Username           string         `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password           string         `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	OriginalPassword   string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName        string         `json:"display_name" gorm:"index" validate:"max=20"`
+	Role               int            `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status             int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	BanReason          string         `json:"ban_reason,omitempty" gorm:"type:varchar(255);column:ban_reason" validate:"max=255"`
+	Email              string         `json:"email" gorm:"index" validate:"max=50"`
+	ForcePasswordReset bool           `json:"force_password_reset" gorm:"type:bool;default:false;column:force_password_reset"`
+	ForceEmailBind     bool           `json:"force_email_bind" gorm:"type:bool;default:false;column:force_email_bind"`
+	WebSessionVersion  int            `json:"-" gorm:"type:int;default:0;column:web_session_version"`
+	GitHubId           string         `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId          string         `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId             string         `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId           string         `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId         string         `json:"telegram_id" gorm:"column:telegram_id;index"`
+	VerificationCode   string         `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
+	AccessToken        *string        `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	Quota              int            `json:"quota" gorm:"type:int;default:0"`
+	UsedQuota          int            `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
+	RequestCount       int            `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Group              string         `json:"group" gorm:"type:varchar(64);default:'default'"`
+	AffCode            string         `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	AffCount           int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
+	AffQuota           int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota    int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	InviterId          int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	LinuxDOId          string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting            string         `json:"setting" gorm:"type:text;column:setting"`
+	Remark             string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	StripeCustomer     string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	SubscriptionData   string         `json:"subscription_data" gorm:"type:text;column:subscription_data"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
 	cache := &UserBase{
-		Id:        user.Id,
-		Group:     user.Group,
-		Quota:     user.Quota,
-		Status:    user.Status,
-		Username:  user.Username,
-		Setting:   user.Setting,
-		Email:     user.Email,
-		BanReason: user.BanReason,
+		Id:                 user.Id,
+		CAHID:              user.CAHID,
+		Group:              user.Group,
+		Quota:              user.Quota,
+		Status:             user.Status,
+		Username:           user.Username,
+		DisplayName:        user.DisplayName,
+		Setting:            user.Setting,
+		Email:              user.Email,
+		ForcePasswordReset: user.ForcePasswordReset,
+		ForceEmailBind:     user.ForceEmailBind,
+		WebSessionVersion:  user.WebSessionVersion,
+		BanReason:          user.BanReason,
 	}
 	return cache
+}
+
+func NormalizeCAHID(cahID string) string {
+	normalized := strings.TrimSpace(strings.ToUpper(cahID))
+	normalized = strings.TrimPrefix(normalized, "CAH-")
+	normalized = strings.TrimPrefix(normalized, "CAH")
+	return normalized
+}
+
+func calculateCAHCheckDigit(decimalValue string) string {
+	weights := []int{2, 3, 4, 5, 6, 7}
+	sum := 0
+	weightIdx := 0
+	for idx := len(decimalValue) - 1; idx >= 0; idx-- {
+		digit := decimalValue[idx]
+		if digit < '0' || digit > '9' {
+			continue
+		}
+		sum += int(digit-'0') * weights[weightIdx]
+		weightIdx = (weightIdx + 1) % len(weights)
+	}
+
+	checkDigit := (11 - (sum % 11)) % 11
+	if checkDigit == 10 {
+		return "X"
+	}
+	return strconv.Itoa(checkDigit)
+}
+
+func buildCAHIDFromHexPart(hexPart string) (string, error) {
+	hexPart = strings.TrimSpace(strings.ToUpper(hexPart))
+	if len(hexPart) != 5 {
+		return "", errors.New("invalid cah hex part")
+	}
+	value, err := strconv.ParseInt(hexPart, 16, 64)
+	if err != nil {
+		return "", err
+	}
+	return hexPart + calculateCAHCheckDigit(strconv.FormatInt(value, 10)), nil
+}
+
+func IsValidCAHID(cahID string) bool {
+	normalized := NormalizeCAHID(cahID)
+	if len(normalized) != 6 {
+		return false
+	}
+	rebuilt, err := buildCAHIDFromHexPart(normalized[:5])
+	if err != nil {
+		return false
+	}
+	return rebuilt == normalized
+}
+
+func generateRandomCAHID() (string, error) {
+	randomValue, err := rand.Int(rand.Reader, big.NewInt(1<<20))
+	if err != nil {
+		return "", err
+	}
+	return buildCAHIDFromHexPart(fmt.Sprintf("%05X", randomValue.Int64()))
+}
+
+func generateUniqueCAHID(tx *gorm.DB) (string, error) {
+	for attempts := 0; attempts < 64; attempts++ {
+		cahID, err := generateRandomCAHID()
+		if err != nil {
+			return "", err
+		}
+
+		var count int64
+		if err = tx.Unscoped().Model(&User{}).Where("cah_id = ?", cahID).Count(&count).Error; err != nil {
+			return "", err
+		}
+		if count == 0 {
+			return cahID, nil
+		}
+	}
+	return "", errors.New("failed to generate unique cah id")
+}
+
+func (user *User) BeforeCreate(tx *gorm.DB) error {
+	if IsValidCAHID(user.CAHID) {
+		user.CAHID = NormalizeCAHID(user.CAHID)
+		return nil
+	}
+
+	cahID, err := generateUniqueCAHID(tx)
+	if err != nil {
+		return err
+	}
+	user.CAHID = cahID
+	return nil
 }
 
 func (user *User) GetAccessToken() string {
@@ -94,6 +196,40 @@ func (user *User) SetSetting(setting dto.UserSetting) {
 		return
 	}
 	user.Setting = string(settingBytes)
+}
+
+func (user *User) HasDisplayName() bool {
+	return strings.TrimSpace(user.DisplayName) != ""
+}
+
+func (user *User) HasBoundEmail() bool {
+	return strings.TrimSpace(user.Email) != ""
+}
+
+func (user *User) RequiresPasswordReset() bool {
+	return user.ForcePasswordReset
+}
+
+func (user *User) RequiresEmailBinding() bool {
+	return user.ForceEmailBind || (common.RequireUserEmailBindingEnabled && !user.HasBoundEmail())
+}
+
+func (user *User) RequiresDisplayName() bool {
+	return common.RequireUserDisplayNameEnabled && !user.HasDisplayName()
+}
+
+func (user *User) GetRequiredActions() []string {
+	actions := make([]string, 0, 3)
+	if user.RequiresPasswordReset() {
+		actions = append(actions, "change_password")
+	}
+	if user.RequiresEmailBinding() {
+		actions = append(actions, "bind_email")
+	}
+	if user.RequiresDisplayName() {
+		actions = append(actions, "update_display_name")
+	}
+	return actions
 }
 
 // 根据用户角色生成默认的边栏配置
@@ -194,6 +330,34 @@ func GetMaxUserId() int {
 	return user.Id
 }
 
+func BackfillUserCAHIDs() error {
+	users := make([]User, 0)
+	if err := DB.Unscoped().Select("id", "cah_id").Find(&users).Error; err != nil {
+		return err
+	}
+
+	backfilled := 0
+	for _, user := range users {
+		if IsValidCAHID(user.CAHID) {
+			continue
+		}
+		cahID, err := generateUniqueCAHID(DB)
+		if err != nil {
+			return err
+		}
+		if err = DB.Unscoped().Model(&User{}).Where("id = ?", user.Id).Update("cah_id", cahID).Error; err != nil {
+			return err
+		}
+		_ = invalidateUserCache(user.Id)
+		backfilled++
+	}
+
+	if backfilled > 0 {
+		common.SysLog(fmt.Sprintf("backfilled cah ids for %d users", backfilled))
+	}
+	return nil
+}
+
 func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
@@ -248,28 +412,29 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	query := tx.Unscoped().Model(&User{})
 
 	// 构建搜索条件
-	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"
+	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR cah_id LIKE ?"
 
 	// 尝试将关键字转换为整数ID
 	keywordInt, err := strconv.Atoi(keyword)
+	normalizedCAHID := NormalizeCAHID(keyword)
 	if err == nil {
 		// 如果是数字，同时搜索ID和其他字段
 		likeCondition = "id = ? OR " + likeCondition
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%", group)
 		} else {
 			query = query.Where(likeCondition,
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%")
 		}
 	} else {
 		// 非数字关键字，只搜索字符串字段
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%", group)
 		} else {
 			query = query.Where(likeCondition,
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%")
 		}
 	}
 
@@ -307,6 +472,45 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 		err = DB.Omit("password").First(&user, "id = ?", id).Error
 	}
 	return &user, err
+}
+
+func GetUserByCAHID(cahID string, selectAll bool) (*User, error) {
+	normalized := NormalizeCAHID(cahID)
+	if !IsValidCAHID(normalized) {
+		return nil, errors.New("cah id 无效！")
+	}
+	user := User{}
+	var err error
+	if selectAll {
+		err = DB.First(&user, "cah_id = ?", normalized).Error
+	} else {
+		err = DB.Omit("password").First(&user, "cah_id = ?", normalized).Error
+	}
+	return &user, err
+}
+
+func GetUserCAHIDById(id int) (string, error) {
+	if id == 0 {
+		return "", errors.New("id 为空！")
+	}
+	var cahID string
+	err := DB.Model(&User{}).Where("id = ?", id).Select("cah_id").Find(&cahID).Error
+	return cahID, err
+}
+
+func ResolveUserIDByPublicIdentifier(identifier string) (int, error) {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return 0, errors.New("用户标识为空")
+	}
+	if userID, err := strconv.Atoi(identifier); err == nil {
+		return userID, nil
+	}
+	user, err := GetUserByCAHID(identifier, true)
+	if err != nil {
+		return 0, err
+	}
+	return user.Id, nil
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {
@@ -644,12 +848,27 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	if email == "" || password == "" {
 		return errors.New("邮箱地址或密码为空！")
 	}
+	var user User
+	if err := DB.Where("email = ?", email).First(&user).Error; err != nil {
+		return err
+	}
 	hashedPassword, err := common.Password2Hash(password)
 	if err != nil {
 		return err
 	}
-	err = DB.Model(&User{}).Where("email = ?", email).Update("password", hashedPassword).Error
-	return err
+	err = DB.Model(&User{}).Where("id = ?", user.Id).Updates(map[string]interface{}{
+		"password":             hashedPassword,
+		"force_password_reset": false,
+		"web_session_version":  user.WebSessionVersion + 1,
+	}).Error
+	if err != nil {
+		return err
+	}
+	refreshed, err := GetUserById(user.Id, false)
+	if err != nil {
+		return err
+	}
+	return updateUserCache(*refreshed)
 }
 
 func IsAdmin(userId int) bool {

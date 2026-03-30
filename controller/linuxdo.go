@@ -55,9 +55,15 @@ func LinuxDoBind(c *gin.Context) {
 		return
 	}
 
-	session := sessions.Default(c)
-	id := session.Get("id")
-	user.Id = id.(int)
+	id, err := getValidatedSessionUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	user.Id = id
 
 	err = user.FillUserById()
 	if err != nil {

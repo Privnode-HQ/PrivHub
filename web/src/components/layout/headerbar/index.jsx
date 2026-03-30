@@ -52,7 +52,9 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     t,
   } = useHeaderBar({ onMobileMenuToggle, drawerOpen });
 
-  const { unreadCount } = useNotifications(Boolean(userState?.user?.id));
+  const { unreadCount } = useNotifications(
+    Boolean(userState?.user?.cah_id || userState?.user?.id),
+  );
 
   const { mainNavLinks } = useNavigation(t, docsLink, headerNavModules);
 

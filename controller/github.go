@@ -197,10 +197,16 @@ func GitHubBind(c *gin.Context) {
 		})
 		return
 	}
-	session := sessions.Default(c)
-	id := session.Get("id")
+	id, err := getValidatedSessionUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 	// id := c.GetInt("id")  // critical bug!
-	user.Id = id.(int)
+	user.Id = id
 	err = user.FillUserById()
 	if err != nil {
 		common.ApiError(c, err)

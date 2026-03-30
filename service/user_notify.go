@@ -39,11 +39,15 @@ func NotifyUser(userId int, userEmail string, userSetting dto.UserSetting, data 
 	}
 
 	username := ""
+	displayName := ""
+	cahID := ""
 	if userCache, cacheErr := model.GetUserCache(userId); cacheErr == nil && userCache != nil {
 		username = userCache.Username
+		displayName = userCache.DisplayName
+		cahID = userCache.CAHID
 	}
 
-	return DeliverSystemMessageToUser(userId, username, emailToUse, data.Title, renderNotifyContent(data))
+	return DeliverSystemMessageToUser(userId, cahID, username, displayName, emailToUse, data.Title, renderNotifyContent(data))
 }
 
 func sendEmailNotify(userEmail string, data dto.Notify) error {

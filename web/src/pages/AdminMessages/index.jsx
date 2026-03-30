@@ -154,8 +154,9 @@ const AdminMessages = () => {
         if (!user?.id || existingIds.has(user.id)) {
           return;
         }
+        const userLabel = user.display_name || user.username;
         merged.push({
-          label: `${user.username} (#${user.id}${user.group ? ` / ${user.group}` : ''}${user.email ? ` / ${user.email}` : ''})`,
+          label: `${userLabel}${user.cah_id ? ` (${user.cah_id})` : ` (#${user.id})`}${user.group ? ` / ${user.group}` : ''}${user.email ? ` / ${user.email}` : ''}`,
           value: user.id,
         });
         existingIds.add(user.id);
@@ -387,7 +388,10 @@ const AdminMessages = () => {
               <Tag color='orange'>{t('指定用户')}</Tag>
               <div className='mt-1 text-sm text-semi-color-text-1'>
                 {(record.target_user_options || [])
-                  .map((user) => user.username)
+                  .map(
+                    (user) =>
+                      `${user.display_name || user.username}${user.cah_id ? ` (${user.cah_id})` : ''}`,
+                  )
                   .join(', ') || '-'}
               </div>
             </div>
@@ -704,7 +708,10 @@ const AdminMessages = () => {
                 <Text type='secondary'>
                   {t('发送到用户')}:{' '}
                   {(previewMessage.target_user_options || [])
-                    .map((user) => user.username)
+                    .map(
+                      (user) =>
+                        `${user.display_name || user.username}${user.cah_id ? ` (${user.cah_id})` : ''}`,
+                    )
                     .join(', ')}
                 </Text>
               )}

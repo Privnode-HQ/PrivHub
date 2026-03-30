@@ -52,6 +52,7 @@ const UserArea = ({
   }
 
   if (userState.user) {
+    const userLabel = userState.user.display_name || userState.user.username;
     return (
       <div className='relative' ref={dropdownRef}>
         <Dropdown
@@ -126,11 +127,11 @@ const UserArea = ({
               color={stringToColor(userState.user.username)}
               className='mr-1'
             >
-              {userState.user.username[0].toUpperCase()}
+              {userLabel[0].toUpperCase()}
             </Avatar>
             <span className='hidden md:inline'>
               <Typography.Text className='!text-xs !font-medium !text-semi-color-text-1 dark:!text-gray-300 mr-1'>
-                {userState.user.username}
+                {userLabel}
               </Typography.Text>
             </span>
             <ChevronDown

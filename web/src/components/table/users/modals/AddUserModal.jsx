@@ -150,8 +150,8 @@ const AddUserModal = (props) => {
                   <Col span={24}>
                     <Form.Input
                       field='display_name'
-                      label={t('显示名称')}
-                      placeholder={t('请输入显示名称')}
+                      label={t('用户名称')}
+                      placeholder={t('请输入用户名称')}
                       showClear
                     />
                   </Col>

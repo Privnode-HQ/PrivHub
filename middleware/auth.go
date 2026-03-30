@@ -16,6 +16,63 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func sessionValueToInt(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int8:
+		return int(v)
+	case int16:
+		return int(v)
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case uint:
+		return int(v)
+	case uint8:
+		return int(v)
+	case uint16:
+		return int(v)
+	case uint32:
+		return int(v)
+	case uint64:
+		return int(v)
+	case float32:
+		return int(v)
+	case float64:
+		return int(v)
+	case string:
+		intValue, _ := strconv.Atoi(v)
+		return intValue
+	default:
+		return 0
+	}
+}
+
+func isPathAllowedWhenUserActionRequired(path string) bool {
+	return path == "/api/user/logout" ||
+		path == "/api/user/self" ||
+		path == "/api/user/passkey" ||
+		strings.HasPrefix(path, "/api/user/2fa")
+}
+
+func abortWithUserActionRequired(c *gin.Context, userCache *model.UserBase) {
+	c.JSON(http.StatusPreconditionRequired, gin.H{
+		"success":    false,
+		"message":    "请先完成账户安全要求",
+		"error_code": "USER_ACTION_REQUIRED",
+		"data": gin.H{
+			"display_name":         userCache.DisplayName,
+			"email":                userCache.Email,
+			"force_password_reset": userCache.ForcePasswordReset,
+			"force_email_bind":     userCache.ForceEmailBind,
+			"required_actions":     userCache.GetRequiredActions(),
+		},
+	})
+	c.Abort()
+}
+
 func validUserInfo(username string, role int) bool {
 	// check username is empty
 	if strings.TrimSpace(username) == "" {
@@ -27,13 +84,27 @@ func validUserInfo(username string, role int) bool {
 	return true
 }
 
+func matchesUserIdentifier(identifier string, userID int, cahID string) bool {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return false
+	}
+	if identifier == strconv.Itoa(userID) {
+		return true
+	}
+	normalizedCAHID := model.NormalizeCAHID(identifier)
+	return normalizedCAHID != "" && normalizedCAHID == model.NormalizeCAHID(cahID)
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
+	cahID := session.Get("cah_id")
 	role := session.Get("role")
 	id := session.Get("id")
 	status := session.Get("status")
 	useAccessToken := false
+	var userCache *model.UserBase
 	if username == nil {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
@@ -57,6 +128,7 @@ func authHelper(c *gin.Context, minRole int) {
 			}
 			// Token is valid
 			username = user.Username
+			cahID = user.CAHID
 			role = user.Role
 			id = user.Id
 			status = user.Status
@@ -80,17 +152,21 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
-	apiUserId, err := strconv.Atoi(apiUserIdStr)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": "无权进行此操作，New-Api-User 格式错误",
-		})
-		c.Abort()
-		return
-
+	if !useAccessToken {
+		userId := id.(int)
+		var err error
+		userCache, err = model.GetUserCache(userId)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			c.Abort()
+			return
+		}
+		cahID = userCache.CAHID
 	}
-	if id != apiUserId {
+	if !matchesUserIdentifier(apiUserIdStr, id.(int), fmt.Sprintf("%v", cahID)) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": "无权进行此操作，New-Api-User 与登录用户不匹配",
@@ -128,7 +204,26 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	if !useAccessToken {
+		if sessionValueToInt(session.Get("session_version")) != userCache.WebSessionVersion ||
+			sessionValueToInt(session.Get("global_session_version")) != common.GlobalWebSessionVersion {
+			session.Clear()
+			_ = session.Save()
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success":    false,
+				"message":    "登录已失效，请重新登录",
+				"error_code": "SESSION_INVALIDATED",
+			})
+			c.Abort()
+			return
+		}
+		if len(userCache.GetRequiredActions()) > 0 && !isPathAllowedWhenUserActionRequired(c.Request.URL.Path) {
+			abortWithUserActionRequired(c, userCache)
+			return
+		}
+	}
 	c.Set("username", username)
+	c.Set("cah_id", cahID)
 	c.Set("role", role)
 	c.Set("id", id)
 	c.Set("group", session.Get("group"))

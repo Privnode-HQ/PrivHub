@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   API,
@@ -32,7 +32,15 @@ import {
   setUserData,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
-import { Modal } from '@douyinfe/semi-ui';
+import {
+  Banner,
+  Button,
+  Card,
+  Input,
+  Modal,
+  Tag,
+  Typography,
+} from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 
 // 导入子组件
@@ -48,8 +56,10 @@ const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
   let navigate = useNavigate();
   const { t } = useTranslation();
+  const { Text } = Typography;
 
   const [inputs, setInputs] = useState({
+    display_name: '',
     wechat_verification_code: '',
     email_verification_code: '',
     email: '',
@@ -75,12 +85,20 @@ const PersonalSetting = () => {
   const [passkeyDeleteLoading, setPasskeyDeleteLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [backToPayAsYouGoLoading, setBackToPayAsYouGoLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
     warningThreshold: 100000,
     notificationEmail: '',
     acceptUnsetModelRatioModel: false,
     recordIpLog: false,
   });
+  const requiredActionPromptKeyRef = useRef('');
+  const requiredActions = userState?.user?.required_actions || [];
+  const requiredActionKey = [...requiredActions].sort().join('|');
+  const requiresDisplayName = requiredActions.includes('update_display_name');
+  const requiresEmailBind = requiredActions.includes('bind_email');
+  const requiresPasswordChange = requiredActions.includes('change_password');
+  const hasRequiredActions = requiredActions.length > 0;
 
   useEffect(() => {
     let saved = localStorage.getItem('status');
@@ -148,6 +166,22 @@ const PersonalSetting = () => {
       });
     }
   }, [userState?.user?.setting]);
+
+  useEffect(() => {
+    if (!requiredActionKey) {
+      requiredActionPromptKeyRef.current = '';
+      return;
+    }
+    if (requiredActionPromptKeyRef.current === requiredActionKey) {
+      return;
+    }
+    if (requiresPasswordChange) {
+      setShowChangePasswordModal(true);
+    } else if (requiresEmailBind) {
+      setShowEmailBindModal(true);
+    }
+    requiredActionPromptKeyRef.current = requiredActionKey;
+  }, [requiredActionKey, requiresEmailBind, requiresPasswordChange]);
 
   const handleInputChange = (name, value) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
@@ -253,9 +287,43 @@ const PersonalSetting = () => {
     if (success) {
       userDispatch({ type: 'login', payload: data });
       setUserData(data);
+      setInputs((prev) => ({
+        ...prev,
+        display_name: data.display_name || '',
+        email: data.email || prev.email || '',
+      }));
       await loadPasskeyStatus();
     } else {
       showError(message);
+    }
+  };
+
+  const saveProfile = async () => {
+    const nextDisplayName = (inputs.display_name || '').trim();
+    if (
+      !nextDisplayName &&
+      (requiresDisplayName || userState?.user?.require_display_name_enabled)
+    ) {
+      showError(t('请输入用户名称'));
+      return;
+    }
+
+    setProfileSaving(true);
+    try {
+      const res = await API.put('/api/user/self', {
+        display_name: nextDisplayName,
+      });
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('用户名称已更新'));
+        await getUserData();
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(t('更新失败，请重试'));
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -323,7 +391,7 @@ const PersonalSetting = () => {
     const { success, message } = res.data;
     if (success) {
       showSuccess(t('密码修改成功！'));
-      setShowWeChatBindModal(false);
+      await getUserData();
     } else {
       showError(message);
     }
@@ -366,7 +434,7 @@ const PersonalSetting = () => {
     if (success) {
       showSuccess(t('邮箱账户绑定成功！'));
       setShowEmailBindModal(false);
-      userState.user.email = inputs.email;
+      await getUserData();
     } else {
       showError(message);
     }
@@ -446,6 +514,116 @@ const PersonalSetting = () => {
         <div className='w-full max-w-7xl mx-auto px-2'>
           {/* 顶部用户信息区域 */}
           <UserInfoHeader t={t} userState={userState} />
+
+          {hasRequiredActions ? (
+            <Banner
+              type='warning'
+              className='mt-4 !rounded-2xl'
+              description={
+                <div className='flex flex-col gap-3'>
+                  <div>
+                    {t(
+                      '管理员或系统要求你先完成以下操作后才能继续使用其他功能。',
+                    )}
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    {requiresDisplayName ? (
+                      <Tag color='orange'>{t('填写用户名称')}</Tag>
+                    ) : null}
+                    {requiresEmailBind ? (
+                      <Tag color='blue'>{t('绑定邮箱')}</Tag>
+                    ) : null}
+                    {requiresPasswordChange ? (
+                      <Tag color='red'>{t('修改密码')}</Tag>
+                    ) : null}
+                  </div>
+                  <div className='flex flex-wrap gap-2'>
+                    {requiresDisplayName ? (
+                      <Button
+                        theme='solid'
+                        type='warning'
+                        onClick={saveProfile}
+                      >
+                        {t('保存用户名称')}
+                      </Button>
+                    ) : null}
+                    {requiresEmailBind ? (
+                      <Button
+                        theme='outline'
+                        type='primary'
+                        onClick={() => setShowEmailBindModal(true)}
+                      >
+                        {t('去绑定邮箱')}
+                      </Button>
+                    ) : null}
+                    {requiresPasswordChange ? (
+                      <Button
+                        theme='outline'
+                        type='danger'
+                        onClick={() => setShowChangePasswordModal(true)}
+                      >
+                        {t('去修改密码')}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              }
+            />
+          ) : null}
+
+          <Card className='!rounded-2xl mt-4 md:mt-6'>
+            <div className='flex items-center justify-between gap-3 mb-4'>
+              <div>
+                <Text className='text-lg font-medium'>{t('个人资料')}</Text>
+                <div className='text-xs text-gray-600'>
+                  {t('用户名称可由你自行编辑，用于展示身份信息')}
+                </div>
+              </div>
+              {requiresDisplayName ? (
+                <Tag color='orange'>{t('当前必须填写')}</Tag>
+              ) : null}
+            </div>
+
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+              <div>
+                <Text strong>{t('登录用户名')}</Text>
+                <Input
+                  value={userState?.user?.username || ''}
+                  disabled
+                  className='mt-2 !rounded-lg'
+                />
+              </div>
+              <div>
+                <Text strong>{t('用户名称')}</Text>
+                <Input
+                  value={inputs.display_name}
+                  onChange={(value) => handleInputChange('display_name', value)}
+                  placeholder={t('请输入用户名称')}
+                  className='mt-2 !rounded-lg'
+                />
+                <div className='mt-2 flex flex-wrap gap-2'>
+                  {userState?.user?.display_name ? (
+                    <Tag color='green'>{t('已设置')}</Tag>
+                  ) : (
+                    <Tag color='grey'>{t('未设置')}</Tag>
+                  )}
+                  {userState?.user?.require_display_name_enabled ? (
+                    <Tag color='orange'>{t('系统要求填写')}</Tag>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className='flex justify-end mt-4'>
+              <Button
+                type='primary'
+                onClick={saveProfile}
+                loading={profileSaving}
+              >
+                {t('保存用户名称')}
+              </Button>
+            </div>
+          </Card>
 
           {/* 账户管理和其他设置 */}
           <div className='grid grid-cols-1 xl:grid-cols-2 items-start gap-4 md:gap-6 mt-4 md:mt-6'>

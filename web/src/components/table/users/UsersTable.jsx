@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo, useState } from 'react';
-import { Empty } from '@douyinfe/semi-ui';
+import { Empty, Modal } from '@douyinfe/semi-ui';
 import CardTable from '../../common/ui/CardTable';
 import {
   IllustrationNoResult,
@@ -94,6 +94,36 @@ const UsersTable = (usersData) => {
     setShowResetTwoFAModal(true);
   };
 
+  const showForceLogoutUserConfirm = (user) => {
+    Modal.confirm({
+      title: t('强制退出该用户登录'),
+      content: t('该用户当前所有 Web 登录会话会立即失效，需要重新登录。'),
+      okText: t('确认退出'),
+      cancelText: t('取消'),
+      onOk: () => manageUser(user.id, 'logout', user),
+    });
+  };
+
+  const showRequirePasswordResetUserConfirm = (user) => {
+    Modal.confirm({
+      title: t('要求用户修改密码'),
+      content: t('用户需要先完成密码修改，才能继续访问其他功能。'),
+      okText: t('确认要求'),
+      cancelText: t('取消'),
+      onOk: () => manageUser(user.id, 'require_password_reset', user),
+    });
+  };
+
+  const showRequireEmailBindUserConfirm = (user) => {
+    Modal.confirm({
+      title: t('要求用户绑定邮箱'),
+      content: t('用户需要先完成邮箱绑定，才能继续访问其他功能。'),
+      okText: t('确认要求'),
+      cancelText: t('取消'),
+      onOk: () => manageUser(user.id, 'require_email_bind', user),
+    });
+  };
+
   // Modal confirm handlers
   const handlePromoteConfirm = () => {
     manageUser(modalUser.id, 'promote', modalUser);
@@ -132,6 +162,9 @@ const UsersTable = (usersData) => {
       showDeleteModal: showDeleteUserModal,
       showResetPasskeyModal: showResetPasskeyUserModal,
       showResetTwoFAModal: showResetTwoFAUserModal,
+      showForceLogoutConfirm: showForceLogoutUserConfirm,
+      showRequirePasswordResetConfirm: showRequirePasswordResetUserConfirm,
+      showRequireEmailBindConfirm: showRequireEmailBindUserConfirm,
     });
   }, [
     t,
@@ -143,6 +176,9 @@ const UsersTable = (usersData) => {
     showDeleteUserModal,
     showResetPasskeyUserModal,
     showResetTwoFAUserModal,
+    showForceLogoutUserConfirm,
+    showRequirePasswordResetUserConfirm,
+    showRequireEmailBindUserConfirm,
   ]);
 
   // Handle compact mode by removing fixed positioning

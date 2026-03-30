@@ -62,7 +62,7 @@ export function getUserIdFromLocalStorage() {
   let user = localStorage.getItem('user');
   if (!user) return -1;
   user = JSON.parse(user);
-  return user.id;
+  return user.cah_id || user.id;
 }
 
 export function getFooterHTML() {
@@ -123,6 +123,29 @@ export function showError(error) {
   console.error(error);
   if (error.message) {
     if (error.name === 'AxiosError') {
+      if (
+        error.response?.status === 428 &&
+        error.response?.data?.error_code === 'USER_ACTION_REQUIRED'
+      ) {
+        try {
+          const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+          const requiredData = error.response?.data?.data || {};
+          localStorage.setItem(
+            'user',
+            JSON.stringify({
+              ...currentUser,
+              ...requiredData,
+            }),
+          );
+        } catch (e) {
+          // ignore local storage parsing errors
+        }
+        Toast.warning(error.response?.data?.message || '请先完成账户安全要求');
+        if (window.location.pathname !== '/console/personal') {
+          window.location.href = '/console/personal?required=1';
+        }
+        return;
+      }
       switch (error.response.status) {
         case 401:
           // 清除用户状态

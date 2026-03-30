@@ -88,9 +88,11 @@ func GenerateEmailIdempotencyKey(eventType string, values ...string) string {
 }
 
 type EmailRecipientContext struct {
-	Username    string
-	Email       string
-	PublishedAt time.Time
+	Username      string
+	RecipientName string
+	CAHID         string
+	Email         string
+	PublishedAt   time.Time
 }
 
 type BatchEmailEntry struct {
@@ -289,7 +291,7 @@ func sendBatchWithRetry(client *resend.Client, requests []*resend.SendEmailReque
 
 func buildEmailRequest(from string, subject string, content string, ctx EmailRecipientContext) (*resend.SendEmailRequest, error) {
 	renderedHTML, err := RenderMessageHTML(subject, content, MessageTemplateContext{
-		RecipientName:  resolveEmailRecipientName(ctx.Username),
+		RecipientName:  resolveEmailRecipientName(ctx),
 		RecipientEmail: ctx.Email,
 		PublishedAt:    ctx.PublishedAt,
 	})
@@ -350,15 +352,30 @@ func batchRetryJitter(attempt int) time.Duration {
 	return time.Duration(raw) * time.Millisecond
 }
 
-func resolveEmailRecipientName(username string) string {
-	username = strings.TrimSpace(username)
+func resolveEmailRecipientName(ctx EmailRecipientContext) string {
+	recipientName := strings.TrimSpace(ctx.RecipientName)
+	if recipientName != "" {
+		return recipientName
+	}
+
+	username := strings.TrimSpace(ctx.Username)
 	if username != "" {
 		return username
+	}
+
+	cahID := strings.TrimSpace(strings.ToUpper(ctx.CAHID))
+	if cahID != "" {
+		return cahID
 	}
 	return "there"
 }
 
 func formatEmailSubject(subject string, ctx EmailRecipientContext) string {
+	cahID := strings.TrimSpace(strings.ToUpper(ctx.CAHID))
+	if cahID != "" {
+		return fmt.Sprintf("[%s] %s", cahID, subject)
+	}
+
 	username := strings.TrimSpace(ctx.Username)
 	if username == "" {
 		username = "guest"

@@ -122,7 +122,9 @@ const TopUp = () => {
   });
 
   const getDefaultTopupCurrencyCode = () => {
-    const quotaDisplayType = (localStorage.getItem('quota_display_type') || 'USD')
+    const quotaDisplayType = (
+      localStorage.getItem('quota_display_type') || 'USD'
+    )
       .trim()
       .toUpperCase();
     return quotaDisplayType === 'TOKENS' ? 'USD' : quotaDisplayType;
@@ -586,7 +588,7 @@ const TopUp = () => {
   };
 
   useEffect(() => {
-    if (!userState?.user?.id) {
+    if (!(userState?.user?.cah_id || userState?.user?.id)) {
       getUserQuota().then();
     }
     setTransferAmount(getQuotaPerUnit());
