@@ -437,9 +437,11 @@ func StreamResponseClaude2OpenAI(reqMode int, claudeResponse *dto.ClaudeResponse
 		}
 	} else {
 		if claudeResponse.Type == "message_start" {
-			response.Id = claudeResponse.Message.Id
-			response.Model = claudeResponse.Message.Model
-			//claudeUsage = &claudeResponse.Message.Usage
+			if claudeResponse.Message != nil {
+				response.Id = claudeResponse.Message.Id
+				response.Model = claudeResponse.Message.Model
+				//claudeUsage = &claudeResponse.Message.Usage
+			}
 			choice.Delta.SetContentString("")
 			choice.Delta.Role = "assistant"
 		} else if claudeResponse.Type == "content_block_start" {
@@ -467,11 +469,15 @@ func StreamResponseClaude2OpenAI(reqMode int, claudeResponse *dto.ClaudeResponse
 				choice.Delta.Content = claudeResponse.Delta.Text
 				switch claudeResponse.Delta.Type {
 				case "input_json_delta":
+					arguments := ""
+					if claudeResponse.Delta.PartialJson != nil {
+						arguments = *claudeResponse.Delta.PartialJson
+					}
 					tools = append(tools, dto.ToolCallResponse{
 						Type:  "function",
 						Index: common.GetPointer(fcIdx),
 						Function: dto.FunctionResponse{
-							Arguments: *claudeResponse.Delta.PartialJson,
+							Arguments: arguments,
 						},
 					})
 				case "signature_delta":
@@ -483,9 +489,11 @@ func StreamResponseClaude2OpenAI(reqMode int, claudeResponse *dto.ClaudeResponse
 				}
 			}
 		} else if claudeResponse.Type == "message_delta" {
-			finishReason := stopReasonClaude2OpenAI(*claudeResponse.Delta.StopReason)
-			if finishReason != "null" {
-				choice.FinishReason = &finishReason
+			if claudeResponse.Delta != nil && claudeResponse.Delta.StopReason != nil {
+				finishReason := stopReasonClaude2OpenAI(*claudeResponse.Delta.StopReason)
+				if finishReason != "null" {
+					choice.FinishReason = &finishReason
+				}
 			}
 			//claudeUsage = &claudeResponse.Usage
 		} else if claudeResponse.Type == "message_stop" {
@@ -594,6 +602,73 @@ func (info *ClaudeResponseInfo) markCacheCreationBillingSkipped(usage *dto.Claud
 	if usage.ShouldTreatCacheCreationAsHit() {
 		info.CacheCreationBillingSkipped = true
 	}
+}
+
+func applyClaudeUsage(target *dto.Usage, source *dto.ClaudeUsage) {
+	if target == nil || source == nil {
+		return
+	}
+	target.PromptTokens = source.InputTokens
+	target.CompletionTokens = source.OutputTokens
+	target.TotalTokens = source.InputTokens + source.OutputTokens
+	target.PromptTokensDetails.CachedTokens = source.CacheReadInputTokens
+	target.PromptTokensDetails.CachedCreationTokens = source.CacheCreationInputTokens
+	target.ClaudeCacheCreation5mTokens = source.GetCacheCreation5mTokens()
+	target.ClaudeCacheCreation1hTokens = source.GetCacheCreation1hTokens()
+}
+
+func mergeClaudeUsageDelta(target *dto.Usage, source *dto.ClaudeUsage) {
+	if target == nil || source == nil {
+		return
+	}
+	if source.InputTokens > 0 {
+		target.PromptTokens = source.InputTokens
+	}
+	target.CompletionTokens = source.OutputTokens
+	target.TotalTokens = target.PromptTokens + target.CompletionTokens
+	if source.CacheReadInputTokens > 0 {
+		target.PromptTokensDetails.CachedTokens = source.CacheReadInputTokens
+	}
+	if source.CacheCreationInputTokens > 0 {
+		target.PromptTokensDetails.CachedCreationTokens = source.CacheCreationInputTokens
+	}
+	if cache5m := source.GetCacheCreation5mTokens(); cache5m > 0 {
+		target.ClaudeCacheCreation5mTokens = cache5m
+	}
+	if cache1h := source.GetCacheCreation1hTokens(); cache1h > 0 {
+		target.ClaudeCacheCreation1hTokens = cache1h
+	}
+}
+
+func claudeResponseText(requestMode int, response *dto.ClaudeResponse) string {
+	if response == nil {
+		return ""
+	}
+	if requestMode == RequestModeCompletion {
+		return response.Completion
+	}
+	var builder strings.Builder
+	for _, content := range response.Content {
+		switch content.Type {
+		case "text":
+			builder.WriteString(content.GetText())
+		case "thinking":
+			if content.Thinking != nil {
+				builder.WriteString(*content.Thinking)
+			}
+		}
+	}
+	return builder.String()
+}
+
+func claudeUsageModelName(info *relaycommon.RelayInfo) string {
+	if info == nil {
+		return ""
+	}
+	if info.UpstreamModelName != "" {
+		return info.UpstreamModelName
+	}
+	return info.OriginModelName
 }
 
 func applyCacheCreationBillingSkipped(info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) {
@@ -768,41 +843,22 @@ func FormatClaudeResponseInfo(requestMode int, claudeResponse *dto.ClaudeRespons
 		if claudeResponse.Type == "message_start" {
 			if claudeResponse.Message != nil {
 				claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Message.Usage)
+				claudeInfo.ResponseId = claudeResponse.Message.Id
+				claudeInfo.Model = claudeResponse.Message.Model
+				applyClaudeUsage(claudeInfo.Usage, claudeResponse.Message.Usage)
 			}
-			claudeInfo.ResponseId = claudeResponse.Message.Id
-			claudeInfo.Model = claudeResponse.Message.Model
-
-			// message_start, 获取usage
-			claudeInfo.Usage.PromptTokens = claudeResponse.Message.Usage.InputTokens
-			claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Message.Usage.CacheReadInputTokens
-			claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Message.Usage.CacheCreationInputTokens
-			claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Message.Usage.GetCacheCreation5mTokens()
-			claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Message.Usage.GetCacheCreation1hTokens()
-			claudeInfo.Usage.CompletionTokens = claudeResponse.Message.Usage.OutputTokens
 		} else if claudeResponse.Type == "content_block_delta" {
-			if claudeResponse.Delta.Text != nil {
-				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Text)
-			}
-			if claudeResponse.Delta.Thinking != nil {
-				claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Thinking)
+			if claudeResponse.Delta != nil {
+				if claudeResponse.Delta.Text != nil {
+					claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Text)
+				}
+				if claudeResponse.Delta.Thinking != nil {
+					claudeInfo.ResponseText.WriteString(*claudeResponse.Delta.Thinking)
+				}
 			}
 		} else if claudeResponse.Type == "message_delta" {
 			claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Usage)
-			// 最终的usage获取
-			if claudeResponse.Usage.InputTokens > 0 {
-				// 不叠加，只取最新的
-				claudeInfo.Usage.PromptTokens = claudeResponse.Usage.InputTokens
-			}
-			claudeInfo.Usage.CompletionTokens = claudeResponse.Usage.OutputTokens
-			claudeInfo.Usage.TotalTokens = claudeInfo.Usage.PromptTokens + claudeInfo.Usage.CompletionTokens
-
-			// 更新缓存相关字段（如果 message_delta 中有提供）
-			if claudeResponse.Usage.CacheReadInputTokens > 0 {
-				claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Usage.CacheReadInputTokens
-			}
-			if claudeResponse.Usage.CacheCreationInputTokens > 0 {
-				claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Usage.CacheCreationInputTokens
-			}
+			mergeClaudeUsageDelta(claudeInfo.Usage, claudeResponse.Usage)
 
 			// 判断是否完整
 			claudeInfo.Done = true
@@ -836,7 +892,9 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		} else {
 			if claudeResponse.Type == "message_start" {
 				// message_start, 获取usage
-				info.UpstreamModelName = claudeResponse.Message.Model
+				if claudeResponse.Message != nil {
+					info.UpstreamModelName = claudeResponse.Message.Model
+				}
 				// Apply cache creation billing skipped for message_start
 				// Per Anthropic API spec: avoid double-counting cache_creation tokens
 				if claudeResponse.Message != nil && claudeResponse.Message.Usage != nil {
@@ -947,13 +1005,12 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		claudeInfo.Usage.CompletionTokens = completionTokens
 		claudeInfo.Usage.TotalTokens = info.PromptTokens + completionTokens
 	} else {
-		claudeInfo.Usage.PromptTokens = claudeResponse.Usage.InputTokens
-		claudeInfo.Usage.CompletionTokens = claudeResponse.Usage.OutputTokens
-		claudeInfo.Usage.TotalTokens = claudeResponse.Usage.InputTokens + claudeResponse.Usage.OutputTokens
-		claudeInfo.Usage.PromptTokensDetails.CachedTokens = claudeResponse.Usage.CacheReadInputTokens
-		claudeInfo.Usage.PromptTokensDetails.CachedCreationTokens = claudeResponse.Usage.CacheCreationInputTokens
-		claudeInfo.Usage.ClaudeCacheCreation5mTokens = claudeResponse.Usage.GetCacheCreation5mTokens()
-		claudeInfo.Usage.ClaudeCacheCreation1hTokens = claudeResponse.Usage.GetCacheCreation1hTokens()
+		if claudeResponse.Usage != nil {
+			applyClaudeUsage(claudeInfo.Usage, claudeResponse.Usage)
+		} else {
+			common.SysLog("claude response missing usage, using local token estimate")
+			claudeInfo.Usage = service.ResponseText2Usage(c, claudeResponseText(requestMode, &claudeResponse), claudeUsageModelName(info), info.PromptTokens)
+		}
 	}
 	claudeInfo.markCacheCreationBillingSkipped(claudeResponse.Usage)
 	applyCacheCreationBillingSkipped(info, claudeInfo)
@@ -978,7 +1035,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 		}
 	}
 
-	if claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {
+	if claudeResponse.Usage != nil && claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {
 		c.Set("claude_web_search_requests", claudeResponse.Usage.ServerToolUse.WebSearchRequests)
 	}
 
