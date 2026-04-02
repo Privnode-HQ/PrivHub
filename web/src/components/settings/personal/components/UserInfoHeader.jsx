@@ -27,6 +27,7 @@ import {
   Badge,
 } from '@douyinfe/semi-ui';
 import {
+  isSupport,
   isRoot,
   isAdmin,
   renderQuota,
@@ -107,6 +108,14 @@ const UserInfoHeader = ({ t, userState }) => {
                         style={{ color: 'white' }}
                       >
                         {t('管理员')}
+                      </Tag>
+                    ) : isSupport() ? (
+                      <Tag
+                        size='large'
+                        shape='circle'
+                        style={{ color: 'white' }}
+                      >
+                        {t('支持人员')}
                       </Tag>
                     ) : (
                       <Tag

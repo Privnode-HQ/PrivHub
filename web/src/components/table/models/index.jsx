@@ -28,10 +28,12 @@ import EditVendorModal from './modals/EditVendorModal';
 import { useModelsData } from '../../../hooks/models/useModelsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { isSupport } from '../../../helpers';
 
 const ModelsPage = () => {
   const modelsData = useModelsData();
   const isMobile = useIsMobile();
+  const readOnlyAdmin = isSupport();
 
   const {
     // Edit state
@@ -112,6 +114,7 @@ const ModelsPage = () => {
               applyUpstreamOverwrite={modelsData.applyUpstreamOverwrite}
               compactMode={compactMode}
               setCompactMode={setCompactMode}
+              readOnlyAdmin={readOnlyAdmin}
               t={t}
             />
 
@@ -138,7 +141,7 @@ const ModelsPage = () => {
         })}
         t={modelsData.t}
       >
-        <ModelsTable {...modelsData} />
+        <ModelsTable {...modelsData} readOnlyAdmin={readOnlyAdmin} />
       </CardPro>
     </>
   );

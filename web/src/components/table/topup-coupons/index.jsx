@@ -30,12 +30,14 @@ import RevokeTopupCouponModal from './modals/RevokeTopupCouponModal';
 import { useTopupCouponsData } from '../../../hooks/topupCoupons/useTopupCouponsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { isSupport } from '../../../helpers';
 
 const { Text } = Typography;
 
 const TopupCouponsPage = () => {
   const topupCouponsData = useTopupCouponsData();
   const isMobile = useIsMobile();
+  const readOnlyAdmin = isSupport();
 
   return (
     <>
@@ -78,6 +80,7 @@ const TopupCouponsPage = () => {
             <TopupCouponsActions
               openCreate={topupCouponsData.openCreate}
               refresh={topupCouponsData.refresh}
+              readOnlyAdmin={readOnlyAdmin}
               t={topupCouponsData.t}
             />
 
@@ -104,7 +107,10 @@ const TopupCouponsPage = () => {
         })}
         t={topupCouponsData.t}
       >
-        <TopupCouponsTable {...topupCouponsData} />
+        <TopupCouponsTable
+          {...topupCouponsData}
+          readOnlyAdmin={readOnlyAdmin}
+        />
       </CardPro>
     </>
   );

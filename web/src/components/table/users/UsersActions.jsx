@@ -20,7 +20,11 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Button, Modal } from '@douyinfe/semi-ui';
 
-const UsersActions = ({ setShowAddUser, logoutAllUsers, t }) => {
+const UsersActions = ({ setShowAddUser, logoutAllUsers, readOnlyAdmin, t }) => {
+  if (readOnlyAdmin) {
+    return null;
+  }
+
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);

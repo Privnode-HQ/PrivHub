@@ -41,6 +41,7 @@ const ModelsActions = ({
   applyUpstreamOverwrite,
   compactMode,
   setCompactMode,
+  readOnlyAdmin,
   t,
 }) => {
   // Modal states
@@ -101,6 +102,18 @@ const ModelsActions = ({
     setPrefillInit({ id: undefined, type: 'model', items });
     setShowAddPrefill(true);
   };
+
+  if (readOnlyAdmin) {
+    return (
+      <div className='flex flex-wrap gap-2 w-full md:w-auto order-2 md:order-1'>
+        <CompactModeToggle
+          compactMode={compactMode}
+          setCompactMode={setCompactMode}
+          t={t}
+        />
+      </div>
+    );
+  }
 
   return (
     <>

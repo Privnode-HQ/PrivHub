@@ -43,6 +43,7 @@ const ModelsTable = (modelsData) => {
     setShowEdit,
     refresh,
     vendorMap,
+    readOnlyAdmin,
     t,
   } = modelsData;
 
@@ -55,8 +56,9 @@ const ModelsTable = (modelsData) => {
       setShowEdit,
       refresh,
       vendorMap,
+      readOnlyAdmin,
     });
-  }, [t, manageModel, setEditingModel, setShowEdit, refresh, vendorMap]);
+  }, [t, manageModel, setEditingModel, setShowEdit, refresh, vendorMap, readOnlyAdmin]);
 
   // Handle compact mode by removing fixed positioning
   const tableColumns = useMemo(() => {
@@ -87,7 +89,7 @@ const ModelsTable = (modelsData) => {
       }}
       hidePagination={true}
       loading={loading}
-      rowSelection={rowSelection}
+      rowSelection={readOnlyAdmin ? undefined : rowSelection}
       onRow={handleRow}
       empty={
         <Empty

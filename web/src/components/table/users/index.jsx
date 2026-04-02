@@ -28,10 +28,12 @@ import EditUserModal from './modals/EditUserModal';
 import { useUsersData } from '../../../hooks/users/useUsersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { isSupport } from '../../../helpers';
 
 const UsersPage = () => {
   const usersData = useUsersData();
   const isMobile = useIsMobile();
+  const readOnlyAdmin = isSupport();
 
   const {
     // Modal state
@@ -91,6 +93,7 @@ const UsersPage = () => {
             <UsersActions
               setShowAddUser={setShowAddUser}
               logoutAllUsers={usersData.logoutAllUsers}
+              readOnlyAdmin={readOnlyAdmin}
               t={t}
             />
 
@@ -119,7 +122,7 @@ const UsersPage = () => {
         })}
         t={usersData.t}
       >
-        <UsersTable {...usersData} />
+        <UsersTable {...usersData} readOnlyAdmin={readOnlyAdmin} />
       </CardPro>
     </>
   );

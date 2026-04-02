@@ -509,6 +509,20 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 		// 超级管理员不需要边栏设置功能
 		permissions["sidebar_settings"] = false
 		permissions["sidebar_modules"] = map[string]interface{}{}
+	} else if userRole == common.RoleSupportUser {
+		// 支持人员拥有后台只读权限，但不能查看渠道和系统设置
+		permissions["sidebar_settings"] = true
+		permissions["sidebar_modules"] = map[string]interface{}{
+			"admin": map[string]interface{}{
+				"channel":        false,
+				"message_manage": true,
+				"models":         true,
+				"redemption":     true,
+				"topup_coupon":   true,
+				"user":           true,
+				"setting":        false,
+			},
+		}
 	} else if userRole == common.RoleAdminUser {
 		// 管理员可以设置边栏，但不包含系统设置功能
 		permissions["sidebar_settings"] = true
@@ -560,7 +574,18 @@ func generateDefaultSidebarConfig(userRole int) string {
 	}
 
 	// 管理员区域 - 根据角色决定
-	if userRole == common.RoleAdminUser {
+	if userRole == common.RoleSupportUser {
+		defaultConfig["admin"] = map[string]interface{}{
+			"enabled":        true,
+			"channel":        false,
+			"message_manage": true,
+			"models":         true,
+			"redemption":     true,
+			"topup_coupon":   true,
+			"user":           true,
+			"setting":        false,
+		}
+	} else if userRole == common.RoleAdminUser {
 		// 管理员可以访问管理员区域，但不能访问系统设置
 		defaultConfig["admin"] = map[string]interface{}{
 			"enabled":        true,
@@ -943,6 +968,16 @@ func CreateUser(c *gin.Context) {
 		user.DisplayName = user.Username
 	}
 	myRole := c.GetInt("role")
+	if user.Role == common.RoleGuestUser {
+		user.Role = common.RoleCommonUser
+	}
+	if !common.IsValidateRole(user.Role) || user.Role == common.RoleGuestUser {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "无效的用户角色",
+		})
+		return
+	}
 	if user.Role >= myRole {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1036,21 +1071,25 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 	case "promote":
-		if myRole != common.RoleRootUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "普通管理员用户无法提升其他用户为管理员",
-			})
-			return
-		}
-		if user.Role >= common.RoleAdminUser {
+		switch user.Role {
+		case common.RoleCommonUser:
+			user.Role = common.RoleSupportUser
+		case common.RoleSupportUser:
+			if myRole != common.RoleRootUser {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "普通管理员用户无法提升支持人员为管理员",
+				})
+				return
+			}
+			user.Role = common.RoleAdminUser
+		default:
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "该用户已经是管理员",
 			})
 			return
 		}
-		user.Role = common.RoleAdminUser
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
@@ -1066,7 +1105,11 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
-		user.Role = common.RoleCommonUser
+		if user.Role == common.RoleAdminUser {
+			user.Role = common.RoleSupportUser
+		} else {
+			user.Role = common.RoleCommonUser
+		}
 	case "logout":
 		user.WebSessionVersion++
 	case "require_password_reset":

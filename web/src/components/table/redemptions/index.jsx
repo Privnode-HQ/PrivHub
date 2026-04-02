@@ -27,10 +27,12 @@ import EditRedemptionModal from './modals/EditRedemptionModal';
 import { useRedemptionsData } from '../../../hooks/redemptions/useRedemptionsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { isSupport } from '../../../helpers';
 
 const RedemptionsPage = () => {
   const redemptionsData = useRedemptionsData();
   const isMobile = useIsMobile();
+  const readOnlyAdmin = isSupport();
 
   const {
     // Edit state
@@ -87,6 +89,7 @@ const RedemptionsPage = () => {
               setShowEdit={setShowEdit}
               batchCopyRedemptions={batchCopyRedemptions}
               batchDeleteRedemptions={batchDeleteRedemptions}
+              readOnlyAdmin={readOnlyAdmin}
               t={t}
             />
 
@@ -113,7 +116,7 @@ const RedemptionsPage = () => {
         })}
         t={redemptionsData.t}
       >
-        <RedemptionsTable {...redemptionsData} />
+        <RedemptionsTable {...redemptionsData} readOnlyAdmin={readOnlyAdmin} />
       </CardPro>
     </>
   );

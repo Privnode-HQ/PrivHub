@@ -76,6 +76,28 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+export function SupportRoute({ children }) {
+  const location = useLocation();
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (user && typeof user.role === 'number' && user.role >= 5) {
+      if (shouldRedirectToPersonal(user, location.pathname)) {
+        return (
+          <Navigate to='/console/personal' replace state={{ from: location }} />
+        );
+      }
+      return children;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return <Navigate to='/forbidden' replace />;
+}
+
 export function AdminRoute({ children }) {
   const location = useLocation();
   const raw = localStorage.getItem('user');

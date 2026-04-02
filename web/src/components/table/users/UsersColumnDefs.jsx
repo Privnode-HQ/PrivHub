@@ -48,6 +48,12 @@ const renderRole = (role, t) => {
           {t('管理员')}
         </Tag>
       );
+    case 5:
+      return (
+        <Tag color='cyan' shape='circle'>
+          {t('支持人员')}
+        </Tag>
+      );
     case 100:
       return (
         <Tag color='orange' shape='circle'>
@@ -227,6 +233,7 @@ const renderOperations = (
   text,
   record,
   {
+    readOnlyAdmin,
     setEditingUser,
     setShowEditUser,
     showPromoteModal,
@@ -242,6 +249,9 @@ const renderOperations = (
   },
 ) => {
   if (record.DeletedAt !== null) {
+    return <></>;
+  }
+  if (readOnlyAdmin) {
     return <></>;
   }
 
@@ -350,6 +360,7 @@ export const getUsersColumns = ({
   showForceLogoutConfirm,
   showRequirePasswordResetConfirm,
   showRequireEmailBindConfirm,
+  readOnlyAdmin,
 }) => {
   return [
     {
@@ -398,6 +409,7 @@ export const getUsersColumns = ({
       width: 200,
       render: (text, record, index) =>
         renderOperations(text, record, {
+          readOnlyAdmin,
           setEditingUser,
           setShowEditUser,
           showPromoteModal,

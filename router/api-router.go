@@ -97,22 +97,25 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/2fa/backup_codes", controller.RegenerateBackupCodes)
 			}
 
+			supportRoute := userRoute.Group("/")
+			supportRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+			{
+				supportRoute.GET("/", controller.GetAllUsers)
+				supportRoute.GET("/topup", controller.GetAllTopUps)
+				supportRoute.GET("/search", controller.SearchUsers)
+				supportRoute.GET("/:id", controller.GetUser)
+			}
+
 			adminRoute := userRoute.Group("/")
 			adminRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 			{
-				adminRoute.GET("/", controller.GetAllUsers)
-				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
-				adminRoute.GET("/search", controller.SearchUsers)
-				adminRoute.GET("/:id", controller.GetUser)
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.POST("/logout_all", controller.LogoutAllUsers)
 				adminRoute.PUT("/", controller.UpdateUser)
 				adminRoute.DELETE("/:id", controller.DeleteUser)
 				adminRoute.DELETE("/:id/reset_passkey", controller.AdminResetPasskey)
-
-				// Admin 2FA routes
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
@@ -136,11 +139,16 @@ func SetApiRouter(router *gin.Engine) {
 				selfMessageRoute.POST("/read/batch", controller.BatchReadMyMessages)
 			}
 
+			supportMessageRoute := messageRoute.Group("/")
+			supportMessageRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+			{
+				supportMessageRoute.GET("/", controller.GetAdminMessages)
+				supportMessageRoute.GET("/template", controller.GetMessageTemplate)
+			}
+
 			adminMessageRoute := messageRoute.Group("/")
 			adminMessageRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 			{
-				adminMessageRoute.GET("/", controller.GetAdminMessages)
-				adminMessageRoute.GET("/template", controller.GetMessageTemplate)
 				adminMessageRoute.PUT("/template", controller.UpdateMessageTemplate)
 				adminMessageRoute.POST("/", controller.CreateMessage)
 				adminMessageRoute.PUT("/:id", controller.UpdateMessage)
@@ -208,37 +216,45 @@ func SetApiRouter(router *gin.Engine) {
 			}
 		}
 
+		redemptionReadRoute := apiRouter.Group("/redemption")
+		redemptionReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			redemptionReadRoute.GET("/", controller.GetAllRedemptions)
+			redemptionReadRoute.GET("/search", controller.SearchRedemptions)
+			redemptionReadRoute.GET("/:id", controller.GetRedemption)
+		}
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
-			redemptionRoute.GET("/", controller.GetAllRedemptions)
-			redemptionRoute.GET("/search", controller.SearchRedemptions)
-			redemptionRoute.GET("/:id", controller.GetRedemption)
 			redemptionRoute.POST("/", controller.AddRedemption)
 			redemptionRoute.PUT("/", controller.UpdateRedemption)
 			redemptionRoute.DELETE("/invalid", controller.DeleteInvalidRedemption)
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
 		}
+		topUpCouponReadRoute := apiRouter.Group("/topup-coupon")
+		topUpCouponReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			topUpCouponReadRoute.GET("/", controller.GetAllTopUpCoupons)
+			topUpCouponReadRoute.GET("/search", controller.SearchTopUpCoupons)
+			topUpCouponReadRoute.GET("/:id", controller.GetTopUpCoupon)
+		}
 		topUpCouponRoute := apiRouter.Group("/topup-coupon")
 		topUpCouponRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
-			topUpCouponRoute.GET("/", controller.GetAllTopUpCoupons)
-			topUpCouponRoute.GET("/search", controller.SearchTopUpCoupons)
-			topUpCouponRoute.GET("/:id", controller.GetTopUpCoupon)
 			topUpCouponRoute.POST("/", controller.AddTopUpCoupon)
 			topUpCouponRoute.PUT("/", controller.UpdateTopUpCoupon)
 		}
 		logRoute := apiRouter.Group("/log")
-		logRoute.GET("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetAllLogs)
+		logRoute.GET("/", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.DeleteHistoryLogs)
-		logRoute.GET("/stat", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetLogsStat)
+		logRoute.GET("/stat", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
-		logRoute.GET("/search", middleware.AdminAuth(), middleware.AdminAudit(), controller.SearchAllLogs)
+		logRoute.GET("/search", middleware.SupportAuth(), middleware.AdminAudit(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
 
 		dataRoute := apiRouter.Group("/data")
-		dataRoute.GET("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetAllQuotaDates)
+		dataRoute.GET("/", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetAllQuotaDates)
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
 
 		logRoute.Use(middleware.CORS())
@@ -246,15 +262,19 @@ func SetApiRouter(router *gin.Engine) {
 			logRoute.GET("/token", controller.GetLogByKey)
 		}
 		groupRoute := apiRouter.Group("/group")
-		groupRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
+		groupRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
 		{
 			groupRoute.GET("/", controller.GetGroups)
 		}
 
+		prefillGroupReadRoute := apiRouter.Group("/prefill_group")
+		prefillGroupReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			prefillGroupReadRoute.GET("/", controller.GetPrefillGroups)
+		}
 		prefillGroupRoute := apiRouter.Group("/prefill_group")
 		prefillGroupRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
-			prefillGroupRoute.GET("/", controller.GetPrefillGroups)
 			prefillGroupRoute.POST("/", controller.CreatePrefillGroup)
 			prefillGroupRoute.PUT("/", controller.UpdatePrefillGroup)
 			prefillGroupRoute.DELETE("/:id", controller.DeletePrefillGroup)
@@ -262,34 +282,42 @@ func SetApiRouter(router *gin.Engine) {
 
 		mjRoute := apiRouter.Group("/mj")
 		mjRoute.GET("/self", middleware.UserAuth(), controller.GetUserMidjourney)
-		mjRoute.GET("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetAllMidjourney)
+		mjRoute.GET("/", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetAllMidjourney)
 
 		taskRoute := apiRouter.Group("/task")
 		{
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
-			taskRoute.GET("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetAllTask)
+			taskRoute.GET("/", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetAllTask)
 		}
 
+		vendorReadRoute := apiRouter.Group("/vendors")
+		vendorReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			vendorReadRoute.GET("/", controller.GetAllVendors)
+			vendorReadRoute.GET("/search", controller.SearchVendors)
+			vendorReadRoute.GET("/:id", controller.GetVendorMeta)
+		}
 		vendorRoute := apiRouter.Group("/vendors")
 		vendorRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
-			vendorRoute.GET("/", controller.GetAllVendors)
-			vendorRoute.GET("/search", controller.SearchVendors)
-			vendorRoute.GET("/:id", controller.GetVendorMeta)
 			vendorRoute.POST("/", controller.CreateVendorMeta)
 			vendorRoute.PUT("/", controller.UpdateVendorMeta)
 			vendorRoute.DELETE("/:id", controller.DeleteVendorMeta)
 		}
 
+		modelsReadRoute := apiRouter.Group("/models")
+		modelsReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			modelsReadRoute.GET("/sync_upstream/preview", controller.SyncUpstreamPreview)
+			modelsReadRoute.GET("/missing", controller.GetMissingModels)
+			modelsReadRoute.GET("/", controller.GetAllModelsMeta)
+			modelsReadRoute.GET("/search", controller.SearchModelsMeta)
+			modelsReadRoute.GET("/:id", controller.GetModelMeta)
+		}
 		modelsRoute := apiRouter.Group("/models")
 		modelsRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
-			modelsRoute.GET("/sync_upstream/preview", controller.SyncUpstreamPreview)
 			modelsRoute.POST("/sync_upstream", controller.SyncUpstreamModels)
-			modelsRoute.GET("/missing", controller.GetMissingModels)
-			modelsRoute.GET("/", controller.GetAllModelsMeta)
-			modelsRoute.GET("/search", controller.SearchModelsMeta)
-			modelsRoute.GET("/:id", controller.GetModelMeta)
 			modelsRoute.POST("/", controller.CreateModelMeta)
 			modelsRoute.PUT("/", controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", controller.DeleteModelMeta)

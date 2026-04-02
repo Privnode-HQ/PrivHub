@@ -83,6 +83,36 @@ export const useSidebar = () => {
     return merged;
   };
 
+  const applyPermissionRestrictions = (config, permissions) => {
+    const sidebarPermissions = permissions?.sidebar_modules;
+    if (!sidebarPermissions) {
+      return config;
+    }
+
+    const restrictedConfig = { ...(config || {}) };
+    Object.keys(sidebarPermissions).forEach((sectionKey) => {
+      const sectionPermissions = sidebarPermissions[sectionKey];
+      if (sectionPermissions === false) {
+        restrictedConfig[sectionKey] = { enabled: false };
+        return;
+      }
+
+      if (!restrictedConfig[sectionKey]) {
+        restrictedConfig[sectionKey] = { enabled: true };
+      }
+
+      if (sectionPermissions && typeof sectionPermissions === 'object') {
+        Object.keys(sectionPermissions).forEach((moduleKey) => {
+          if (sectionPermissions[moduleKey] === false) {
+            restrictedConfig[sectionKey][moduleKey] = false;
+          }
+        });
+      }
+    });
+
+    return restrictedConfig;
+  };
+
   // 获取管理员配置
   const adminConfig = useMemo(() => {
     if (statusState?.status?.SidebarModulesAdmin) {
@@ -109,6 +139,9 @@ export const useSidebar = () => {
       }
 
       const res = await API.get('/api/user/self');
+      const permissionRestrictedConfig = (config) =>
+        applyPermissionRestrictions(config, res.data?.data?.permissions);
+
       if (res.data.success && res.data.data.sidebar_modules) {
         let config;
         // 检查sidebar_modules是字符串还是对象
@@ -117,7 +150,7 @@ export const useSidebar = () => {
         } else {
           config = res.data.data.sidebar_modules;
         }
-        setUserConfig(mergeSidebarConfig(config));
+        setUserConfig(mergeSidebarConfig(permissionRestrictedConfig(config)));
       } else {
         // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
         // 这样可以确保权限控制正确生效
@@ -136,7 +169,9 @@ export const useSidebar = () => {
             });
           }
         });
-        setUserConfig(defaultUserConfig);
+        setUserConfig(
+          mergeSidebarConfig(permissionRestrictedConfig(defaultUserConfig)),
+        );
       }
     } catch (error) {
       // 出错时也生成默认配置，而不是设置为空对象
@@ -151,7 +186,7 @@ export const useSidebar = () => {
           });
         }
       });
-      setUserConfig(defaultUserConfig);
+      setUserConfig(mergeSidebarConfig(defaultUserConfig));
     } finally {
       if (shouldShowLoader) {
         setLoading(false);

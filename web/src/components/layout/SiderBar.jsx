@@ -25,7 +25,12 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError } from '../../helpers';
+import {
+  hasAdminAccess,
+  isAdmin,
+  isRoot,
+  showError,
+} from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -176,31 +181,31 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('信息管理'),
         itemKey: 'message_manage',
         to: '/message-management',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {
         text: t('模型管理'),
         itemKey: 'models',
         to: '/console/models',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {
         text: t('兑换码管理'),
         itemKey: 'redemption',
         to: '/redemption',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {
         text: t('折扣中心'),
         itemKey: 'topup_coupon',
         to: '/topup-coupon',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {
         text: t('系统设置'),
@@ -217,7 +222,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     });
 
     return filteredItems;
-  }, [isAdmin(), isRoot(), t, isModuleVisible]);
+  }, [isAdmin(), hasAdminAccess(), isRoot(), t, isModuleVisible]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -418,7 +423,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         type='sidebar'
         className=''
         collapsed={collapsed}
-        showAdmin={isAdmin()}
+        showAdmin={hasAdminAccess()}
       >
         <Nav
           className='sidebar-nav'
@@ -515,7 +520,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           )}
 
           {/* 管理员区域 - 只在管理员时显示且配置允许时显示 */}
-          {isAdmin() && hasSectionVisibleModules('admin') && (
+          {hasAdminAccess() && hasSectionVisibleModules('admin') && (
             <>
               <Divider className='sidebar-divider' />
               <div>

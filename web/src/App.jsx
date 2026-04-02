@@ -21,7 +21,12 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute } from './helpers';
+import {
+  AuthRedirect,
+  PrivateRoute,
+  AdminRoute,
+  SupportRoute,
+} from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -117,17 +122,17 @@ function App() {
         <Route
           path='/console/message-management'
           element={
-            <AdminRoute>
+            <SupportRoute>
               <AdminMessages />
-            </AdminRoute>
+            </SupportRoute>
           }
         />
         <Route
           path='/console/models'
           element={
-            <AdminRoute>
+            <SupportRoute>
               <ModelPage />
-            </AdminRoute>
+            </SupportRoute>
           }
         />
         <Route
@@ -157,25 +162,25 @@ function App() {
         <Route
           path='/console/redemption'
           element={
-            <AdminRoute>
+            <SupportRoute>
               <Redemption />
-            </AdminRoute>
+            </SupportRoute>
           }
         />
         <Route
           path='/console/topup-coupon'
           element={
-            <AdminRoute>
+            <SupportRoute>
               <TopupCoupon />
-            </AdminRoute>
+            </SupportRoute>
           }
         />
         <Route
           path='/console/user'
           element={
-            <AdminRoute>
+            <SupportRoute>
               <User />
-            </AdminRoute>
+            </SupportRoute>
           }
         />
         <Route

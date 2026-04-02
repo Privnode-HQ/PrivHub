@@ -280,8 +280,9 @@ export const getModelsColumns = ({
   setShowEdit,
   refresh,
   vendorMap,
+  readOnlyAdmin,
 }) => {
-  return [
+  const columns = [
     {
       title: t('图标'),
       dataIndex: 'icon',
@@ -361,7 +362,10 @@ export const getModelsColumns = ({
         return <div>{renderTimestamp(text)}</div>;
       },
     },
-    {
+  ];
+
+  if (!readOnlyAdmin) {
+    columns.push({
       title: '',
       dataIndex: 'operate',
       fixed: 'right',
@@ -375,6 +379,8 @@ export const getModelsColumns = ({
           refresh,
           t,
         ),
-    },
-  ];
+    });
+  }
+
+  return columns;
 };

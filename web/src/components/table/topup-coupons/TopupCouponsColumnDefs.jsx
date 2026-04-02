@@ -50,8 +50,13 @@ const renderTime = (timestamp, emptyText, t) => {
   return timestamp2string(timestamp);
 };
 
-export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
-  return [
+export const getTopupCouponsColumns = ({
+  t,
+  openEdit,
+  openRevoke,
+  readOnlyAdmin,
+}) => {
+  const columns = [
     {
       title: t('ID'),
       dataIndex: 'id',
@@ -102,14 +107,18 @@ export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
       dataIndex: 'issued_at',
       render: (text) => renderTime(text, '无', t),
     },
-    {
+  ];
+
+  if (!readOnlyAdmin) {
+    columns.push({
       title: '',
       dataIndex: 'operate',
       fixed: 'right',
       width: 180,
       render: (text, record) => {
         const displayStatus = getDisplayStatus(record);
-        const canEdit = displayStatus !== 'used' && displayStatus !== 'reserved';
+        const canEdit =
+          displayStatus !== 'used' && displayStatus !== 'reserved';
         const canRevoke =
           displayStatus === 'available' || displayStatus === 'expired';
 
@@ -134,6 +143,8 @@ export const getTopupCouponsColumns = ({ t, openEdit, openRevoke }) => {
           </Space>
         );
       },
-    },
-  ];
+    });
+  }
+
+  return columns;
 };

@@ -39,6 +39,7 @@ const TopupCouponsTable = (topupCouponsData) => {
     handleRow,
     openEdit,
     openRevoke,
+    readOnlyAdmin,
     t,
   } = topupCouponsData;
 
@@ -47,8 +48,9 @@ const TopupCouponsTable = (topupCouponsData) => {
       t,
       openEdit,
       openRevoke,
+      readOnlyAdmin,
     });
-  }, [t, openEdit, openRevoke]);
+  }, [t, openEdit, openRevoke, readOnlyAdmin]);
 
   const tableColumns = useMemo(() => {
     return compactMode

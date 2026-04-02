@@ -49,6 +49,7 @@ import {
   API,
   formatDateTimeString,
   getRelativeTime,
+  isSupport,
   showError,
   showSuccess,
 } from '../../helpers';
@@ -73,6 +74,7 @@ const targetTypeOptions = [
 
 const AdminMessages = () => {
   const { t } = useTranslation();
+  const readOnlyAdmin = isSupport();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -454,16 +456,18 @@ const AdminMessages = () => {
           >
             {t('预览')}
           </Button>
-          <Button
-            icon={<Copy size={14} />}
-            theme='light'
-            loading={submitting}
-            onClick={() => duplicateMessage(record)}
-          >
-            {t('复制')}
-          </Button>
+          {!readOnlyAdmin && (
+            <Button
+              icon={<Copy size={14} />}
+              theme='light'
+              loading={submitting}
+              onClick={() => duplicateMessage(record)}
+            >
+              {t('复制')}
+            </Button>
+          )}
 
-          {record.status === 'online' && (
+          {!readOnlyAdmin && record.status === 'online' && (
             <Button
               icon={<RefreshCw size={14} />}
               theme='light'
@@ -475,7 +479,7 @@ const AdminMessages = () => {
             </Button>
           )}
 
-          {record.status === 'draft' && (
+          {!readOnlyAdmin && record.status === 'draft' && (
             <>
               <Button
                 icon={<Save size={14} />}
@@ -518,13 +522,15 @@ const AdminMessages = () => {
               <Button theme='light' onClick={() => loadMessages(page)}>
                 {t('刷新')}
               </Button>
-              <Button
-                icon={<FilePlus2 size={14} />}
-                type='primary'
-                onClick={openCreateModal}
-              >
-                {t('新增消息')}
-              </Button>
+              {!readOnlyAdmin && (
+                <Button
+                  icon={<FilePlus2 size={14} />}
+                  type='primary'
+                  onClick={openCreateModal}
+                >
+                  {t('新增消息')}
+                </Button>
+              )}
             </Space>
           }
         >
@@ -559,13 +565,15 @@ const AdminMessages = () => {
         <Card
           title={t('模板设置')}
           headerExtraContent={
-            <Button
-              type='primary'
-              loading={savingTemplate}
-              onClick={saveTemplate}
-            >
-              {t('保存模板')}
-            </Button>
+            !readOnlyAdmin ? (
+              <Button
+                type='primary'
+                loading={savingTemplate}
+                onClick={saveTemplate}
+              >
+                {t('保存模板')}
+              </Button>
+            ) : null
           }
         >
           <Space
@@ -590,6 +598,7 @@ const AdminMessages = () => {
             value={template}
             autosize={{ minRows: 14, maxRows: 24 }}
             style={{ marginTop: 16, fontFamily: 'JetBrains Mono, Consolas' }}
+            readOnly={readOnlyAdmin}
             onChange={setTemplate}
           />
         </Card>
@@ -597,7 +606,7 @@ const AdminMessages = () => {
 
       <Modal
         title={editingMessage ? t('编辑草稿') : t('新增消息')}
-        visible={editorVisible}
+        visible={!readOnlyAdmin && editorVisible}
         onCancel={() => setEditorVisible(false)}
         onOk={submitDraft}
         okText={editingMessage ? t('保存草稿') : t('创建草稿')}

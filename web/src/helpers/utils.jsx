@@ -32,17 +32,37 @@ const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
-export function isAdmin() {
-  let user = localStorage.getItem('user');
+export function getCurrentUser() {
+  const user = localStorage.getItem('user');
+  if (!user) return null;
+  try {
+    return JSON.parse(user);
+  } catch (error) {
+    return null;
+  }
+}
+
+export function hasAdminAccess() {
+  const user = getCurrentUser();
   if (!user) return false;
-  user = JSON.parse(user);
+  return user.role >= 5;
+}
+
+export function isSupport() {
+  const user = getCurrentUser();
+  if (!user) return false;
+  return user.role >= 5 && user.role < 10;
+}
+
+export function isAdmin() {
+  const user = getCurrentUser();
+  if (!user) return false;
   return user.role >= 10;
 }
 
 export function isRoot() {
-  let user = localStorage.getItem('user');
+  const user = getCurrentUser();
   if (!user) return false;
-  user = JSON.parse(user);
   return user.role >= 100;
 }
 
@@ -59,9 +79,8 @@ export function getLogo() {
 }
 
 export function getUserIdFromLocalStorage() {
-  let user = localStorage.getItem('user');
+  const user = getCurrentUser();
   if (!user) return -1;
-  user = JSON.parse(user);
   return user.cah_id || user.id;
 }
 

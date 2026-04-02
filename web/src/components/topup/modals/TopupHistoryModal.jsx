@@ -34,7 +34,10 @@ import {
 import { Coins } from 'lucide-react';
 import { IconSearch } from '@douyinfe/semi-icons';
 import { API, timestamp2string } from '../../../helpers';
-import { isAdmin } from '../../../helpers/utils';
+import {
+  hasAdminAccess,
+  isAdmin,
+} from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 
 const { Text } = Typography;
@@ -66,7 +69,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
   const loadTopups = async (currentPage, currentPageSize) => {
     setLoading(true);
     try {
-      const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
+      const base = hasAdminAccess() ? '/api/user/topup' : '/api/user/topup/self';
       const qs =
         `p=${currentPage}&page_size=${currentPageSize}` +
         (keyword ? `&keyword=${encodeURIComponent(keyword)}` : '');

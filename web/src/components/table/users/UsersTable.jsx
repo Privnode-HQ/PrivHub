@@ -49,6 +49,7 @@ const UsersTable = (usersData) => {
     refresh,
     resetUserPasskey,
     resetUserTwoFA,
+    readOnlyAdmin,
     t,
   } = usersData;
 
@@ -165,6 +166,7 @@ const UsersTable = (usersData) => {
       showForceLogoutConfirm: showForceLogoutUserConfirm,
       showRequirePasswordResetConfirm: showRequirePasswordResetUserConfirm,
       showRequireEmailBindConfirm: showRequireEmailBindUserConfirm,
+      readOnlyAdmin,
     });
   }, [
     t,
@@ -179,6 +181,7 @@ const UsersTable = (usersData) => {
     showForceLogoutUserConfirm,
     showRequirePasswordResetUserConfirm,
     showRequireEmailBindUserConfirm,
+    readOnlyAdmin,
   ]);
 
   // Handle compact mode by removing fixed positioning
