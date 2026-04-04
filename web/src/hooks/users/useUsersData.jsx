@@ -17,14 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { API, showError, showSuccess } from '../../helpers';
+import {
+  API,
+  setUserData,
+  showError,
+  showSuccess,
+  updateAPI,
+} from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+import { UserContext } from '../../context/User';
 
 export const useUsersData = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [, userDispatch] = useContext(UserContext);
   const [compactMode, setCompactMode] = useTableCompactMode('users');
 
   // State management
@@ -42,6 +52,7 @@ export const useUsersData = () => {
   const [editingUser, setEditingUser] = useState({
     id: undefined,
   });
+  const [impersonationLoading, setImpersonationLoading] = useState(false);
 
   // Form initial values
   const formInitValues = {
@@ -220,6 +231,46 @@ export const useUsersData = () => {
     }
   };
 
+  const startImpersonation = async (user, options = {}) => {
+    if (!user?.id) {
+      return false;
+    }
+
+    try {
+      setImpersonationLoading(true);
+      const res = await API.post(`/api/user/${user.id}/impersonation`, {
+        read_only: Boolean(options.readOnly),
+        break_glass: Boolean(options.breakGlass),
+      });
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return false;
+      }
+
+      if (data?.user) {
+        setUserData(data.user);
+        userDispatch({ type: 'login', payload: data.user });
+        updateAPI();
+        showSuccess(
+          options.breakGlass
+            ? t('已进入打破玻璃会话')
+            : t('已进入仿冒用户会话'),
+        );
+        navigate('/console');
+        return true;
+      }
+
+      showSuccess(message || t('访问请求已发送'));
+      return true;
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+      return false;
+    } finally {
+      setImpersonationLoading(false);
+    }
+  };
+
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
@@ -340,6 +391,8 @@ export const useUsersData = () => {
     logoutAllUsers,
     resetUserPasskey,
     resetUserTwoFA,
+    startImpersonation,
+    impersonationLoading,
     handlePageChange,
     handlePageSizeChange,
     handleRow,

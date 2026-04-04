@@ -18,10 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   API,
   copy,
+  formatDateTimeString,
   showError,
   showInfo,
   showSuccess,
@@ -47,14 +48,18 @@ import { useTranslation } from 'react-i18next';
 import UserInfoHeader from './personal/components/UserInfoHeader';
 import AccountManagement from './personal/cards/AccountManagement';
 import NotificationSettings from './personal/cards/NotificationSettings';
+import SupportAccessCard from './personal/cards/SupportAccessCard';
 import EmailBindModal from './personal/modals/EmailBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
 import AccountDeleteModal from './personal/modals/AccountDeleteModal';
 import ChangePasswordModal from './personal/modals/ChangePasswordModal';
+import SecureVerificationModal from '../common/modals/SecureVerificationModal';
+import { useSecureVerification } from '../../hooks/common/useSecureVerification';
 
 const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
   let navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
   const { Text } = Typography;
 
@@ -86,6 +91,12 @@ const PersonalSetting = () => {
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [backToPayAsYouGoLoading, setBackToPayAsYouGoLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [supportAccessState, setSupportAccessState] = useState({
+    break_glass_incidents: [],
+  });
+  const [supportAccessLoading, setSupportAccessLoading] = useState(false);
+  const [approvalRequest, setApprovalRequest] = useState(null);
+  const [approvalRequestLoading, setApprovalRequestLoading] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
     warningThreshold: 100000,
     notificationEmail: '',
@@ -99,6 +110,16 @@ const PersonalSetting = () => {
   const requiresEmailBind = requiredActions.includes('bind_email');
   const requiresPasswordChange = requiredActions.includes('change_password');
   const hasRequiredActions = requiredActions.length > 0;
+  const {
+    isModalVisible: isSecureVerificationVisible,
+    verificationMethods,
+    verificationState,
+    executeVerification,
+    cancelVerification,
+    setVerificationCode,
+    switchVerificationMethod,
+    withVerification,
+  } = useSecureVerification();
 
   useEffect(() => {
     let saved = localStorage.getItem('status');
@@ -135,11 +156,21 @@ const PersonalSetting = () => {
     })();
 
     getUserData();
+    loadImpersonationHistory();
 
     isPasskeySupported()
       .then(setPasskeySupported)
       .catch(() => setPasskeySupported(false));
   }, []);
+
+  useEffect(() => {
+    const token = searchParams.get('support_access_token');
+    if (!token) {
+      setApprovalRequest(null);
+      return;
+    }
+    loadApprovalRequest(token);
+  }, [searchParams]);
 
   useEffect(() => {
     let countdownInterval = null;
@@ -295,6 +326,181 @@ const PersonalSetting = () => {
       await loadPasskeyStatus();
     } else {
       showError(message);
+    }
+  };
+
+  const loadImpersonationHistory = async () => {
+    try {
+      const res = await API.get('/api/user/impersonation/history');
+      const { success, message, data } = res.data;
+      if (success) {
+        setSupportAccessState(data || { break_glass_incidents: [] });
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(t('加载客服访问记录失败'));
+    }
+  };
+
+  const clearSupportAccessToken = () => {
+    if (!searchParams.get('support_access_token')) {
+      return;
+    }
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete('support_access_token');
+    setSearchParams(nextSearchParams, { replace: true });
+  };
+
+  const loadApprovalRequest = async (token) => {
+    if (!token) {
+      setApprovalRequest(null);
+      return;
+    }
+
+    try {
+      const res = await API.get(
+        `/api/user/impersonation/request/${encodeURIComponent(token)}`,
+      );
+      const { success, message, data } = res.data;
+      if (success) {
+        setApprovalRequest({
+          ...data,
+          token,
+        });
+      } else {
+        showError(message);
+        clearSupportAccessToken();
+      }
+    } catch (error) {
+      showError(t('该访问请求不存在或已失效'));
+      clearSupportAccessToken();
+    }
+  };
+
+  const handleApproveAccessRequest = async () => {
+    if (!approvalRequest?.token) {
+      return;
+    }
+    try {
+      setApprovalRequestLoading(true);
+      const approveRequestApiCall = async () => {
+        const res = await API.post(
+          `/api/user/impersonation/request/${encodeURIComponent(
+            approvalRequest.token,
+          )}/approve`,
+        );
+        if (!res.data.success) {
+          throw new Error(res.data.message || t('操作失败，请重试'));
+        }
+        showSuccess(res.data.message || t('访问请求已批准'));
+        setApprovalRequest((prev) =>
+          prev
+            ? {
+                ...prev,
+                state: 'approved',
+              }
+            : prev,
+        );
+        clearSupportAccessToken();
+        await loadImpersonationHistory();
+        await getUserData();
+        return res;
+      };
+      const result = await withVerification(approveRequestApiCall, {
+        title: t('批准客服访问'),
+        description: approvalRequest.requested_read_only
+          ? t(
+              '该请求为只读会话。若你已启用 2FA 或 Passkey，批准前需要先完成一次安全验证。',
+            )
+          : t(
+              '该请求允许客服代表你执行操作。若你已启用 2FA 或 Passkey，批准前需要先完成一次安全验证。',
+            ),
+      });
+
+      if (!result) {
+        return;
+      }
+    } finally {
+      setApprovalRequestLoading(false);
+    }
+  };
+
+  const handleRejectAccessRequest = async () => {
+    if (!approvalRequest?.token) {
+      return;
+    }
+
+    try {
+      setApprovalRequestLoading(true);
+      const res = await API.post(
+        `/api/user/impersonation/request/${encodeURIComponent(
+          approvalRequest.token,
+        )}/reject`,
+      );
+      if (res.data.success) {
+        showSuccess(res.data.message || t('访问请求已拒绝'));
+        setApprovalRequest((prev) =>
+          prev
+            ? {
+                ...prev,
+                state: 'rejected',
+              }
+            : prev,
+        );
+        clearSupportAccessToken();
+        await loadImpersonationHistory();
+      } else {
+        showError(res.data.message);
+      }
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+    } finally {
+      setApprovalRequestLoading(false);
+    }
+  };
+
+  const handleOpenSupportAccess = async () => {
+    try {
+      setSupportAccessLoading(true);
+      const openSupportAccessApiCall = async () => {
+        const res = await API.post('/api/user/impersonation/open_access');
+        if (!res.data.success) {
+          throw new Error(res.data.message || t('操作失败，请重试'));
+        }
+        showSuccess(res.data.message || t('已开放一次客服访问'));
+        await loadImpersonationHistory();
+        return res;
+      };
+      const result = await withVerification(openSupportAccessApiCall, {
+        title: t('开放一次客服访问'),
+        description: t(
+          '该权限仅可被管理员激活一次，且必须在 24 小时内开始使用。若你已启用 2FA 或 Passkey，需要先完成一次安全验证。',
+        ),
+      });
+
+      if (!result) {
+        return;
+      }
+    } finally {
+      setSupportAccessLoading(false);
+    }
+  };
+
+  const handleCloseSupportAccess = async () => {
+    try {
+      setSupportAccessLoading(true);
+      const res = await API.delete('/api/user/impersonation/open_access');
+      if (res.data.success) {
+        showSuccess(res.data.message || t('未使用的客服访问已关闭'));
+        await loadImpersonationHistory();
+      } else {
+        showError(res.data.message);
+      }
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+    } finally {
+      setSupportAccessLoading(false);
     }
   };
 
@@ -657,10 +863,116 @@ const PersonalSetting = () => {
               saveNotificationSettings={saveNotificationSettings}
             />
           </div>
+
+          <SupportAccessCard
+            t={t}
+            supportAccessState={supportAccessState}
+            supportAccessLoading={supportAccessLoading}
+            onOpenSupportAccess={handleOpenSupportAccess}
+            onCloseSupportAccess={handleCloseSupportAccess}
+          />
         </div>
       </div>
 
       {/* 模态框组件 */}
+      <Modal
+        title={t('处理客服访问请求')}
+        visible={Boolean(approvalRequest)}
+        onCancel={() => {
+          setApprovalRequest(null);
+          clearSupportAccessToken();
+        }}
+        footer={
+          <div className='flex justify-end gap-2'>
+            <Button
+              onClick={() => {
+                setApprovalRequest(null);
+                clearSupportAccessToken();
+              }}
+            >
+              {t('稍后处理')}
+            </Button>
+            <Button
+              theme='light'
+              type='danger'
+              loading={approvalRequestLoading}
+              disabled={approvalRequest?.state !== 'pending'}
+              onClick={handleRejectAccessRequest}
+            >
+              {t('拒绝')}
+            </Button>
+            <Button
+              type='primary'
+              loading={approvalRequestLoading}
+              disabled={approvalRequest?.state !== 'pending'}
+              onClick={handleApproveAccessRequest}
+            >
+              {t('批准访问')}
+            </Button>
+          </div>
+        }
+        width={640}
+      >
+        {approvalRequest ? (
+          <div className='flex flex-col gap-4'>
+            <Banner
+              type={approvalRequest.requested_read_only ? 'info' : 'warning'}
+              title={
+                approvalRequest.requested_read_only
+                  ? t('这是一个只读会话请求')
+                  : t('这是一个标准会话请求')
+              }
+              description={
+                approvalRequest.requested_read_only
+                  ? t('批准后，客服只能查看你的账户数据，不能代表你执行操作。')
+                  : t('批准后，客服可以像你本人一样查看并执行操作。')
+              }
+            />
+
+            <div className='rounded-2xl border border-semi-color-border p-4'>
+              <div className='flex flex-col gap-2'>
+                <div>
+                  <Text strong>{t('请求人')}</Text>
+                  <div className='mt-1'>
+                    {approvalRequest.operator_username || '-'}
+                  </div>
+                </div>
+                <div>
+                  <Text strong>{t('请求时间')}</Text>
+                  <div className='mt-1'>
+                    {approvalRequest.requested_at
+                      ? formatDateTimeString(
+                          new Date(approvalRequest.requested_at),
+                        )
+                      : '-'}
+                  </div>
+                </div>
+                <div>
+                  <Text strong>{t('使用限制')}</Text>
+                  <div className='mt-1 text-sm text-semi-color-text-2'>
+                    {t(
+                      '批准后仅可激活一次，管理员必须在 24 小时内开始使用；激活后的会话会在 24 小时后失效。',
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Text strong>{t('当前状态')}</Text>
+                  <div className='mt-1'>
+                    {approvalRequest.state === 'pending'
+                      ? t('待处理')
+                      : approvalRequest.state === 'approved'
+                        ? t('已批准')
+                        : approvalRequest.state === 'rejected'
+                          ? t('已拒绝')
+                          : approvalRequest.state}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
       <EmailBindModal
         t={t}
         showEmailBindModal={showEmailBindModal}
@@ -710,6 +1022,18 @@ const PersonalSetting = () => {
         turnstileEnabled={turnstileEnabled}
         turnstileSiteKey={turnstileSiteKey}
         setTurnstileToken={setTurnstileToken}
+      />
+
+      <SecureVerificationModal
+        visible={isSecureVerificationVisible}
+        verificationMethods={verificationMethods}
+        verificationState={verificationState}
+        onVerify={executeVerification}
+        onCancel={cancelVerification}
+        onCodeChange={setVerificationCode}
+        onMethodSwitch={switchVerificationMethod}
+        title={verificationState.title || t('安全验证')}
+        description={verificationState.description}
       />
     </div>
   );

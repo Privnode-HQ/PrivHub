@@ -31,6 +31,7 @@ import EnableDisableUserModal from './modals/EnableDisableUserModal';
 import DeleteUserModal from './modals/DeleteUserModal';
 import ResetPasskeyModal from './modals/ResetPasskeyModal';
 import ResetTwoFAModal from './modals/ResetTwoFAModal';
+import ImpersonationUserModal from './modals/ImpersonationUserModal';
 
 const UsersTable = (usersData) => {
   const {
@@ -49,6 +50,8 @@ const UsersTable = (usersData) => {
     refresh,
     resetUserPasskey,
     resetUserTwoFA,
+    startImpersonation,
+    impersonationLoading,
     readOnlyAdmin,
     t,
   } = usersData;
@@ -62,6 +65,7 @@ const UsersTable = (usersData) => {
   const [enableDisableAction, setEnableDisableAction] = useState('');
   const [showResetPasskeyModal, setShowResetPasskeyModal] = useState(false);
   const [showResetTwoFAModal, setShowResetTwoFAModal] = useState(false);
+  const [showImpersonationModal, setShowImpersonationModal] = useState(false);
 
   // Modal handlers
   const showPromoteUserModal = (user) => {
@@ -93,6 +97,11 @@ const UsersTable = (usersData) => {
   const showResetTwoFAUserModal = (user) => {
     setModalUser(user);
     setShowResetTwoFAModal(true);
+  };
+
+  const showImpersonationUserModal = (user) => {
+    setModalUser(user);
+    setShowImpersonationModal(true);
   };
 
   const showForceLogoutUserConfirm = (user) => {
@@ -163,6 +172,7 @@ const UsersTable = (usersData) => {
       showDeleteModal: showDeleteUserModal,
       showResetPasskeyModal: showResetPasskeyUserModal,
       showResetTwoFAModal: showResetTwoFAUserModal,
+      showImpersonationModal: showImpersonationUserModal,
       showForceLogoutConfirm: showForceLogoutUserConfirm,
       showRequirePasswordResetConfirm: showRequirePasswordResetUserConfirm,
       showRequireEmailBindConfirm: showRequireEmailBindUserConfirm,
@@ -178,6 +188,7 @@ const UsersTable = (usersData) => {
     showDeleteUserModal,
     showResetPasskeyUserModal,
     showResetTwoFAUserModal,
+    showImpersonationUserModal,
     showForceLogoutUserConfirm,
     showRequirePasswordResetUserConfirm,
     showRequireEmailBindUserConfirm,
@@ -279,6 +290,20 @@ const UsersTable = (usersData) => {
         onCancel={() => setShowResetTwoFAModal(false)}
         onConfirm={handleResetTwoFAConfirm}
         user={modalUser}
+        t={t}
+      />
+
+      <ImpersonationUserModal
+        visible={showImpersonationModal}
+        onCancel={() => setShowImpersonationModal(false)}
+        onSubmit={async (options) => {
+          const success = await startImpersonation(modalUser, options);
+          if (success) {
+            setShowImpersonationModal(false);
+          }
+        }}
+        user={modalUser}
+        loading={impersonationLoading}
         t={t}
       />
     </>

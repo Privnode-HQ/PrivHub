@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -111,6 +112,8 @@ func Login(c *gin.Context) {
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
 	session := sessions.Default(c)
+	service.ClearImpersonationSession(session)
+	service.ClearImpersonationHeaderAlias(session)
 	session.Set("id", user.Id)
 	session.Set("username", user.Username)
 	session.Set("cah_id", user.CAHID)
@@ -136,6 +139,7 @@ func setupLogin(user *model.User, c *gin.Context) {
 
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
+	_, _ = service.StopCurrentImpersonation(session, false)
 	session.Clear()
 	err := session.Save()
 	if err != nil {
@@ -437,24 +441,9 @@ func GetAffCode(c *gin.Context) {
 	return
 }
 
-func GetSelf(c *gin.Context) {
-	id := c.GetInt("id")
-	userRole := c.GetInt("role")
-	user, err := model.GetUserById(id, false)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	// Hide admin remarks: set to empty to trigger omitempty tag, ensuring the remark field is not included in JSON returned to regular users
-	user.Remark = ""
-
-	// 计算用户权限信息
+func buildSelfResponseData(user *model.User, userRole int) map[string]interface{} {
 	permissions := calculateUserPermissions(userRole)
-
-	// 获取用户设置并提取sidebar_modules
 	userSetting := user.GetSetting()
-
-	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
 		"cah_id":                        user.CAHID,
 		"username":                      user.Username,
@@ -491,12 +480,78 @@ func GetSelf(c *gin.Context) {
 			responseData["inviter_cah_id"] = inviterCAHID
 		}
 	}
+	return responseData
+}
+
+func attachSessionStateToSelfResponse(session sessions.Session, user *model.User, responseData map[string]interface{}) {
+	if session == nil || user == nil || responseData == nil {
+		return
+	}
+
+	impersonationState := service.GetImpersonationSessionState(session)
+	if impersonationState.Active {
+		responseData["impersonation"] = gin.H{
+			"active":            true,
+			"grant_id":          impersonationState.GrantID,
+			"read_only":         impersonationState.ReadOnly,
+			"break_glass":       impersonationState.BreakGlass,
+			"started_at":        impersonationState.StartedAt,
+			"expires_at":        impersonationState.ExpiresAt,
+			"operator_id":       impersonationState.OriginalID,
+			"operator_username": impersonationState.OriginalUsername,
+			"operator_cah_id":   impersonationState.OriginalCAHID,
+		}
+		return
+	}
+
+	grant, err := model.GetLatestBreakGlassAlertGrant(user.Id)
+	if err != nil || grant == nil {
+		return
+	}
+	now := time.Now()
+	if model.ExpireImpersonationGrantIfNeeded(grant, now) {
+		_ = model.SaveImpersonationGrant(grant)
+	}
+	responseData["break_glass_alert"] = gin.H{
+		"grant_id":          grant.Id,
+		"active":            grant.EndedAt == nil,
+		"operator_id":       grant.OperatorId,
+		"operator_username": grant.OperatorUsername,
+		"started_at": func() *time.Time {
+			if grant.ActivatedAt != nil {
+				return grant.ActivatedAt
+			}
+			return &grant.RequestedAt
+		}(),
+		"ended_at": grant.EndedAt,
+	}
+}
+
+func respondWithCurrentUser(c *gin.Context, userID int, userRole int) {
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	user.Remark = ""
+	responseData := buildSelfResponseData(user, userRole)
+	session := sessions.Default(c)
+	attachSessionStateToSelfResponse(session, user, responseData)
+	sessionState := service.GetImpersonationSessionState(session)
+	if !sessionState.Active && (sessionState.HeaderAliasID != 0 || sessionState.HeaderAliasCAHID != "") {
+		service.ClearImpersonationHeaderAlias(session)
+		_ = session.Save()
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data":    responseData,
 	})
+}
+
+func GetSelf(c *gin.Context) {
+	respondWithCurrentUser(c, c.GetInt("id"), c.GetInt("role"))
 	return
 }
 

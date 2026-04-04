@@ -242,6 +242,7 @@ const renderOperations = (
     showDeleteModal,
     showResetPasskeyModal,
     showResetTwoFAModal,
+    showImpersonationModal,
     showForceLogoutConfirm,
     showRequirePasswordResetConfirm,
     showRequireEmailBindConfirm,
@@ -256,6 +257,14 @@ const renderOperations = (
   }
 
   const moreMenu = [
+    {
+      node: 'item',
+      name: t('仿冒访问'),
+      onClick: () => showImpersonationModal(record),
+    },
+    {
+      node: 'divider',
+    },
     {
       node: 'item',
       name: t('强制退出登录'),

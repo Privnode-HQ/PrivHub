@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -105,6 +106,7 @@ func authHelper(c *gin.Context, minRole int) {
 	status := session.Get("status")
 	useAccessToken := false
 	var userCache *model.UserBase
+	impersonationState := service.GetImpersonationSessionState(session)
 	if username == nil {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
@@ -142,6 +144,15 @@ func authHelper(c *gin.Context, minRole int) {
 			return
 		}
 	}
+	if !useAccessToken && impersonationState.Active && impersonationState.HasSessionExpired(time.Now()) && !service.IsImpersonationStopPath(c.Request.URL.Path) {
+		_, _ = service.StopCurrentImpersonation(session, true)
+		username = session.Get("username")
+		cahID = session.Get("cah_id")
+		role = session.Get("role")
+		id = session.Get("id")
+		status = session.Get("status")
+		impersonationState = service.GetImpersonationSessionState(session)
+	}
 	// get header New-Api-User
 	apiUserIdStr := c.Request.Header.Get("New-Api-User")
 	if apiUserIdStr == "" {
@@ -166,7 +177,7 @@ func authHelper(c *gin.Context, minRole int) {
 		}
 		cahID = userCache.CAHID
 	}
-	if !matchesUserIdentifier(apiUserIdStr, id.(int), fmt.Sprintf("%v", cahID)) {
+	if !matchesUserIdentifier(apiUserIdStr, id.(int), fmt.Sprintf("%v", cahID)) && !service.MatchesImpersonationHeaderAlias(session, apiUserIdStr) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": "无权进行此操作，New-Api-User 与登录用户不匹配",
@@ -217,7 +228,7 @@ func authHelper(c *gin.Context, minRole int) {
 			c.Abort()
 			return
 		}
-		if len(userCache.GetRequiredActions()) > 0 && !isPathAllowedWhenUserActionRequired(c.Request.URL.Path) {
+		if len(userCache.GetRequiredActions()) > 0 && !impersonationState.Active && !isPathAllowedWhenUserActionRequired(c.Request.URL.Path) {
 			abortWithUserActionRequired(c, userCache)
 			return
 		}
@@ -229,6 +240,12 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("group", session.Get("group"))
 	c.Set("user_group", session.Get("group"))
 	c.Set("use_access_token", useAccessToken)
+	c.Set("impersonation_active", impersonationState.Active)
+	c.Set("impersonation_grant_id", impersonationState.GrantID)
+	c.Set("impersonation_read_only", impersonationState.ReadOnly)
+	c.Set("impersonation_break_glass", impersonationState.BreakGlass)
+	c.Set("impersonation_original_id", impersonationState.OriginalID)
+	c.Set("impersonation_original_username", impersonationState.OriginalUsername)
 
 	//userCache, err := model.GetUserCache(id.(int))
 	//if err != nil {

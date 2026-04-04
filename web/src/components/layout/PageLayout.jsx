@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import HeaderBar from './headerbar';
-import { Layout } from '@douyinfe/semi-ui';
+import { Banner, Button, Layout } from '@douyinfe/semi-ui';
 import SiderBar from './SiderBar';
 import App from '../../App';
 import FooterBar from './Footer';
@@ -31,22 +31,26 @@ import {
   API,
   getLogo,
   getSystemName,
+  setUserData,
   showError,
+  showSuccess,
   setStatusData,
+  updateAPI,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 const { Sider, Content, Header } = Layout;
 
 const PageLayout = () => {
-  const [, userDispatch] = useContext(UserContext);
+  const [userState, userDispatch] = useContext(UserContext);
   const [, statusDispatch] = useContext(StatusContext);
   const isMobile = useIsMobile();
   const [collapsed, , setCollapsed] = useSidebarCollapsed();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { i18n } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const cardProPages = [
     '/console/channel',
@@ -88,6 +92,30 @@ const PageLayout = () => {
     }
   };
 
+  const refreshUserFromServer = async (skipErrorHandler = false) => {
+    const localUser = localStorage.getItem('user');
+    if (!localUser) {
+      return;
+    }
+
+    try {
+      const res = await API.get('/api/user/self', {
+        disableDuplicate: true,
+        skipErrorHandler,
+      });
+      const { success, data } = res.data;
+      if (success && data) {
+        userDispatch({ type: 'login', payload: data });
+        setUserData(data);
+        updateAPI();
+      }
+    } catch (error) {
+      if (!skipErrorHandler) {
+        showError(error);
+      }
+    }
+  };
+
   const loadStatus = async () => {
     try {
       const res = await API.get('/api/status');
@@ -106,6 +134,7 @@ const PageLayout = () => {
   useEffect(() => {
     loadUser();
     loadStatus().catch(console.error);
+    refreshUserFromServer(true).catch(() => null);
     let systemName = getSystemName();
     if (systemName) {
       document.title = systemName;
@@ -122,6 +151,36 @@ const PageLayout = () => {
       i18n.changeLanguage(savedLang);
     }
   }, [i18n]);
+
+  useEffect(() => {
+    const user = localStorage.getItem('user');
+    if (!user) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      refreshUserFromServer(true).catch(() => null);
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, [location.pathname]);
+
+  const handleStopImpersonation = async () => {
+    try {
+      const res = await API.post('/api/user/impersonation/stop');
+      if (res.data.success && res.data.data?.user) {
+        userDispatch({ type: 'login', payload: res.data.data.user });
+        setUserData(res.data.data.user);
+        updateAPI();
+        showSuccess('已返回原始管理员会话');
+        navigate('/console/user');
+      } else {
+        showError(res.data.message || '无法返回原始会话');
+      }
+    } catch (error) {
+      showError(error);
+    }
+  };
 
   return (
     <Layout
@@ -196,6 +255,60 @@ const PageLayout = () => {
               position: 'relative',
             }}
           >
+            {userState?.user?.impersonation?.active ? (
+              <div className='mt-16 px-2'>
+                <Banner
+                  type='warning'
+                  className='!rounded-2xl'
+                  title='当前正在仿冒用户会话'
+                  description={
+                    <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+                      <div>
+                        {userState.user.impersonation.operator_username ||
+                          '管理员'}{' '}
+                        正在以当前账户身份访问系统。
+                        {userState.user.impersonation.read_only
+                          ? ' 当前为只读会话。'
+                          : ' 当前为标准会话。'}
+                      </div>
+                      <Button type='primary' onClick={handleStopImpersonation}>
+                        返回原始会话
+                      </Button>
+                    </div>
+                  }
+                />
+              </div>
+            ) : null}
+
+            {!userState?.user?.impersonation?.active &&
+            userState?.user?.break_glass_alert ? (
+              <div className='mt-16 px-2'>
+                <Banner
+                  type='danger'
+                  className='!rounded-2xl'
+                  title='检测到打破玻璃访问记录'
+                  description={
+                    <div className='flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+                      <div>
+                        {userState.user.break_glass_alert.operator_username ||
+                          '客服人员'}{' '}
+                        {userState.user.break_glass_alert.active
+                          ? '正在通过打破玻璃方式访问你的账户。'
+                          : '最近通过打破玻璃方式访问过你的账户。'}
+                      </div>
+                      <Button
+                        theme='solid'
+                        type='danger'
+                        onClick={() => navigate('/console/personal')}
+                      >
+                        查看详情
+                      </Button>
+                    </div>
+                  }
+                />
+              </div>
+            ) : null}
+
             <App />
           </Content>
           {!shouldHideFooter && (

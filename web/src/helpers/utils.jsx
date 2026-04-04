@@ -166,6 +166,18 @@ export function showError(error) {
         return;
       }
       switch (error.response.status) {
+        case 403:
+          if (error.response?.data?.code === 'READ_ONLY_IMPERSONATION') {
+            Toast.warning(
+              error.response?.data?.message ||
+                '当前为只读仿冒会话，无法执行写操作',
+            );
+            break;
+          }
+          Toast.error(
+            '错误：' + (error.response?.data?.message || error.message),
+          );
+          break;
         case 401:
           // 清除用户状态
           localStorage.removeItem('user');

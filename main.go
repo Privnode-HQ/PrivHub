@@ -155,6 +155,8 @@ func main() {
 		SameSite: http.SameSiteLaxMode, // 改为 Lax 模式以支持 SSO 跨站链接跳转
 	})
 	server.Use(sessions.Sessions("session", store))
+	server.Use(middleware.ReadOnlyImpersonationGuard())
+	server.Use(middleware.ImpersonationAudit())
 
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
