@@ -43,6 +43,7 @@ import TopupHistoryModal from './modals/TopupHistoryModal';
 const emptyTopupQuote = {
   available_coupons: [],
   currency_code: '',
+  supported_currency_codes: [],
   original_amount: 0,
   base_payable_amount: 0,
   platform_discount_amount: 0,
@@ -100,6 +101,8 @@ const TopUp = () => {
   const [topupQuote, setTopupQuote] = useState(emptyTopupQuote);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [selectedCouponId, setSelectedCouponId] = useState(0);
+  const [selectedStripeCurrencyCode, setSelectedStripeCurrencyCode] =
+    useState('');
 
   const affFetchedRef = useRef(false);
 
@@ -191,6 +194,7 @@ const TopUp = () => {
     amountValue,
     couponId = 0,
     product = null,
+    currencyCode = '',
   }) => {
     if (!paymentMethod) return null;
 
@@ -210,6 +214,17 @@ const TopUp = () => {
       payload.coupon_id = couponId;
     }
 
+    if (paymentMethod === 'stripe') {
+      const resolvedCurrencyCode = String(
+        currencyCode || selectedStripeCurrencyCode || '',
+      )
+        .trim()
+        .toUpperCase();
+      if (resolvedCurrencyCode) {
+        payload.currency_code = resolvedCurrencyCode;
+      }
+    }
+
     setQuoteLoading(true);
     try {
       const res = await API.post('/api/user/topup/quote', payload);
@@ -223,8 +238,16 @@ const TopUp = () => {
         ...emptyTopupQuote,
         ...data,
         available_coupons: data.available_coupons || [],
+        supported_currency_codes: data.supported_currency_codes || [],
       });
       setSelectedCouponId(data.selected_coupon_id || 0);
+      if (paymentMethod === 'stripe') {
+        setSelectedStripeCurrencyCode(
+          String(data.currency_code || '')
+            .trim()
+            .toUpperCase(),
+        );
+      }
       return data;
     } catch (error) {
       showError(error.message);
@@ -252,7 +275,7 @@ const TopUp = () => {
     resetTopupQuote();
     try {
       if (payment === 'stripe') {
-        await getStripeAmount();
+        await getStripeAmount(undefined, selectedStripeCurrencyCode);
       } else {
         await getAmount();
       }
@@ -280,7 +303,7 @@ const TopUp = () => {
     if (payWay === 'stripe') {
       // Stripe 支付处理
       if (amount === 0) {
-        await getStripeAmount();
+        await getStripeAmount(undefined, selectedStripeCurrencyCode);
       }
     } else {
       // 普通支付处理
@@ -311,6 +334,8 @@ const TopUp = () => {
         res = await API.post('/api/user/stripe/pay', {
           amount: parseInt(topUpCount),
           payment_method: 'stripe',
+          currency_code:
+            selectedStripeCurrencyCode || topupQuote.currency_code || undefined,
           coupon_id: selectedCouponId || undefined,
         });
       } else {
@@ -652,7 +677,7 @@ const TopUp = () => {
     setAmountLoading(false);
   };
 
-  const getStripeAmount = async (value) => {
+  const getStripeAmount = async (value, currencyCode = '') => {
     if (value === undefined) {
       value = topUpCount;
     }
@@ -660,6 +685,7 @@ const TopUp = () => {
     try {
       const res = await API.post('/api/user/stripe/amount', {
         amount: parseFloat(value),
+        currency_code: currencyCode || selectedStripeCurrencyCode || undefined,
       });
       if (res !== undefined) {
         const { message, data } = res.data;
@@ -710,6 +736,10 @@ const TopUp = () => {
       amountValue: topUpCount,
       product: selectedCreemProduct,
       couponId: nextCouponId,
+      currencyCode:
+        payWay === 'stripe'
+          ? selectedStripeCurrencyCode || topupQuote.currency_code
+          : '',
     });
   };
 
@@ -773,6 +803,34 @@ const TopUp = () => {
         payWay={payWay}
         payMethods={payMethods}
         currencyCode={topupQuote.currency_code || getDefaultTopupCurrencyCode()}
+        supportedCurrencyCodes={topupQuote.supported_currency_codes || []}
+        selectedCurrencyCode={
+          selectedStripeCurrencyCode ||
+          topupQuote.currency_code ||
+          getDefaultTopupCurrencyCode()
+        }
+        onCurrencyChange={async (currencyCode) => {
+          const nextCurrencyCode = String(currencyCode || '')
+            .trim()
+            .toUpperCase();
+          if (
+            !nextCurrencyCode ||
+            nextCurrencyCode === selectedStripeCurrencyCode
+          ) {
+            return;
+          }
+          const previousCurrencyCode = selectedStripeCurrencyCode;
+          setSelectedStripeCurrencyCode(nextCurrencyCode);
+          const quote = await loadTopupQuote({
+            paymentMethod: 'stripe',
+            amountValue: topUpCount,
+            couponId: selectedCouponId,
+            currencyCode: nextCurrencyCode,
+          });
+          if (!quote) {
+            setSelectedStripeCurrencyCode(previousCurrencyCode);
+          }
+        }}
         originalAmount={topupQuote.original_amount || amount}
         platformDiscountAmount={topupQuote.platform_discount_amount || 0}
         couponDiscountAmount={topupQuote.coupon_discount_amount || 0}

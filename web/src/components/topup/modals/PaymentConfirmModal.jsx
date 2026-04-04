@@ -37,6 +37,9 @@ const PaymentConfirmModal = ({
   payWay,
   payMethods,
   currencyCode,
+  supportedCurrencyCodes,
+  selectedCurrencyCode,
+  onCurrencyChange,
   originalAmount,
   platformDiscountAmount,
   couponDiscountAmount,
@@ -58,6 +61,8 @@ const PaymentConfirmModal = ({
     finalPayableAmount && finalPayableAmount > 0 ? finalPayableAmount : 0;
   const hasAnyDiscount =
     normalizedPlatformDiscount > 0 || normalizedCouponDiscount > 0;
+  const showStripeCurrencySelector =
+    payWay === 'stripe' && (supportedCurrencyCodes?.length || 0) > 1;
   return (
     <Modal
       title={
@@ -96,10 +101,38 @@ const PaymentConfirmModal = ({
                 <Skeleton.Title style={{ width: '60px', height: '16px' }} />
               ) : (
                 <Text strong className='font-bold' style={{ color: 'red' }}>
-                  {formatCurrencyAmountByCode(normalizedFinalAmount, currencyCode)}
+                  {formatCurrencyAmountByCode(
+                    normalizedFinalAmount,
+                    currencyCode,
+                  )}
                 </Text>
               )}
             </div>
+            {showStripeCurrencySelector && (
+              <div className='space-y-2'>
+                <Text strong className='text-slate-700 dark:text-slate-200'>
+                  {t('结算货币')}：
+                </Text>
+                <Select
+                  value={selectedCurrencyCode || currencyCode}
+                  onChange={onCurrencyChange}
+                  size='small'
+                  style={{ width: '100%' }}
+                  disabled={amountLoading || confirmLoading}
+                >
+                  {(supportedCurrencyCodes || []).map(
+                    (supportedCurrencyCode) => (
+                      <Select.Option
+                        value={supportedCurrencyCode}
+                        key={supportedCurrencyCode}
+                      >
+                        {supportedCurrencyCode}
+                      </Select.Option>
+                    ),
+                  )}
+                </Select>
+              </div>
+            )}
             {availableCoupons?.length > 0 && (
               <div className='space-y-2'>
                 <Text strong className='text-slate-700 dark:text-slate-200'>
@@ -111,9 +144,7 @@ const PaymentConfirmModal = ({
                   size='small'
                   style={{ width: '100%' }}
                 >
-                  <Select.Option value={0}>
-                    {t('不使用优惠券')}
-                  </Select.Option>
+                  <Select.Option value={0}>{t('不使用优惠券')}</Select.Option>
                   {availableCoupons.map((coupon) => (
                     <Select.Option value={coupon.id} key={coupon.id}>
                       {`${coupon.name} (-${formatCurrencyAmountByCode(
@@ -135,7 +166,10 @@ const PaymentConfirmModal = ({
                     {t('原价')}：
                   </Text>
                   <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {formatCurrencyAmountByCode(normalizedOriginalAmount, currencyCode)}
+                    {formatCurrencyAmountByCode(
+                      normalizedOriginalAmount,
+                      currencyCode,
+                    )}
                   </Text>
                 </div>
                 {normalizedPlatformDiscount > 0 && (

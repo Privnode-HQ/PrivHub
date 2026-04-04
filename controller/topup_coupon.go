@@ -35,6 +35,7 @@ type TopUpQuoteRequest struct {
 	PaymentMethod string `json:"payment_method"`
 	Amount        int64  `json:"amount"`
 	ProductId     string `json:"product_id"`
+	CurrencyCode  string `json:"currency_code"`
 	CouponId      int    `json:"coupon_id"`
 }
 
@@ -54,6 +55,7 @@ type TopUpQuoteData struct {
 	ProductName            string             `json:"product_name,omitempty"`
 	ProductQuota           int64              `json:"product_quota,omitempty"`
 	CurrencyCode           string             `json:"currency_code,omitempty"`
+	SupportedCurrencyCodes []string           `json:"supported_currency_codes,omitempty"`
 	OriginalAmount         float64            `json:"original_amount"`
 	BasePayableAmount      float64            `json:"base_payable_amount"`
 	PlatformDiscountAmount float64            `json:"platform_discount_amount"`
@@ -291,7 +293,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		if req.Amount < getStripeMinTopup() {
 			return nil, fmt.Errorf("充值数量不能小于 %d", getStripeMinTopup())
 		}
-		stripePriceInfo, priceErr := getStripePriceInfo()
+		stripePriceInfo, priceErr := getStripePriceInfo(req.CurrencyCode)
 		if priceErr != nil {
 			return nil, priceErr
 		}
@@ -300,9 +302,10 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 			return nil, err
 		}
 		quote.CurrencyCode = model.NormalizeTopUpCouponCurrencyCode(string(stripePriceInfo.Currency))
+		quote.SupportedCurrencyCodes = stripePriceInfo.SupportedCurrencyCodes
 		platformDiscount = getTopupDiscountAmount(req.Amount)
 		discountedBasePayable = applyTopupDiscount(originalAmount, req.Amount)
-		stripeMinPayMoney, minErr := getStripePayMoney(getStripeMinTopup())
+		stripeMinPayMoney, minErr := getStripePayMoneyWithPrice(stripePriceInfo, getStripeMinTopup())
 		if minErr != nil {
 			return nil, minErr
 		}

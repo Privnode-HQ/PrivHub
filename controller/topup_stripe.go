@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ var stripeAdaptor = &StripeAdaptor{}
 type StripePayRequest struct {
 	Amount        int64  `json:"amount"`
 	PaymentMethod string `json:"payment_method"`
+	CurrencyCode  string `json:"currency_code"`
 	CouponId      int    `json:"coupon_id"`
 }
 
@@ -46,6 +48,14 @@ type stripeUserCouponContext struct {
 	Username       string
 	UserCouponID   int
 	DiscountAmount decimal.Decimal
+}
+
+type stripePriceContext struct {
+	ID                     string
+	DefaultCurrency        stripe.Currency
+	Currency               stripe.Currency
+	UnitAmount             int64
+	SupportedCurrencyCodes []string
 }
 
 func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
@@ -62,6 +72,7 @@ func (*StripeAdaptor) RequestAmount(c *gin.Context, req *StripePayRequest) {
 	quote, err := buildTopUpQuote(user, TopUpQuoteRequest{
 		PaymentMethod: PaymentMethodStripe,
 		Amount:        req.Amount,
+		CurrencyCode:  req.CurrencyCode,
 		CouponId:      req.CouponId,
 	})
 	if err != nil {
@@ -95,6 +106,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	quote, err := buildTopUpQuote(user, TopUpQuoteRequest{
 		PaymentMethod: PaymentMethodStripe,
 		Amount:        req.Amount,
+		CurrencyCode:  req.CurrencyCode,
 		CouponId:      req.CouponId,
 	})
 	if err != nil {
@@ -140,6 +152,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		user.StripeCustomer,
 		user.Email,
 		checkoutQuantity,
+		quote.CurrencyCode,
 		discountRule,
 		userCoupon,
 	)
@@ -316,10 +329,11 @@ func genStripeLink(
 	customerId string,
 	email string,
 	quantity int64,
+	currencyCode string,
 	discountRule operation_setting.AmountDiscountRule,
 	userCoupon *stripeUserCouponContext,
 ) (string, string, error) {
-	priceInfo, err := getStripePriceInfo()
+	priceInfo, err := getStripePriceInfo(currencyCode)
 	if err != nil {
 		return "", "", err
 	}
@@ -332,7 +346,7 @@ func genStripeLink(
 		}
 		appliedCouponID = createdCoupon.ID
 		temporaryCouponID = createdCoupon.ID
-	} else if discountRule.DiscountAmount > 0 && discountRule.CouponID != "" {
+	} else if discountRule.DiscountAmount > 0 && discountRule.CouponID != "" && priceInfo.Currency == priceInfo.DefaultCurrency {
 		appliedCouponID = discountRule.CouponID
 	} else if discountRule.DiscountAmount > 0 {
 		createdCoupon, createErr := createStripePlatformDiscountCoupon(
@@ -362,6 +376,7 @@ func genStripeLink(
 		ClientReferenceID: stripe.String(referenceId),
 		SuccessURL:        stripe.String(system_setting.ServerAddress + "/console/log"),
 		CancelURL:         stripe.String(system_setting.ServerAddress + "/console/topup"),
+		Currency:          stripe.String(strings.ToLower(string(priceInfo.Currency))),
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			lineItem,
 		},
@@ -398,7 +413,7 @@ func genStripeLink(
 	return result.URL, temporaryCouponID, nil
 }
 
-func createStripeUserDiscountCoupon(priceInfo *stripe.Price, userCoupon *stripeUserCouponContext) (*stripe.Coupon, error) {
+func createStripeUserDiscountCoupon(priceInfo *stripePriceContext, userCoupon *stripeUserCouponContext) (*stripe.Coupon, error) {
 	if priceInfo == nil || userCoupon == nil {
 		return nil, fmt.Errorf("缺少 Stripe 用户优惠券上下文")
 	}
@@ -410,11 +425,11 @@ func createStripeUserDiscountCoupon(priceInfo *stripe.Price, userCoupon *stripeU
 	})
 }
 
-func createStripePlatformDiscountCoupon(priceInfo *stripe.Price, discountAmount decimal.Decimal) (*stripe.Coupon, error) {
+func createStripePlatformDiscountCoupon(priceInfo *stripePriceContext, discountAmount decimal.Decimal) (*stripe.Coupon, error) {
 	return createStripeDiscountCoupon(priceInfo, discountAmount, "Platform Discount", nil)
 }
 
-func createStripeDiscountCoupon(priceInfo *stripe.Price, discountAmount decimal.Decimal, name string, metadata map[string]string) (*stripe.Coupon, error) {
+func createStripeDiscountCoupon(priceInfo *stripePriceContext, discountAmount decimal.Decimal, name string, metadata map[string]string) (*stripe.Coupon, error) {
 	if priceInfo == nil {
 		return nil, fmt.Errorf("缺少 Stripe 价格上下文")
 	}
@@ -474,14 +489,25 @@ func cleanupStripeCouponByID(couponID string) error {
 	return err
 }
 
-func getStripePriceInfo() (*stripe.Price, error) {
+func getStripePriceInfo(requestedCurrencyCode string) (*stripePriceContext, error) {
+	priceInfo, err := getStripeRawPriceInfo()
+	if err != nil {
+		return nil, err
+	}
+	return resolveStripePriceContext(priceInfo, requestedCurrencyCode)
+}
+
+func getStripeRawPriceInfo() (*stripe.Price, error) {
 	if !strings.HasPrefix(setting.StripeApiSecret, "sk_") && !strings.HasPrefix(setting.StripeApiSecret, "rk_") {
 		return nil, fmt.Errorf("无效的Stripe API密钥")
 	}
 
 	stripe.Key = setting.StripeApiSecret
 
-	priceInfo, err := stripeprice.Get(setting.StripePriceId, nil)
+	params := &stripe.PriceParams{}
+	params.AddExpand("currency_options")
+
+	priceInfo, err := stripeprice.Get(setting.StripePriceId, params)
 	if err != nil {
 		return nil, fmt.Errorf("获取Stripe价格配置失败: %w", err)
 	}
@@ -491,8 +517,84 @@ func getStripePriceInfo() (*stripe.Price, error) {
 	return priceInfo, nil
 }
 
-func getStripePayMoney(amount int64) (float64, error) {
-	payMoney, _, err := getStripeOriginalPayMoney(amount)
+func resolveStripePriceContext(priceInfo *stripe.Price, requestedCurrencyCode string) (*stripePriceContext, error) {
+	if priceInfo == nil || priceInfo.ID == "" || priceInfo.UnitAmount <= 0 {
+		return nil, fmt.Errorf("无效的Stripe价格配置")
+	}
+
+	defaultCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(string(priceInfo.Currency))
+	if defaultCurrencyCode == "" {
+		return nil, fmt.Errorf("无效的Stripe价格配置")
+	}
+
+	supportedCurrencyCodes := getStripeSupportedCurrencyCodes(priceInfo)
+	if len(supportedCurrencyCodes) == 0 {
+		return nil, fmt.Errorf("无效的Stripe价格配置")
+	}
+
+	selectedCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(requestedCurrencyCode)
+	if selectedCurrencyCode == "" {
+		selectedCurrencyCode = defaultCurrencyCode
+	}
+
+	resolved := &stripePriceContext{
+		ID:                     priceInfo.ID,
+		DefaultCurrency:        priceInfo.Currency,
+		Currency:               stripe.Currency(strings.ToLower(selectedCurrencyCode)),
+		SupportedCurrencyCodes: supportedCurrencyCodes,
+	}
+
+	if selectedCurrencyCode == defaultCurrencyCode {
+		resolved.UnitAmount = priceInfo.UnitAmount
+	} else {
+		currencyOption, ok := priceInfo.CurrencyOptions[strings.ToLower(selectedCurrencyCode)]
+		if !ok || currencyOption == nil || currencyOption.UnitAmount <= 0 {
+			return nil, fmt.Errorf("Stripe Price 不支持币种 %s", selectedCurrencyCode)
+		}
+		resolved.UnitAmount = currencyOption.UnitAmount
+	}
+
+	if resolved.UnitAmount <= 0 {
+		return nil, fmt.Errorf("无效的Stripe价格配置")
+	}
+	return resolved, nil
+}
+
+func getStripeSupportedCurrencyCodes(priceInfo *stripe.Price) []string {
+	if priceInfo == nil {
+		return nil
+	}
+
+	defaultCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(string(priceInfo.Currency))
+	codes := make([]string, 0, len(priceInfo.CurrencyOptions)+1)
+	seen := make(map[string]struct{}, len(priceInfo.CurrencyOptions)+1)
+	if defaultCurrencyCode != "" && priceInfo.UnitAmount > 0 {
+		codes = append(codes, defaultCurrencyCode)
+		seen[defaultCurrencyCode] = struct{}{}
+	}
+
+	extraCodes := make([]string, 0, len(priceInfo.CurrencyOptions))
+	for currencyCode, currencyOption := range priceInfo.CurrencyOptions {
+		if currencyOption == nil || currencyOption.UnitAmount <= 0 {
+			continue
+		}
+		normalizedCurrencyCode := model.NormalizeTopUpCouponCurrencyCode(currencyCode)
+		if normalizedCurrencyCode == "" {
+			continue
+		}
+		if _, exists := seen[normalizedCurrencyCode]; exists {
+			continue
+		}
+		extraCodes = append(extraCodes, normalizedCurrencyCode)
+		seen[normalizedCurrencyCode] = struct{}{}
+	}
+
+	sort.Strings(extraCodes)
+	return append(codes, extraCodes...)
+}
+
+func getStripePayMoneyWithPrice(priceInfo *stripePriceContext, amount int64) (float64, error) {
+	payMoney, _, err := getStripeOriginalPayMoneyWithPrice(priceInfo, amount)
 	if err != nil {
 		return 0, err
 	}
@@ -500,15 +602,15 @@ func getStripePayMoney(amount int64) (float64, error) {
 	return payMoney.InexactFloat64(), nil
 }
 
-func getStripeOriginalPayMoney(amount int64) (decimal.Decimal, int64, error) {
-	priceInfo, err := getStripePriceInfo()
+func getStripeOriginalPayMoney(amount int64, requestedCurrencyCode string) (decimal.Decimal, int64, error) {
+	priceInfo, err := getStripePriceInfo(requestedCurrencyCode)
 	if err != nil {
 		return decimal.Zero, 0, err
 	}
 	return getStripeOriginalPayMoneyWithPrice(priceInfo, amount)
 }
 
-func getStripeOriginalPayMoneyWithPrice(priceInfo *stripe.Price, amount int64) (decimal.Decimal, int64, error) {
+func getStripeOriginalPayMoneyWithPrice(priceInfo *stripePriceContext, amount int64) (decimal.Decimal, int64, error) {
 	if priceInfo == nil {
 		return decimal.Zero, 0, fmt.Errorf("缺少 Stripe 价格配置")
 	}
