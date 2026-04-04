@@ -18,11 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom';
 import { UserContext } from '../../context/User';
 import {
   API,
+  consumePendingAuthRedirectTarget,
+  getAuthRedirectTargetFromLocation,
   getLogo,
+  persistPendingAuthRedirectTarget,
   showError,
   showInfo,
   showSuccess,
@@ -38,7 +46,15 @@ import {
   isPasskeySupported,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';
-import { Button, Card, Checkbox, Divider, Form, Icon, Modal } from '@douyinfe/semi-ui';
+import {
+  Button,
+  Card,
+  Checkbox,
+  Divider,
+  Form,
+  Icon,
+  Modal,
+} from '@douyinfe/semi-ui';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import TelegramLoginButton from 'react-telegram-login';
@@ -54,7 +70,7 @@ import WeChatIcon from '../common/logo/WeChatIcon';
 import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import TwoFAVerification from './TwoFAVerification';
 import { useTranslation } from 'react-i18next';
-import { SiDiscord }from 'react-icons/si';
+import { SiDiscord } from 'react-icons/si';
 
 const LoginForm = () => {
   let navigate = useNavigate();
@@ -113,7 +129,7 @@ const LoginForm = () => {
       setTurnstileEnabled(true);
       setTurnstileSiteKey(status.turnstile_site_key);
     }
-    
+
     // 从 status 获取用户协议和隐私政策的启用状态
     setHasUserAgreement(status.user_agreement_enabled || false);
     setHasPrivacyPolicy(status.privacy_policy_enabled || false);
@@ -147,14 +163,14 @@ const LoginForm = () => {
     const performLogout = async () => {
       // 如果域名是 pro.privnode.com，则跳转到 privnode.com
       if (window.location.hostname === 'pro.privnode.com') {
-        window.location.href = 'https://privnode.com/login';
+        window.location.href = `https://privnode.com/login${window.location.search || ''}`;
         return;
       }
 
       // 检查 session cookie 是否存在
       const sessionCookie = document.cookie
         .split('; ')
-        .find(row => row.startsWith('session='));
+        .find((row) => row.startsWith('session='));
 
       // 如果 session 为空则跳过，防止无限刷新
       if (!sessionCookie) {
@@ -173,7 +189,8 @@ const LoginForm = () => {
       localStorage.removeItem('user');
 
       // 清除 session cookie
-      document.cookie = 'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie =
+        'session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 
       // 刷新页面
       window.location.reload();
@@ -182,51 +199,23 @@ const LoginForm = () => {
     performLogout();
   }, [searchParams, userDispatch]);
 
-  const sanitizeRedirectTarget = (target) => {
-    if (!target || typeof target !== 'string') {
-      return null;
+  useEffect(() => {
+    const redirectTarget = getAuthRedirectTargetFromLocation(location);
+    if (redirectTarget) {
+      persistPendingAuthRedirectTarget(redirectTarget);
     }
+  }, [location]);
 
-    const trimmed = target.trim();
-
-    if (!trimmed.startsWith('/')) {
-      return null;
-    }
-    if (trimmed.startsWith('//')) {
-      return null;
-    }
-    if (trimmed.includes('://')) {
-      return null;
-    }
-    if (trimmed.includes('\n') || trimmed.includes('\r')) {
-      return null;
-    }
-    if (trimmed.startsWith('/login')) {
-      return null;
-    }
-    if (trimmed.startsWith('/api')) {
-      return null;
-    }
-
-    return trimmed;
-  };
-
-  const getPostLoginRedirectTarget = () => {
-    const redirectParam = sanitizeRedirectTarget(searchParams.get('redirect'));
-    if (redirectParam) {
-      return redirectParam;
-    }
-
+  const navigateAfterLogin = (fallback = '/console') => {
     const from = location?.state?.from;
     const fromPath =
       from && typeof from === 'object'
         ? `${from.pathname || ''}${from.search || ''}${from.hash || ''}`
         : null;
-    return sanitizeRedirectTarget(fromPath);
-  };
-
-  const navigateAfterLogin = (fallback = '/console') => {
-    const target = getPostLoginRedirectTarget();
+    const target = consumePendingAuthRedirectTarget(
+      searchParams.get('redirect'),
+      fromPath,
+    );
     navigate(target || fallback, { replace: true });
   };
 
@@ -589,7 +578,15 @@ const LoginForm = () => {
                     theme='outline'
                     className='w-full h-12 flex items-center justify-center !rounded-full border border-gray-200 hover:bg-gray-50 transition-colors'
                     type='tertiary'
-                    icon={<SiDiscord style={{ color: '#5865F2', width: '20px', height: '20px' }} />}
+                    icon={
+                      <SiDiscord
+                        style={{
+                          color: '#5865F2',
+                          width: '20px',
+                          height: '20px',
+                        }}
+                      />
+                    }
                     onClick={handleDiscordClick}
                     loading={discordLoading}
                   >
@@ -701,11 +698,11 @@ const LoginForm = () => {
                             {t('隐私政策')}
                           </a>
                         </>
-                        )}
-                      </Text>
-                    </Checkbox>
-                  </div>
-                )}
+                      )}
+                    </Text>
+                  </Checkbox>
+                </div>
+              )}
 
               {!status.self_use_mode_enabled && (
                 <div className='mt-6 text-center text-sm'>
@@ -821,7 +818,9 @@ const LoginForm = () => {
                     htmlType='submit'
                     onClick={handleSubmit}
                     loading={loginLoading}
-                    disabled={(hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms}
+                    disabled={
+                      (hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms
+                    }
                   >
                     {t('继续')}
                   </Button>

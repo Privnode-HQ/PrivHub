@@ -285,7 +285,7 @@ func RequestOrStartImpersonation(session sessions.Session, operator *model.User,
 		return &StartImpersonationResult{State: ImpersonationStartStatePendingExisting, Grant: pending}, nil
 	}
 
-	token, err := common.GenerateRandomKey(48)
+	token, err := common.GenerateURLSafeToken(24)
 	if err != nil {
 		return nil, err
 	}

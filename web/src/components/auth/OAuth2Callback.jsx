@@ -22,6 +22,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   API,
+  clearPendingAuthRedirectTarget,
+  consumePendingAuthRedirectTarget,
   showError,
   showSuccess,
   updateAPI,
@@ -52,6 +54,7 @@ const OAuth2Callback = (props) => {
       }
 
       if (message === 'bind') {
+        clearPendingAuthRedirectTarget();
         showSuccess(t('绑定成功！'));
         navigate('/console/personal');
       } else {
@@ -60,7 +63,9 @@ const OAuth2Callback = (props) => {
         setUserData(data);
         updateAPI();
         showSuccess(t('登录成功！'));
-        navigate('/console/token');
+        navigate(consumePendingAuthRedirectTarget() || '/console/token', {
+          replace: true,
+        });
       }
     } catch (error) {
       if (retry < MAX_RETRIES) {
@@ -70,6 +75,7 @@ const OAuth2Callback = (props) => {
       }
 
       // 重试次数耗尽，提示错误并返回设置页面
+      clearPendingAuthRedirectTarget();
       showError(error.message || t('授权失败'));
       navigate('/console/personal');
     }
@@ -81,6 +87,7 @@ const OAuth2Callback = (props) => {
 
     // 参数缺失直接返回
     if (!code) {
+      clearPendingAuthRedirectTarget();
       showError(t('未获取到授权码'));
       navigate('/console/personal');
       return;

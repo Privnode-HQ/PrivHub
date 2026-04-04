@@ -70,7 +70,7 @@ func (grant *ImpersonationGrant) BeforeCreate(tx *gorm.DB) error {
 	if strings.TrimSpace(grant.ApprovalToken) != "" {
 		return nil
 	}
-	token, err := common.GenerateRandomKey(48)
+	token, err := common.GenerateURLSafeToken(24)
 	if err != nil {
 		return err
 	}

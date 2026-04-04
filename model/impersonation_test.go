@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +50,19 @@ func TestExpireImpersonationGrantIfNeeded(t *testing.T) {
 	}
 	if activeGrant.EndedAt == nil || !activeGrant.EndedAt.Equal(now) {
 		t.Fatalf("expected ended_at to be set to now, got %+v", activeGrant.EndedAt)
+	}
+}
+
+func TestImpersonationGrantBeforeCreateUsesURLSafeToken(t *testing.T) {
+	grant := &ImpersonationGrant{}
+	if err := grant.BeforeCreate(nil); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if grant.ApprovalToken == "" {
+		t.Fatalf("expected approval token to be generated")
+	}
+	if strings.ContainsAny(grant.ApprovalToken, "+/=") {
+		t.Fatalf("expected approval token to be URL-safe, got %q", grant.ApprovalToken)
 	}
 }
 

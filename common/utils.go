@@ -253,6 +253,17 @@ func GenerateRandomKey(length int) (string, error) {
 	return base64.StdEncoding.EncodeToString(bytes), nil
 }
 
+func GenerateURLSafeToken(byteLength int) (string, error) {
+	if byteLength <= 0 {
+		byteLength = 16
+	}
+	bytes := make([]byte, byteLength)
+	if _, err := crand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
 func GenerateKey() (string, error) {
 	//rand.Seed(time.Now().UnixNano())
 	return GenerateRandomCharsKey(48)

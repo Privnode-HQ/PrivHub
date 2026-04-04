@@ -21,6 +21,8 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { history } from './history';
 
+const AUTH_REDIRECT_STORAGE_KEY = 'auth_redirect_target';
+
 export function authHeader() {
   // return authorization header with jwt token
   let user = JSON.parse(localStorage.getItem('user'));
@@ -33,14 +35,100 @@ export function authHeader() {
 }
 
 export const AuthRedirect = ({ children }) => {
+  const location = useLocation();
   const user = localStorage.getItem('user');
 
   if (user) {
-    return <Navigate to='/console' replace />;
+    const redirectTarget = getAuthRedirectTargetFromLocation(location);
+    return <Navigate to={redirectTarget || '/console'} replace />;
   }
 
   return children;
 };
+
+export function sanitizeAuthRedirectTarget(target) {
+  if (!target || typeof target !== 'string') {
+    return null;
+  }
+
+  const trimmed = target.trim();
+
+  if (!trimmed.startsWith('/')) {
+    return null;
+  }
+  if (trimmed.startsWith('//')) {
+    return null;
+  }
+  if (trimmed.includes('://')) {
+    return null;
+  }
+  if (trimmed.includes('\n') || trimmed.includes('\r')) {
+    return null;
+  }
+  if (trimmed.startsWith('/login')) {
+    return null;
+  }
+  if (trimmed.startsWith('/api')) {
+    return null;
+  }
+
+  return trimmed;
+}
+
+export function getAuthRedirectTargetFromLocation(location) {
+  if (!location) {
+    return null;
+  }
+
+  const searchParams = new URLSearchParams(location.search || '');
+  const redirectParam = sanitizeAuthRedirectTarget(
+    searchParams.get('redirect'),
+  );
+  if (redirectParam) {
+    return redirectParam;
+  }
+
+  const from = location?.state?.from;
+  const fromPath =
+    from && typeof from === 'object'
+      ? `${from.pathname || ''}${from.search || ''}${from.hash || ''}`
+      : null;
+  return sanitizeAuthRedirectTarget(fromPath);
+}
+
+export function persistPendingAuthRedirectTarget(target) {
+  const sanitized = sanitizeAuthRedirectTarget(target);
+  if (!sanitized) {
+    sessionStorage.removeItem(AUTH_REDIRECT_STORAGE_KEY);
+    return null;
+  }
+  sessionStorage.setItem(AUTH_REDIRECT_STORAGE_KEY, sanitized);
+  return sanitized;
+}
+
+export function getPendingAuthRedirectTarget() {
+  return sanitizeAuthRedirectTarget(
+    sessionStorage.getItem(AUTH_REDIRECT_STORAGE_KEY),
+  );
+}
+
+export function clearPendingAuthRedirectTarget() {
+  sessionStorage.removeItem(AUTH_REDIRECT_STORAGE_KEY);
+}
+
+export function consumePendingAuthRedirectTarget(...candidates) {
+  for (const candidate of candidates) {
+    const sanitized = sanitizeAuthRedirectTarget(candidate);
+    if (sanitized) {
+      clearPendingAuthRedirectTarget();
+      return sanitized;
+    }
+  }
+
+  const storedTarget = getPendingAuthRedirectTarget();
+  clearPendingAuthRedirectTarget();
+  return storedTarget;
+}
 
 export function getRequiredUserActions(user) {
   if (!user || !Array.isArray(user.required_actions)) {
