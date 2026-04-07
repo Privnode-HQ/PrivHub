@@ -63,9 +63,10 @@ const SystemSetting = () => {
     'oidc.token_endpoint': '',
     'oidc.user_info_endpoint': '',
     Notice: '',
-    ResendSenderName: '',
-    ResendSenderEmail: '',
-    ResendAPIKey: '',
+    PostmarkSenderName: '',
+    PostmarkSenderEmail: '',
+    PostmarkServerToken: '',
+    PostmarkLargeBatchMode: 'chunked',
     WorkerUrl: '',
     WorkerValidKey: '',
     WorkerAllowHttpImageRequestEnabled: '',
@@ -316,28 +317,36 @@ const SystemSetting = () => {
     await updateOptions([{ key: 'ServerAddress', value: ServerAddress }]);
   };
 
-  const submitResend = async () => {
+  const submitPostmark = async () => {
     const options = [];
 
-    if (originInputs['ResendSenderName'] !== inputs.ResendSenderName) {
+    if (originInputs['PostmarkSenderName'] !== inputs.PostmarkSenderName) {
       options.push({
-        key: 'ResendSenderName',
-        value: inputs.ResendSenderName,
+        key: 'PostmarkSenderName',
+        value: inputs.PostmarkSenderName,
       });
     }
-    if (originInputs['ResendSenderEmail'] !== inputs.ResendSenderEmail) {
+    if (originInputs['PostmarkSenderEmail'] !== inputs.PostmarkSenderEmail) {
       options.push({
-        key: 'ResendSenderEmail',
-        value: inputs.ResendSenderEmail,
+        key: 'PostmarkSenderEmail',
+        value: inputs.PostmarkSenderEmail,
       });
     }
     if (
-      originInputs['ResendAPIKey'] !== inputs.ResendAPIKey &&
-      inputs.ResendAPIKey !== ''
+      originInputs['PostmarkServerToken'] !== inputs.PostmarkServerToken &&
+      inputs.PostmarkServerToken !== ''
     ) {
       options.push({
-        key: 'ResendAPIKey',
-        value: inputs.ResendAPIKey,
+        key: 'PostmarkServerToken',
+        value: inputs.PostmarkServerToken,
+      });
+    }
+    if (
+      originInputs['PostmarkLargeBatchMode'] !== inputs.PostmarkLargeBatchMode
+    ) {
+      options.push({
+        key: 'PostmarkLargeBatchMode',
+        value: inputs.PostmarkLargeBatchMode || 'chunked',
       });
     }
 
@@ -1312,34 +1321,71 @@ const SystemSetting = () => {
                 </Form.Section>
               </Card>
               <Card>
-                <Form.Section text={t('配置 Resend')}>
-                  <Text>{t('通过 Resend API 发送系统邮件')}</Text>
+                <Form.Section text={t('配置 Postmark')}>
+                  <Text>
+                    {t(
+                      '单封邮件使用 Postmark /email，2 到 50 封使用 /email/batch，超过 50 封可按下方模式发送',
+                    )}
+                  </Text>
                   <Row
                     gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
                   >
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='ResendSenderName'
-                        label={t('Resend 发件人名称')}
+                        field='PostmarkSenderName'
+                        label={t('Postmark 发件人名称')}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='ResendSenderEmail'
-                        label={t('Resend 发件人邮箱')}
+                        field='PostmarkSenderEmail'
+                        label={t('Postmark 发件人邮箱')}
                       />
                     </Col>
                     <Col xs={24} sm={24} md={8} lg={8} xl={8}>
                       <Form.Input
-                        field='ResendAPIKey'
-                        label={t('Resend API Key')}
+                        field='PostmarkServerToken'
+                        label={t('Postmark Server Token')}
                         type='password'
                         placeholder='敏感信息不会发送到前端显示'
                       />
                     </Col>
                   </Row>
-                  <Button onClick={submitResend}>
-                    {t('保存 Resend 设置')}
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                    style={{ marginTop: 16 }}
+                  >
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Text strong>{t('超过 50 封邮件时的发送方式')}</Text>
+                      <Text
+                        type='secondary'
+                        style={{ display: 'block', marginBottom: 8 }}
+                      >
+                        {t(
+                          '可选择按 50 封一批、每批间隔 2 分钟发送，或直接使用 Postmark /email/bulk',
+                        )}
+                      </Text>
+                      <Radio.Group
+                        type='button'
+                        value={inputs.PostmarkLargeBatchMode || 'chunked'}
+                        onChange={(val) => {
+                          const selected =
+                            val && val.target ? val.target.value : val;
+                          setInputs((prev) => ({
+                            ...prev,
+                            PostmarkLargeBatchMode: selected || 'chunked',
+                          }));
+                        }}
+                      >
+                        <Radio value='chunked'>
+                          {t('50 封一批，间隔 2 分钟')}
+                        </Radio>
+                        <Radio value='bulk'>{t('使用 /email/bulk')}</Radio>
+                      </Radio.Group>
+                    </Col>
+                  </Row>
+                  <Button onClick={submitPostmark}>
+                    {t('保存 Postmark 设置')}
                   </Button>
                 </Form.Section>
               </Card>

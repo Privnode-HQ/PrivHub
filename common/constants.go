@@ -71,9 +71,15 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
-var ResendSenderName = ""
-var ResendSenderEmail = ""
-var ResendAPIKey = ""
+const (
+	PostmarkLargeBatchModeChunked = "chunked"
+	PostmarkLargeBatchModeBulk    = "bulk"
+)
+
+var PostmarkSenderName = ""
+var PostmarkSenderEmail = ""
+var PostmarkServerToken = ""
+var PostmarkLargeBatchMode = PostmarkLargeBatchModeChunked
 
 var GitHubClientId = ""
 var GitHubClientSecret = ""

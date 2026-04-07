@@ -64,10 +64,18 @@ func UpdateOption(c *gin.Context) {
 	}
 	switch option.Key {
 	case "EmailVerificationEnabled":
-		if option.Value == "true" && (strings.TrimSpace(common.ResendAPIKey) == "" || strings.TrimSpace(common.ResendSenderEmail) == "") {
+		if option.Value == "true" && (strings.TrimSpace(common.PostmarkServerToken) == "" || strings.TrimSpace(common.PostmarkSenderEmail) == "") {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "无法启用邮箱验证，请先配置 Resend API Key 和发件人邮箱！",
+				"message": "无法启用邮箱验证，请先配置 Postmark Server Token 和发件人邮箱！",
+			})
+			return
+		}
+	case "PostmarkLargeBatchMode":
+		if option.Value != common.PostmarkLargeBatchModeChunked && option.Value != common.PostmarkLargeBatchModeBulk {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "无效的 Postmark 大批量发送模式",
 			})
 			return
 		}

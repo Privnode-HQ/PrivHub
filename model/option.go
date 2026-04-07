@@ -21,11 +21,13 @@ type Option struct {
 func normalizeOptionKey(key string) string {
 	switch key {
 	case "SendGridSenderName":
-		return "ResendSenderName"
+		return "PostmarkSenderName"
 	case "SendGridSenderEmail":
-		return "ResendSenderEmail"
-	case "SendGridAPIKey":
-		return "ResendAPIKey"
+		return "PostmarkSenderEmail"
+	case "ResendSenderName":
+		return "PostmarkSenderName"
+	case "ResendSenderEmail":
+		return "PostmarkSenderEmail"
 	default:
 		return key
 	}
@@ -70,9 +72,10 @@ func InitOptionMap() {
 	common.OptionMap["EmailDomainRestrictionEnabled"] = strconv.FormatBool(common.EmailDomainRestrictionEnabled)
 	common.OptionMap["EmailAliasRestrictionEnabled"] = strconv.FormatBool(common.EmailAliasRestrictionEnabled)
 	common.OptionMap["EmailDomainWhitelist"] = strings.Join(common.EmailDomainWhitelist, ",")
-	common.OptionMap["ResendSenderName"] = ""
-	common.OptionMap["ResendSenderEmail"] = ""
-	common.OptionMap["ResendAPIKey"] = ""
+	common.OptionMap["PostmarkSenderName"] = ""
+	common.OptionMap["PostmarkSenderEmail"] = ""
+	common.OptionMap["PostmarkServerToken"] = ""
+	common.OptionMap["PostmarkLargeBatchMode"] = common.PostmarkLargeBatchModeChunked
 	common.OptionMap["Notice"] = ""
 	common.OptionMap[common.MessageTemplateOptionKey] = ""
 	common.OptionMap["LegacyMessagesMigrated"] = "false"
@@ -335,12 +338,19 @@ func updateOptionMap(key string, value string) (err error) {
 	switch key {
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
-	case "ResendSenderName":
-		common.ResendSenderName = value
-	case "ResendSenderEmail":
-		common.ResendSenderEmail = value
-	case "ResendAPIKey":
-		common.ResendAPIKey = value
+	case "PostmarkSenderName":
+		common.PostmarkSenderName = value
+	case "PostmarkSenderEmail":
+		common.PostmarkSenderEmail = value
+	case "PostmarkServerToken":
+		common.PostmarkServerToken = value
+	case "PostmarkLargeBatchMode":
+		switch value {
+		case common.PostmarkLargeBatchModeBulk:
+			common.PostmarkLargeBatchMode = common.PostmarkLargeBatchModeBulk
+		default:
+			common.PostmarkLargeBatchMode = common.PostmarkLargeBatchModeChunked
+		}
 	case "ServerAddress":
 		system_setting.ServerAddress = value
 	case "WorkerUrl":
