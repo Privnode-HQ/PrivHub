@@ -143,6 +143,14 @@ func scopeEmailIdempotencyKey(baseKey string, recipient string) string {
 	return normalizeEmailIdempotencyKey(fmt.Sprintf("%s/%s", baseKey, shortEmailKeyHash(recipient)))
 }
 
+func postmarkMetadataIdempotencyValue(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	return shortEmailKeyHash(key)
+}
+
 func formatEmailSender(name string, address string) string {
 	sender := mail.Address{
 		Name:    strings.TrimSpace(name),
@@ -507,7 +515,7 @@ func buildPostmarkEmailRequest(from string, subject string, content string, ctx 
 	}
 	if scopedKey := normalizeEmailIdempotencyKey(idempotencyKey); scopedKey != "" {
 		request.Metadata = map[string]string{
-			"idempotency_key": scopedKey,
+			"idempotency_key": postmarkMetadataIdempotencyValue(scopedKey),
 		}
 	}
 
