@@ -243,6 +243,7 @@ const renderOperations = (
     showResetPasskeyModal,
     showResetTwoFAModal,
     showImpersonationModal,
+    showAccessLinkModal,
     showForceLogoutConfirm,
     showRequirePasswordResetConfirm,
     showRequireEmailBindConfirm,
@@ -261,6 +262,14 @@ const renderOperations = (
       node: 'item',
       name: t('仿冒访问'),
       onClick: () => showImpersonationModal(record),
+    },
+    {
+      node: 'divider',
+    },
+    {
+      node: 'item',
+      name: t('生成访问链接'),
+      onClick: () => showAccessLinkModal(record),
     },
     {
       node: 'divider',
@@ -367,6 +376,7 @@ export const getUsersColumns = ({
   showResetPasskeyModal,
   showResetTwoFAModal,
   showImpersonationModal,
+  showAccessLinkModal,
   showForceLogoutConfirm,
   showRequirePasswordResetConfirm,
   showRequireEmailBindConfirm,
@@ -429,6 +439,7 @@ export const getUsersColumns = ({
           showResetPasskeyModal,
           showResetTwoFAModal,
           showImpersonationModal,
+          showAccessLinkModal,
           showForceLogoutConfirm,
           showRequirePasswordResetConfirm,
           showRequireEmailBindConfirm,

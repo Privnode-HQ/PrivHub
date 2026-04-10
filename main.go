@@ -147,13 +147,7 @@ func main() {
 	middleware.SetUpLogger(server)
 	// Initialize session store
 	store := cookie.NewStore([]byte(common.SessionSecret))
-	store.Options(sessions.Options{
-		Path:     "/",
-		MaxAge:   2592000, // 30 days
-		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteLaxMode, // 改为 Lax 模式以支持 SSO 跨站链接跳转
-	})
+	store.Options(service.WebSessionOptions(service.DefaultWebSessionMaxAgeSeconds))
 	server.Use(sessions.Sessions("session", store))
 	server.Use(middleware.ReadOnlyImpersonationGuard())
 	server.Use(middleware.ImpersonationAudit())

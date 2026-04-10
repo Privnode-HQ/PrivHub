@@ -13,43 +13,43 @@ import (
 )
 
 const (
-	ImpersonationGrantWindow  = 24 * time.Hour
+	ImpersonationGrantWindow   = 24 * time.Hour
 	ImpersonationSessionWindow = 24 * time.Hour
 
-	sessionKeyImpersonationGrantID             = "impersonation_grant_id"
-	sessionKeyImpersonationOriginalID          = "impersonation_original_id"
-	sessionKeyImpersonationOriginalUsername    = "impersonation_original_username"
-	sessionKeyImpersonationOriginalCAHID       = "impersonation_original_cah_id"
-	sessionKeyImpersonationOriginalRole        = "impersonation_original_role"
-	sessionKeyImpersonationOriginalStatus      = "impersonation_original_status"
-	sessionKeyImpersonationOriginalGroup       = "impersonation_original_group"
-	sessionKeyImpersonationOriginalSessionVer  = "impersonation_original_session_version"
-	sessionKeyImpersonationOriginalGlobalVer   = "impersonation_original_global_session_version"
-	sessionKeyImpersonationReadOnly            = "impersonation_read_only"
-	sessionKeyImpersonationBreakGlass          = "impersonation_break_glass"
-	sessionKeyImpersonationStartedAt           = "impersonation_started_at"
-	sessionKeyImpersonationExpiresAt           = "impersonation_expires_at"
-	sessionKeyImpersonationHeaderAliasID       = "impersonation_header_alias_id"
-	sessionKeyImpersonationHeaderAliasCAHID    = "impersonation_header_alias_cah_id"
+	sessionKeyImpersonationGrantID            = "impersonation_grant_id"
+	sessionKeyImpersonationOriginalID         = "impersonation_original_id"
+	sessionKeyImpersonationOriginalUsername   = "impersonation_original_username"
+	sessionKeyImpersonationOriginalCAHID      = "impersonation_original_cah_id"
+	sessionKeyImpersonationOriginalRole       = "impersonation_original_role"
+	sessionKeyImpersonationOriginalStatus     = "impersonation_original_status"
+	sessionKeyImpersonationOriginalGroup      = "impersonation_original_group"
+	sessionKeyImpersonationOriginalSessionVer = "impersonation_original_session_version"
+	sessionKeyImpersonationOriginalGlobalVer  = "impersonation_original_global_session_version"
+	sessionKeyImpersonationReadOnly           = "impersonation_read_only"
+	sessionKeyImpersonationBreakGlass         = "impersonation_break_glass"
+	sessionKeyImpersonationStartedAt          = "impersonation_started_at"
+	sessionKeyImpersonationExpiresAt          = "impersonation_expires_at"
+	sessionKeyImpersonationHeaderAliasID      = "impersonation_header_alias_id"
+	sessionKeyImpersonationHeaderAliasCAHID   = "impersonation_header_alias_cah_id"
 )
 
 type ImpersonationSessionState struct {
-	Active               bool
-	GrantID              uint
-	OriginalID           int
-	OriginalUsername     string
-	OriginalCAHID        string
-	OriginalRole         int
-	OriginalStatus       int
-	OriginalGroup        string
-	OriginalSessionVer   int
-	OriginalGlobalVer    int
-	ReadOnly             bool
-	BreakGlass           bool
-	StartedAt            int64
-	ExpiresAt            int64
-	HeaderAliasID        int
-	HeaderAliasCAHID     string
+	Active             bool
+	GrantID            uint
+	OriginalID         int
+	OriginalUsername   string
+	OriginalCAHID      string
+	OriginalRole       int
+	OriginalStatus     int
+	OriginalGroup      string
+	OriginalSessionVer int
+	OriginalGlobalVer  int
+	ReadOnly           bool
+	BreakGlass         bool
+	StartedAt          int64
+	ExpiresAt          int64
+	HeaderAliasID      int
+	HeaderAliasCAHID   string
 }
 
 func sessionAnyToInt(value any) int {

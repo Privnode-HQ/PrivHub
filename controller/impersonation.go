@@ -144,6 +144,57 @@ func StartUserImpersonation(c *gin.Context) {
 	})
 }
 
+func GenerateUserAccessLink(c *gin.Context) {
+	targetID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || targetID == 0 {
+		common.ApiErrorMsg(c, "无效的用户 ID")
+		return
+	}
+
+	operator, err := model.GetUserById(c.GetInt("id"), true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	target, err := model.GetUserById(targetID, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if target.Status != common.UserStatusEnabled {
+		common.ApiErrorMsg(c, "目标用户当前不可访问")
+		return
+	}
+
+	grant, link, err := service.GenerateAdminAccessLink(operator, target)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.SetAdminAuditMeta(c, model.AdminAuditMeta{
+		Resource:   "user",
+		Action:     "access_link_generate",
+		TargetType: "user",
+		TargetId:   target.Id,
+		TargetName: target.Username,
+		Content:    "管理员已生成一次性账户访问链接",
+		Details: map[string]interface{}{
+			"grant_id": grant.Id,
+		},
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "访问链接已生成，24 小时内有效",
+		"data": gin.H{
+			"grant_id":    grant.Id,
+			"access_link": link,
+			"expires_at":  grant.GrantedExpiresAt,
+		},
+	})
+}
+
 func StopUserImpersonation(c *gin.Context) {
 	session := sessions.Default(c)
 	state := service.GetImpersonationSessionState(session)
@@ -167,6 +218,38 @@ func StopUserImpersonation(c *gin.Context) {
 		"message": "",
 		"data": gin.H{
 			"user": buildCurrentUserEnvelope(c, user),
+		},
+	})
+}
+
+func ConsumeUserAccessLink(c *gin.Context) {
+	token := strings.TrimSpace(c.Param("token"))
+	if token == "" {
+		common.ApiErrorMsg(c, "访问链接不能为空")
+		return
+	}
+
+	target, grant, err := service.ConsumeAdminAccessLink(sessions.Default(c), token)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if target == nil || grant == nil {
+		common.ApiErrorMsg(c, "访问链接无效")
+		return
+	}
+
+	target, err = model.GetUserById(target.Id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "访问链接已生效",
+		"data": gin.H{
+			"grant_id": grant.Id,
+			"user":     buildCurrentUserEnvelope(c, target),
 		},
 	})
 }
@@ -299,8 +382,8 @@ func OpenSelfServiceSupportAccess(c *gin.Context) {
 		"success": true,
 		"message": "已开放一次客服访问，24 小时内可由管理员激活一次",
 		"data": gin.H{
-			"id":                grant.Id,
-			"state":             grant.State,
+			"id":                 grant.Id,
+			"state":              grant.State,
 			"granted_expires_at": grant.GrantedExpiresAt,
 		},
 	})
@@ -368,10 +451,10 @@ func GetImpersonationHistory(c *gin.Context) {
 				}
 				return &incident.Grant.RequestedAt
 			}(),
-			"ended_at":       incident.Grant.EndedAt,
-			"active":         incident.Grant.EndedAt == nil,
-			"action_count":   len(actions),
-			"actions":        actions,
+			"ended_at":     incident.Grant.EndedAt,
+			"active":       incident.Grant.EndedAt == nil,
+			"action_count": len(actions),
+			"actions":      actions,
 		})
 	}
 

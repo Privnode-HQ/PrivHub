@@ -62,6 +62,10 @@ func buildPersonalSettingsURL() string {
 	return common.BuildURL(defaultServerAddress(), "/console/personal")
 }
 
+func buildAdminAccessLinkURL(token string) string {
+	return common.BuildURL(defaultServerAddress(), "/access-link?token="+url.QueryEscape(strings.TrimSpace(token)))
+}
+
 func impersonationAccessLabel(readOnly bool) string {
 	if readOnly {
 		return "只读访问"
@@ -194,6 +198,45 @@ func notifyUserOfBreakGlassEnded(target *model.User, grant *model.ImpersonationG
 	))
 }
 
+func notifyUserOfAdminAccessLinkGenerated(target *model.User, grant *model.ImpersonationGrant) error {
+	if target == nil || grant == nil {
+		return nil
+	}
+	content := fmt.Sprintf(
+		"管理员 **%s** 已为您的账户生成一个一次性访问链接。\n\n- 使用限制：该链接只能使用一次，且需在 24 小时内访问\n- 会话权限：访问后将直接登入您的账户，不受只读或额外权限限制\n- 会话时效：链接被使用后，会话将在 24 小时后自动失效\n\n如果这不是您本人授权的操作，请立即联系管理员。",
+		grant.OperatorUsername,
+	)
+	return NotifyUser(target.Id, target.Email, target.GetSetting(), dto.NewNotify(
+		"admin_access_link_created",
+		fmt.Sprintf("%s 为您的账户生成了访问链接", grant.OperatorUsername),
+		content,
+		nil,
+	))
+}
+
+func notifyUserOfAdminAccessLinkActivated(target *model.User, grant *model.ImpersonationGrant) error {
+	if target == nil || grant == nil {
+		return nil
+	}
+	content := fmt.Sprintf(
+		"管理员 **%s** 生成的一次性账户访问链接已被使用。\n\n- 登录身份：%s\n- 会话权限：当前会话拥有您账户的完整访问权限\n- 会话失效时间：%s\n\n如果这不是您本人授权的操作，请立即联系管理员。",
+		grant.OperatorUsername,
+		target.Username,
+		func() string {
+			if grant.SessionExpiresAt == nil {
+				return "未知"
+			}
+			return grant.SessionExpiresAt.Format("2006-01-02 15:04:05")
+		}(),
+	)
+	return NotifyUser(target.Id, target.Email, target.GetSetting(), dto.NewNotify(
+		"admin_access_link_used",
+		fmt.Sprintf("%s 的访问链接已被使用", target.Username),
+		content,
+		nil,
+	))
+}
+
 func UserNeedsSupportAccessVerification(userID int) bool {
 	if userID == 0 {
 		return false
@@ -219,14 +262,14 @@ func RequestOrStartImpersonation(session sessions.Session, operator *model.User,
 	now := time.Now()
 	if breakGlass {
 		grant := &model.ImpersonationGrant{
-			Source:           model.ImpersonationSourceAdminRequest,
-			Mode:             model.ImpersonationModeBreakGlass,
-			State:            model.ImpersonationStateApproved,
+			Source:            model.ImpersonationSourceAdminRequest,
+			Mode:              model.ImpersonationModeBreakGlass,
+			State:             model.ImpersonationStateApproved,
 			RequestedReadOnly: false,
-			RequestedAt:      now,
-			ApprovedAt:       &now,
-			ActivatedAt:      &now,
-			ActiveReadOnly:   false,
+			RequestedAt:       now,
+			ApprovedAt:        &now,
+			ActivatedAt:       &now,
+			ActiveReadOnly:    false,
 		}
 		fillImpersonationGrantSnapshot(grant, operator, target)
 		if err := model.CreateImpersonationGrant(grant); err != nil {
@@ -240,8 +283,8 @@ func RequestOrStartImpersonation(session sessions.Session, operator *model.User,
 		if err := BeginImpersonationSession(session, operator, target, grant, false); err != nil {
 			_ = model.DB.Model(&model.ImpersonationGrant{}).Where("id = ?", grant.Id).
 				Updates(map[string]interface{}{
-					"state":        model.ImpersonationStateCompleted,
-					"ended_at":     now,
+					"state":    model.ImpersonationStateCompleted,
+					"ended_at": now,
 				}).Error
 			return nil, err
 		}
@@ -377,13 +420,13 @@ func OpenSelfServiceSupportAccess(user *model.User) (*model.ImpersonationGrant, 
 	now := time.Now()
 	expiresAt := now.Add(ImpersonationGrantWindow)
 	grant := &model.ImpersonationGrant{
-		Source:           model.ImpersonationSourceSelfService,
-		Mode:             model.ImpersonationModeStandard,
-		State:            model.ImpersonationStateApproved,
+		Source:            model.ImpersonationSourceSelfService,
+		Mode:              model.ImpersonationModeStandard,
+		State:             model.ImpersonationStateApproved,
 		RequestedReadOnly: false,
-		RequestedAt:      now,
-		ApprovedAt:       &now,
-		GrantedExpiresAt: &expiresAt,
+		RequestedAt:       now,
+		ApprovedAt:        &now,
+		GrantedExpiresAt:  &expiresAt,
 	}
 	fillImpersonationGrantSnapshot(grant, nil, user)
 	grant.ApprovedByUserId = user.Id
@@ -458,4 +501,108 @@ func RecordBreakGlassAction(grantID uint, operatorID int, operatorUsername strin
 		StatusCode:       statusCode,
 		Success:          statusCode >= 200 && statusCode < 400,
 	})
+}
+
+func GenerateAdminAccessLink(operator *model.User, target *model.User) (*model.ImpersonationGrant, string, error) {
+	if operator == nil || target == nil {
+		return nil, "", errors.New("缺少必要的访问链接参数")
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(ImpersonationGrantWindow)
+	grant := &model.ImpersonationGrant{
+		Source:            model.ImpersonationSourceAdminLink,
+		Mode:              model.ImpersonationModeStandard,
+		State:             model.ImpersonationStateApproved,
+		RequestedReadOnly: false,
+		RequestedAt:       now,
+		ApprovedAt:        &now,
+		GrantedExpiresAt:  &expiresAt,
+		ApprovedByUserId:  operator.Id,
+		ApprovedByMethod:  "admin_access_link",
+	}
+	fillImpersonationGrantSnapshot(grant, operator, target)
+	if err := model.CancelApprovedAdminAccessLinksByTargetUserID(target.Id); err != nil {
+		return nil, "", err
+	}
+	if err := model.CreateImpersonationGrant(grant); err != nil {
+		return nil, "", err
+	}
+	if err := notifyUserOfAdminAccessLinkGenerated(target, grant); err != nil {
+		return nil, "", err
+	}
+	return grant, buildAdminAccessLinkURL(grant.ApprovalToken), nil
+}
+
+func ConsumeAdminAccessLink(session sessions.Session, token string) (*model.User, *model.ImpersonationGrant, error) {
+	if session == nil {
+		return nil, nil, errors.New("会话不可用")
+	}
+
+	grant, err := model.GetImpersonationGrantByToken(strings.TrimSpace(token))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("访问链接不存在")
+		}
+		return nil, nil, err
+	}
+	if !grant.IsAdminAccessLink() {
+		return nil, nil, errors.New("无效的访问链接")
+	}
+
+	now := time.Now()
+	if model.ExpireImpersonationGrantIfNeeded(grant, now) {
+		if err = model.SaveImpersonationGrant(grant); err != nil {
+			return nil, nil, err
+		}
+	}
+	if grant.State != model.ImpersonationStateApproved {
+		return nil, nil, errors.New("访问链接已失效或已使用")
+	}
+	if grant.HasGrantWindowExpired(now) {
+		grant.State = model.ImpersonationStateExpired
+		if err = model.SaveImpersonationGrant(grant); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, errors.New("访问链接已过期")
+	}
+
+	target, err := model.GetUserById(grant.TargetUserId, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	if target.Status != common.UserStatusEnabled {
+		return nil, nil, errors.New("目标用户当前不可访问")
+	}
+
+	sessionExpiresAt := now.Add(ImpersonationSessionWindow)
+	if err = model.ActivateAccessLinkGrant(grant.Id, now, &sessionExpiresAt); err != nil {
+		return nil, nil, err
+	}
+	grant.State = model.ImpersonationStateActive
+	grant.ActivatedAt = &now
+	grant.SessionExpiresAt = &sessionExpiresAt
+
+	if _, err = StopCurrentImpersonation(session, false); err != nil {
+		return nil, nil, err
+	}
+	if _, err = CompleteCurrentAccessLinkGrant(session); err != nil {
+		return nil, nil, err
+	}
+	ClearAccessLinkSession(session)
+
+	if err = BeginAccessLinkSession(session, target, grant); err != nil {
+		_ = model.DB.Model(&model.ImpersonationGrant{}).Where("id = ?", grant.Id).
+			Updates(map[string]interface{}{
+				"state":              model.ImpersonationStateApproved,
+				"activated_at":       nil,
+				"session_expires_at": nil,
+				"ended_at":           nil,
+				"active_read_only":   false,
+			}).Error
+		return nil, nil, err
+	}
+
+	_ = notifyUserOfAdminAccessLinkActivated(target, grant)
+	return target, grant, nil
 }

@@ -11,6 +11,7 @@ import (
 
 const (
 	ImpersonationSourceAdminRequest = "admin_request"
+	ImpersonationSourceAdminLink    = "admin_access_link"
 	ImpersonationSourceSelfService  = "self_service"
 
 	ImpersonationModeStandard   = "standard"
@@ -85,6 +86,10 @@ type BreakGlassIncident struct {
 
 func (grant *ImpersonationGrant) IsBreakGlass() bool {
 	return grant != nil && grant.Mode == ImpersonationModeBreakGlass
+}
+
+func (grant *ImpersonationGrant) IsAdminAccessLink() bool {
+	return grant != nil && grant.Source == ImpersonationSourceAdminLink
 }
 
 func (grant *ImpersonationGrant) IsPending() bool {
@@ -350,6 +355,15 @@ func RejectPendingImpersonationGrant(grantID uint, approvedByUserID int, method 
 	return DB.Model(&ImpersonationGrant{}).Where("id = ? AND state = ?", grantID, ImpersonationStatePending).Updates(updates).Error
 }
 
+func CancelApprovedAdminAccessLinksByTargetUserID(targetUserID int) error {
+	if targetUserID == 0 {
+		return nil
+	}
+	return DB.Model(&ImpersonationGrant{}).
+		Where("target_user_id = ? AND source = ? AND state = ?", targetUserID, ImpersonationSourceAdminLink, ImpersonationStateApproved).
+		Update("state", ImpersonationStateCancelled).Error
+}
+
 func ApprovePendingImpersonationGrant(grantID uint, approvedByUserID int, method string, decidedAt time.Time, grantExpiresAt time.Time) error {
 	if grantID == 0 {
 		return nil
@@ -374,6 +388,19 @@ func ActivateApprovedImpersonationGrant(grantID uint, operatorID int, operatorUs
 		"operator_username":  strings.TrimSpace(operatorUsername),
 		"operator_cah_id":    strings.TrimSpace(operatorCAHID),
 		"active_read_only":   readOnly,
+		"activated_at":       activatedAt,
+		"session_expires_at": sessionExpiresAt,
+	}
+	return DB.Model(&ImpersonationGrant{}).Where("id = ? AND state = ?", grantID, ImpersonationStateApproved).Updates(updates).Error
+}
+
+func ActivateAccessLinkGrant(grantID uint, activatedAt time.Time, sessionExpiresAt *time.Time) error {
+	if grantID == 0 {
+		return errors.New("grant id is required")
+	}
+	updates := map[string]interface{}{
+		"state":              ImpersonationStateActive,
+		"active_read_only":   false,
 		"activated_at":       activatedAt,
 		"session_expires_at": sessionExpiresAt,
 	}

@@ -53,6 +53,7 @@ export const useUsersData = () => {
     id: undefined,
   });
   const [impersonationLoading, setImpersonationLoading] = useState(false);
+  const [accessLinkLoading, setAccessLinkLoading] = useState(false);
 
   // Form initial values
   const formInitValues = {
@@ -271,6 +272,30 @@ export const useUsersData = () => {
     }
   };
 
+  const generateUserAccessLink = async (user) => {
+    if (!user?.id) {
+      return null;
+    }
+
+    try {
+      setAccessLinkLoading(true);
+      const res = await API.post(`/api/user/${user.id}/access_link`);
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return null;
+      }
+
+      showSuccess(message || t('访问链接已生成'));
+      return data || null;
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+      return null;
+    } finally {
+      setAccessLinkLoading(false);
+    }
+  };
+
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
@@ -393,6 +418,8 @@ export const useUsersData = () => {
     resetUserTwoFA,
     startImpersonation,
     impersonationLoading,
+    generateUserAccessLink,
+    accessLinkLoading,
     handlePageChange,
     handlePageSizeChange,
     handleRow,

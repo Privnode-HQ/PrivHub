@@ -2211,6 +2211,18 @@
     "最高可减": "up to",
     "立即充值": "Recharge Now",
     "当前支付方式暂不支持优惠券": "This payment method does not support coupons yet",
-    "优惠券币种与当前支付方式不匹配": "The coupon currency does not match the current payment method"
+    "优惠券币种与当前支付方式不匹配": "The coupon currency does not match the current payment method",
+    "一次性访问链接": "One-time access link",
+    "完整权限访问": "Full-privilege access",
+    "生成后会创建一个只能使用一次的账户访问链接。链接需在 24 小时内访问，访问后会直接以该用户身份登录并创建一个 24 小时有效的完整权限会话。系统会立即通知该用户，并在链接被实际使用时再次通知。": "Generates a single-use account access link. It must be opened within 24 hours. Once used, it signs in as the target user and creates a full-privilege session valid for 24 hours. The user is notified immediately and notified again when the link is actually used.",
+    "访问链接": "Access link",
+    "有效期至": "Valid until",
+    "生成访问链接": "Generate access link",
+    "账户访问链接": "Account access link",
+    "正在验证访问链接": "Verifying access link",
+    "请稍候，系统正在为您创建登录会话。": "Please wait while the system creates your login session.",
+    "访问链接已生效": "Access link activated",
+    "访问链接无效或不存在": "The access link is invalid or does not exist",
+    "返回登录页": "Back to login"
   }
 }

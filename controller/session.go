@@ -3,9 +3,11 @@ package controller
 import (
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -59,6 +61,13 @@ func getValidatedSessionUserID(c *gin.Context) (int, error) {
 	userCache, err := model.GetUserCache(userId)
 	if err != nil {
 		return 0, err
+	}
+	if accessLinkState := service.GetAccessLinkSessionState(session); accessLinkState.Active && accessLinkState.HasSessionExpired(time.Now()) {
+		_, _ = service.CompleteCurrentAccessLinkGrant(session)
+		session.Clear()
+		service.ApplyDefaultWebSessionOptions(session)
+		_ = session.Save()
+		return 0, errors.New("登录已失效，请重新登录")
 	}
 
 	if sessionValueToInt(session.Get("session_version")) != userCache.WebSessionVersion ||

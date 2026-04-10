@@ -107,6 +107,7 @@ func authHelper(c *gin.Context, minRole int) {
 	useAccessToken := false
 	var userCache *model.UserBase
 	impersonationState := service.GetImpersonationSessionState(session)
+	accessLinkState := service.GetAccessLinkSessionState(session)
 	if username == nil {
 		// Check access token
 		accessToken := c.Request.Header.Get("Authorization")
@@ -143,6 +144,19 @@ func authHelper(c *gin.Context, minRole int) {
 			c.Abort()
 			return
 		}
+	}
+	if !useAccessToken && accessLinkState.Active && accessLinkState.HasSessionExpired(time.Now()) {
+		if impersonationState.Active {
+			_, _ = service.StopCurrentImpersonation(session, false)
+		}
+		_, _ = service.StopCurrentAccessLinkSession(session, true)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success":    false,
+			"message":    "登录已失效，请重新登录",
+			"error_code": "SESSION_INVALIDATED",
+		})
+		c.Abort()
+		return
 	}
 	if !useAccessToken && impersonationState.Active && impersonationState.HasSessionExpired(time.Now()) && !service.IsImpersonationStopPath(c.Request.URL.Path) {
 		_, _ = service.StopCurrentImpersonation(session, true)
@@ -228,7 +242,7 @@ func authHelper(c *gin.Context, minRole int) {
 			c.Abort()
 			return
 		}
-		if len(userCache.GetRequiredActions()) > 0 && !impersonationState.Active && !isPathAllowedWhenUserActionRequired(c.Request.URL.Path) {
+		if len(userCache.GetRequiredActions()) > 0 && !impersonationState.Active && !accessLinkState.Active && !isPathAllowedWhenUserActionRequired(c.Request.URL.Path) {
 			abortWithUserActionRequired(c, userCache)
 			return
 		}
@@ -246,6 +260,8 @@ func authHelper(c *gin.Context, minRole int) {
 	c.Set("impersonation_break_glass", impersonationState.BreakGlass)
 	c.Set("impersonation_original_id", impersonationState.OriginalID)
 	c.Set("impersonation_original_username", impersonationState.OriginalUsername)
+	c.Set("access_link_active", accessLinkState.Active)
+	c.Set("access_link_grant_id", accessLinkState.GrantID)
 
 	//userCache, err := model.GetUserCache(id.(int))
 	//if err != nil {

@@ -138,6 +138,9 @@ export function getRequiredUserActions(user) {
 }
 
 function shouldRedirectToPersonal(user, pathname) {
+  if (user?.impersonation?.active || user?.access_link_session?.active) {
+    return false;
+  }
   const actions = getRequiredUserActions(user);
   if (actions.length === 0) {
     return false;

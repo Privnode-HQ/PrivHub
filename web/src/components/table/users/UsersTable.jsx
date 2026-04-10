@@ -32,6 +32,8 @@ import DeleteUserModal from './modals/DeleteUserModal';
 import ResetPasskeyModal from './modals/ResetPasskeyModal';
 import ResetTwoFAModal from './modals/ResetTwoFAModal';
 import ImpersonationUserModal from './modals/ImpersonationUserModal';
+import AccessLinkUserModal from './modals/AccessLinkUserModal';
+import { copy, showError, showSuccess } from '../../../helpers';
 
 const UsersTable = (usersData) => {
   const {
@@ -52,6 +54,8 @@ const UsersTable = (usersData) => {
     resetUserTwoFA,
     startImpersonation,
     impersonationLoading,
+    generateUserAccessLink,
+    accessLinkLoading,
     readOnlyAdmin,
     t,
   } = usersData;
@@ -66,6 +70,11 @@ const UsersTable = (usersData) => {
   const [showResetPasskeyModal, setShowResetPasskeyModal] = useState(false);
   const [showResetTwoFAModal, setShowResetTwoFAModal] = useState(false);
   const [showImpersonationModal, setShowImpersonationModal] = useState(false);
+  const [showAccessLinkModal, setShowAccessLinkModal] = useState(false);
+  const [accessLinkData, setAccessLinkData] = useState({
+    accessLink: '',
+    expiresAt: '',
+  });
 
   // Modal handlers
   const showPromoteUserModal = (user) => {
@@ -102,6 +111,23 @@ const UsersTable = (usersData) => {
   const showImpersonationUserModal = (user) => {
     setModalUser(user);
     setShowImpersonationModal(true);
+  };
+
+  const showAccessLinkUserModal = (user) => {
+    setModalUser(user);
+    setAccessLinkData({
+      accessLink: '',
+      expiresAt: '',
+    });
+    setShowAccessLinkModal(true);
+  };
+
+  const closeAccessLinkModal = () => {
+    setShowAccessLinkModal(false);
+    setAccessLinkData({
+      accessLink: '',
+      expiresAt: '',
+    });
   };
 
   const showForceLogoutUserConfirm = (user) => {
@@ -160,6 +186,29 @@ const UsersTable = (usersData) => {
     setShowResetTwoFAModal(false);
   };
 
+  const handleGenerateAccessLink = async () => {
+    const data = await generateUserAccessLink(modalUser);
+    if (!data?.access_link) {
+      return;
+    }
+    setAccessLinkData({
+      accessLink: data.access_link,
+      expiresAt: data.expires_at || '',
+    });
+  };
+
+  const handleCopyAccessLink = async () => {
+    if (!accessLinkData.accessLink) {
+      return;
+    }
+    const ok = await copy(accessLinkData.accessLink);
+    if (ok) {
+      showSuccess(t('复制成功'));
+      return;
+    }
+    showError(t('复制失败'));
+  };
+
   // Get all columns
   const columns = useMemo(() => {
     return getUsersColumns({
@@ -173,6 +222,7 @@ const UsersTable = (usersData) => {
       showResetPasskeyModal: showResetPasskeyUserModal,
       showResetTwoFAModal: showResetTwoFAUserModal,
       showImpersonationModal: showImpersonationUserModal,
+      showAccessLinkModal: showAccessLinkUserModal,
       showForceLogoutConfirm: showForceLogoutUserConfirm,
       showRequirePasswordResetConfirm: showRequirePasswordResetUserConfirm,
       showRequireEmailBindConfirm: showRequireEmailBindUserConfirm,
@@ -189,6 +239,7 @@ const UsersTable = (usersData) => {
     showResetPasskeyUserModal,
     showResetTwoFAUserModal,
     showImpersonationUserModal,
+    showAccessLinkUserModal,
     showForceLogoutUserConfirm,
     showRequirePasswordResetUserConfirm,
     showRequireEmailBindUserConfirm,
@@ -304,6 +355,18 @@ const UsersTable = (usersData) => {
         }}
         user={modalUser}
         loading={impersonationLoading}
+        t={t}
+      />
+
+      <AccessLinkUserModal
+        visible={showAccessLinkModal}
+        onCancel={closeAccessLinkModal}
+        onGenerate={handleGenerateAccessLink}
+        onCopy={handleCopyAccessLink}
+        user={modalUser}
+        loading={accessLinkLoading}
+        generatedLink={accessLinkData.accessLink}
+        expiresAt={accessLinkData.expiresAt}
         t={t}
       />
     </>

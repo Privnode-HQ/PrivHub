@@ -112,16 +112,12 @@ func Login(c *gin.Context) {
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
 	session := sessions.Default(c)
+	_, _ = service.CompleteCurrentAccessLinkGrant(session)
+	service.ClearAccessLinkSession(session)
 	service.ClearImpersonationSession(session)
 	service.ClearImpersonationHeaderAlias(session)
-	session.Set("id", user.Id)
-	session.Set("username", user.Username)
-	session.Set("cah_id", user.CAHID)
-	session.Set("role", user.Role)
-	session.Set("status", user.Status)
-	session.Set("group", user.Group)
-	session.Set("session_version", user.WebSessionVersion)
-	session.Set("global_session_version", common.GlobalWebSessionVersion)
+	service.ApplyDefaultWebSessionOptions(session)
+	service.SetAuthenticatedUserSession(session, user)
 	err := session.Save()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -140,7 +136,9 @@ func setupLogin(user *model.User, c *gin.Context) {
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	_, _ = service.StopCurrentImpersonation(session, false)
+	_, _ = service.CompleteCurrentAccessLinkGrant(session)
 	session.Clear()
+	service.ApplyDefaultWebSessionOptions(session)
 	err := session.Save()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -502,6 +500,15 @@ func attachSessionStateToSelfResponse(session sessions.Session, user *model.User
 			"operator_cah_id":   impersonationState.OriginalCAHID,
 		}
 		return
+	}
+
+	accessLinkState := service.GetAccessLinkSessionState(session)
+	if accessLinkState.Active {
+		responseData["access_link_session"] = gin.H{
+			"active":     true,
+			"grant_id":   accessLinkState.GrantID,
+			"expires_at": accessLinkState.ExpiresAt,
+		}
 	}
 
 	grant, err := model.GetLatestBreakGlassAlertGrant(user.Id)

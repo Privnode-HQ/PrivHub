@@ -29,6 +29,7 @@ import {
 } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
+import AccessLinkLogin from './components/auth/AccessLinkLogin';
 import NotFound from './pages/NotFound';
 import Forbidden from './pages/Forbidden';
 import Setting from './pages/Setting';
@@ -198,6 +199,14 @@ function App() {
               <AuthRedirect>
                 <LoginForm />
               </AuthRedirect>
+            </Suspense>
+          }
+        />
+        <Route
+          path='/access-link'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <AccessLinkLogin />
             </Suspense>
           }
         />
