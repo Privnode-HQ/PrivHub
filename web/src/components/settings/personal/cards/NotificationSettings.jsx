@@ -202,6 +202,7 @@ const NotificationSettings = ({
         { key: 'redemption', label: t('兑换码管理') },
         { key: 'topup_coupon', label: t('折扣中心') },
         { key: 'user', label: t('用户管理') },
+        { key: 'user_api_key', label: t('API Key 查用户') },
         { key: 'setting', label: t('系统设置') },
       ],
     },

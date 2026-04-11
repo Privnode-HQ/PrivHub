@@ -111,6 +111,7 @@ func SetApiRouter(router *gin.Engine) {
 				supportRoute.GET("/", controller.GetAllUsers)
 				supportRoute.GET("/topup", controller.GetAllTopUps)
 				supportRoute.GET("/search", controller.SearchUsers)
+				supportRoute.GET("/search/api-key", controller.SearchUserByAPIKey)
 				supportRoute.GET("/:id", controller.GetUser)
 			}
 

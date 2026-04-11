@@ -83,6 +83,14 @@ func NormalizeCAHID(cahID string) string {
 	return normalized
 }
 
+func NormalizeAPIKey(rawKey string) string {
+	normalized := strings.TrimSpace(rawKey)
+	if len(normalized) >= 3 && strings.EqualFold(normalized[:3], "sk-") {
+		normalized = normalized[3:]
+	}
+	return strings.TrimSpace(normalized)
+}
+
 func calculateCAHCheckDigit(decimalValue string) string {
 	weights := []int{2, 3, 4, 5, 6, 7}
 	sum := 0
@@ -272,6 +280,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        false,
 		}
 	} else if userRole == common.RoleAdminUser {
@@ -284,6 +293,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
@@ -296,6 +306,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        true,
 		}
 	}
@@ -422,8 +433,9 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	// 构建基础查询
 	query := tx.Unscoped().Model(&User{})
 
-	// 构建搜索条件
-	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR cah_id LIKE ?"
+	// 构建搜索条件，支持第三方账号 ID 检索
+	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR cah_id LIKE ? OR github_id LIKE ? OR discord_id LIKE ? OR oidc_id LIKE ? OR wechat_id LIKE ? OR telegram_id LIKE ? OR linux_do_id LIKE ?"
+	searchPattern := "%" + keyword + "%"
 
 	// 尝试将关键字转换为整数ID
 	keywordInt, err := strconv.Atoi(keyword)
@@ -433,19 +445,19 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 		likeCondition = "id = ? OR " + likeCondition
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%", group)
+				keywordInt, searchPattern, searchPattern, searchPattern, "%"+normalizedCAHID+"%", searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, group)
 		} else {
 			query = query.Where(likeCondition,
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%")
+				keywordInt, searchPattern, searchPattern, searchPattern, "%"+normalizedCAHID+"%", searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 		}
 	} else {
 		// 非数字关键字，只搜索字符串字段
 		if group != "" {
 			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%", group)
+				searchPattern, searchPattern, searchPattern, "%"+normalizedCAHID+"%", searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, group)
 		} else {
 			query = query.Where(likeCondition,
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+normalizedCAHID+"%")
+				searchPattern, searchPattern, searchPattern, "%"+normalizedCAHID+"%", searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 		}
 	}
 
@@ -469,6 +481,38 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	}
 
 	return users, total, nil
+}
+
+func FindUserByAPIKey(rawKey string) (*User, *Token, error) {
+	apiKey := NormalizeAPIKey(rawKey)
+	if apiKey == "" {
+		return nil, nil, errors.New("API Key 不能为空")
+	}
+
+	token := &Token{}
+	err := DB.Unscoped().
+		Select("id", "user_id", "name", "status", "created_time", "accessed_time", "expired_time", commonGroupCol, "deleted_at").
+		Where(commonKeyCol+" = ?", apiKey).
+		First(token).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("未找到匹配的 API Key")
+		}
+		return nil, nil, err
+	}
+
+	user := &User{}
+	err = DB.Unscoped().
+		Omit("password", "access_token").
+		First(user, "id = ?", token.UserId).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("未找到 API Key 对应的用户")
+		}
+		return nil, nil, err
+	}
+
+	return user, token, nil
 }
 
 func GetUserById(id int, selectAll bool) (*User, error) {

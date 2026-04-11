@@ -59,6 +59,7 @@ import ReferralRedirect from './pages/Referral';
 import SSOAuthorize from './pages/SSOAuthorize';
 import Messages from './pages/Messages';
 import AdminMessages from './pages/AdminMessages';
+import UserApiKeySearch from './pages/UserApiKeySearch';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -181,6 +182,14 @@ function App() {
           element={
             <SupportRoute>
               <User />
+            </SupportRoute>
+          }
+        />
+        <Route
+          path='/console/user-api-key'
+          element={
+            <SupportRoute>
+              <UserApiKeySearch />
             </SupportRoute>
           }
         />

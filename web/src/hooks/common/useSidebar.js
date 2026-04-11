@@ -68,6 +68,7 @@ export const useSidebar = () => {
       redemption: true,
       topup_coupon: true,
       user: true,
+      user_api_key: true,
       setting: true,
     },
   };

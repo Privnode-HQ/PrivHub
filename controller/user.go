@@ -316,6 +316,35 @@ func SearchUsers(c *gin.Context) {
 	return
 }
 
+func SearchUserByAPIKey(c *gin.Context) {
+	rawKey := c.Query("key")
+	if strings.TrimSpace(rawKey) == "" {
+		common.ApiErrorMsg(c, "请输入 API Key")
+		return
+	}
+
+	user, token, err := model.FindUserByAPIKey(rawKey)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	common.ApiSuccess(c, gin.H{
+		"user": user,
+		"token": gin.H{
+			"id":            token.Id,
+			"user_id":       token.UserId,
+			"name":          token.Name,
+			"group":         token.Group,
+			"status":        token.Status,
+			"created_time":  token.CreatedTime,
+			"accessed_time": token.AccessedTime,
+			"expired_time":  token.ExpiredTime,
+			"deleted":       token.DeletedAt.Valid,
+		},
+	})
+}
+
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -582,6 +611,7 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 				"redemption":     true,
 				"topup_coupon":   true,
 				"user":           true,
+				"user_api_key":   true,
 				"setting":        false,
 			},
 		}
@@ -590,7 +620,8 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 		permissions["sidebar_settings"] = true
 		permissions["sidebar_modules"] = map[string]interface{}{
 			"admin": map[string]interface{}{
-				"setting": false, // 管理员不能访问系统设置
+				"user_api_key": true,
+				"setting":      false, // 管理员不能访问系统设置
 			},
 		}
 	} else {
@@ -645,6 +676,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        false,
 		}
 	} else if userRole == common.RoleAdminUser {
@@ -657,6 +689,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
@@ -669,6 +702,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"redemption":     true,
 			"topup_coupon":   true,
 			"user":           true,
+			"user_api_key":   true,
 			"setting":        true,
 		}
 	}

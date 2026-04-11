@@ -45,6 +45,7 @@ const routerMap = {
   topup_coupon: '/console/topup-coupon',
   topup: '/console/topup',
   user: '/console/user',
+  user_api_key: '/console/user-api-key',
   message_manage: '/console/message-management',
   log: '/console/log',
   midjourney: '/console/midjourney',
@@ -205,6 +206,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
+        className: hasAdminAccess() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('API Key 查用户'),
+        itemKey: 'user_api_key',
+        to: '/user-api-key',
         className: hasAdminAccess() ? '' : 'tableHiddle',
       },
       {

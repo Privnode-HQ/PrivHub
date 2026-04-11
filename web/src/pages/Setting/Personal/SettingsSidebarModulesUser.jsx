@@ -108,6 +108,7 @@ export default function SettingsSidebarModulesUser() {
         models: isSidebarModuleAllowed('admin', 'models'),
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
+        user_api_key: isSidebarModuleAllowed('admin', 'user_api_key'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
       };
     }
@@ -359,6 +360,11 @@ export default function SettingsSidebarModulesUser() {
           description: t('充值优惠券管理'),
         },
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
+        {
+          key: 'user_api_key',
+          title: t('API Key 查用户'),
+          description: t('通过 API Key 反查所属用户'),
+        },
         {
           key: 'setting',
           title: t('系统设置'),
