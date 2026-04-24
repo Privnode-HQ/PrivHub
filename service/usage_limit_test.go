@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting"
@@ -383,5 +384,162 @@ func TestGetUserUsageLimitSnapshotHidesMetricDetailsWhenConfigured(t *testing.T)
 	expectedWeeklyPercent := computeConsumptionPercent(policy.Weekly, 50, 10)
 	if snapshot.Metrics.Weekly.ConsumptionPercent == nil || expectedWeeklyPercent == nil || *snapshot.Metrics.Weekly.ConsumptionPercent != *expectedWeeklyPercent {
 		t.Fatalf("expected weekly consumption percent=%#v, got %#v", expectedWeeklyPercent, snapshot.Metrics.Weekly.ConsumptionPercent)
+	}
+}
+
+func TestGetUserUsageLimitSnapshotAppliesMultiplierRules(t *testing.T) {
+	originalDB := model.DB
+	t.Cleanup(func() {
+		model.DB = originalDB
+	})
+
+	db, err := gorm.Open(sqlite.Open("file:usage-limit-multiplier-test?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.UserUsageWindow{}, &model.UserUsageReservation{}); err != nil {
+		t.Fatalf("migrate test db: %v", err)
+	}
+	model.DB = db
+
+	originalPolicies := setting.UserGroupUsageLimits2JSONString()
+	originalMultiplierRules := setting.UserUsageLimitMultiplierRules2JSONString()
+	t.Cleanup(func() {
+		if err := setting.UpdateUserGroupUsageLimitsByJSONString(originalPolicies); err != nil {
+			t.Errorf("restore usage limit policies: %v", err)
+		}
+		if err := setting.UpdateUserUsageLimitMultiplierRulesByJSONString(originalMultiplierRules); err != nil {
+			t.Errorf("restore usage limit multiplier rules: %v", err)
+		}
+	})
+
+	if err := setting.UpdateUserGroupUsageLimitsByJSONString(`{"vip":{"daily":100,"weekly":200}}`); err != nil {
+		t.Fatalf("set usage limit policies: %v", err)
+	}
+	if err := setting.UpdateUserUsageLimitMultiplierRulesByJSONString(`[
+		{"scope":"all","metrics":["daily"],"multiplier":1.05},
+		{"scope":"groups","group_names":["vip"],"metrics":["daily","weekly"],"multiplier":1.1},
+		{"scope":"users","user_ids":[9],"metrics":["weekly"],"multiplier":1.25}
+	]`); err != nil {
+		t.Fatalf("set usage limit multiplier rules: %v", err)
+	}
+
+	snapshot, err := GetUserUsageLimitSnapshot(9, "vip")
+	if err != nil {
+		t.Fatalf("GetUserUsageLimitSnapshot returned error: %v", err)
+	}
+
+	policy, found := resolveUserUsageLimitPolicy(9, "vip")
+	if !found {
+		t.Fatalf("expected effective usage policy to exist")
+	}
+	if snapshot.Metrics.Daily.Limit == nil || policy.Daily == nil || *snapshot.Metrics.Daily.Limit != *policy.Daily {
+		t.Fatalf("expected daily limit=%#v, got %#v", policy.Daily, snapshot.Metrics.Daily.Limit)
+	}
+	if snapshot.Metrics.Weekly.Limit == nil || policy.Weekly == nil || *snapshot.Metrics.Weekly.Limit != *policy.Weekly {
+		t.Fatalf("expected weekly limit=%#v, got %#v", policy.Weekly, snapshot.Metrics.Weekly.Limit)
+	}
+}
+
+func TestResetUserUsageLimitsByScope(t *testing.T) {
+	originalDB := model.DB
+	t.Cleanup(func() {
+		model.DB = originalDB
+	})
+
+	db, err := gorm.Open(sqlite.Open("file:usage-limit-reset-test?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	if err := db.AutoMigrate(&model.User{}, &model.UserUsageWindow{}, &model.UserUsageReservation{}); err != nil {
+		t.Fatalf("migrate test db: %v", err)
+	}
+	model.DB = db
+
+	users := []*model.User{
+		{Username: "reset_all_enabled", Password: "password", Group: "default", Status: common.UserStatusEnabled, AffCode: "reset_aff_1"},
+		{Username: "reset_group_disabled", Password: "password", Group: "vip", Status: common.UserStatusDisabled, AffCode: "reset_aff_2"},
+		{Username: "reset_group_enabled", Password: "password", Group: "vip", Status: common.UserStatusEnabled, AffCode: "reset_aff_3"},
+	}
+	for _, user := range users {
+		if err := db.Create(user).Error; err != nil {
+			t.Fatalf("create user %s: %v", user.Username, err)
+		}
+	}
+
+	seedUsage := func(userID int) {
+		window := &model.UserUsageWindow{
+			UserID:      userID,
+			WindowKind:  usageWindowDay,
+			WindowStart: 1,
+			WindowEnd:   2,
+			RequestUsed: 1,
+		}
+		if err := db.Create(window).Error; err != nil {
+			t.Fatalf("seed usage window for user %d: %v", userID, err)
+		}
+		reservation := &model.UserUsageReservation{
+			ReservationID:     time.Now().Add(time.Duration(userID) * time.Millisecond).Format("20060102150405.000000000"),
+			UserID:            userID,
+			GroupName:         "test",
+			MinuteWindowStart: 1,
+			HourWindowStart:   1,
+			DayWindowStart:    1,
+			WeekWindowStart:   1,
+			MonthWindowStart:  1,
+			ReservedRequests:  1,
+			Status:            usageReservationReserved,
+			ExpiresAt:         time.Now().Add(time.Hour).Unix(),
+		}
+		if err := db.Create(reservation).Error; err != nil {
+			t.Fatalf("seed reservation for user %d: %v", userID, err)
+		}
+	}
+
+	seedUsage(users[0].Id)
+	seedUsage(users[1].Id)
+	seedUsage(users[2].Id)
+
+	allResult, err := ResetUserUsageLimits(setting.UsageLimitTargetAll, nil, nil)
+	if err != nil {
+		t.Fatalf("ResetUserUsageLimits all returned error: %v", err)
+	}
+	if allResult.TargetedUsers != 2 {
+		t.Fatalf("expected 2 enabled users to be reset, got %d", allResult.TargetedUsers)
+	}
+	if allResult.SkippedBannedUsers != 1 {
+		t.Fatalf("expected 1 banned user to be skipped, got %d", allResult.SkippedBannedUsers)
+	}
+
+	var remainingEnabledWindows int64
+	if err := db.Model(&model.UserUsageWindow{}).Where("user_id IN ?", []int{users[0].Id, users[2].Id}).Count(&remainingEnabledWindows).Error; err != nil {
+		t.Fatalf("count remaining enabled windows: %v", err)
+	}
+	if remainingEnabledWindows != 0 {
+		t.Fatalf("expected enabled users windows to be cleared, got %d", remainingEnabledWindows)
+	}
+
+	var disabledWindows int64
+	if err := db.Model(&model.UserUsageWindow{}).Where("user_id = ?", users[1].Id).Count(&disabledWindows).Error; err != nil {
+		t.Fatalf("count disabled windows: %v", err)
+	}
+	if disabledWindows != 1 {
+		t.Fatalf("expected disabled user window to remain after all reset, got %d", disabledWindows)
+	}
+
+	groupResult, err := ResetUserUsageLimits(setting.UsageLimitTargetGroups, []string{"vip"}, nil)
+	if err != nil {
+		t.Fatalf("ResetUserUsageLimits groups returned error: %v", err)
+	}
+	if groupResult.TargetedUsers != 2 {
+		t.Fatalf("expected both vip users to be targeted, got %d", groupResult.TargetedUsers)
+	}
+
+	var remainingVIPReservations int64
+	if err := db.Model(&model.UserUsageReservation{}).Where("user_id IN ?", []int{users[1].Id, users[2].Id}).Count(&remainingVIPReservations).Error; err != nil {
+		t.Fatalf("count vip reservations: %v", err)
+	}
+	if remainingVIPReservations != 0 {
+		t.Fatalf("expected vip reservations to be cleared, got %d", remainingVIPReservations)
 	}
 }

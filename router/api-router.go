@@ -220,6 +220,7 @@ func SetApiRouter(router *gin.Engine) {
 		usageRoute.Use(middleware.CriticalRateLimit())
 		{
 			usageRoute.GET("/self/limits", middleware.UserAuth(), controller.GetSelfUsageLimits)
+			usageRoute.POST("/reset", middleware.RootAuth(), middleware.AdminAudit(), controller.ResetUsageLimits)
 			tokenUsageRoute := usageRoute.Group("/token")
 			tokenUsageRoute.Use(middleware.TokenAuth())
 			{

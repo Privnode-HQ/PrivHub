@@ -22,10 +22,13 @@ import { Card, Spin } from '@douyinfe/semi-ui';
 
 import { API, showError } from '../../helpers';
 import RequestRateLimit from '../../pages/Setting/RateLimit/SettingsRequestRateLimit';
+import SettingsUsageLimitReset from '../../pages/Setting/RateLimit/SettingsUsageLimitReset';
+import SettingsUsageLimitMultiplier from '../../pages/Setting/RateLimit/SettingsUsageLimitMultiplier';
 
 const RateLimitSetting = () => {
   let [inputs, setInputs] = useState({
     UserGroupUsageLimits: '{}',
+    UserUsageLimitMultiplierRules: '[]',
   });
 
   let [loading, setLoading] = useState(false);
@@ -68,9 +71,14 @@ const RateLimitSetting = () => {
   return (
     <>
       <Spin spinning={loading} size='large'>
-        {/* 用户分组使用限制 */}
         <Card style={{ marginTop: '10px' }}>
           <RequestRateLimit options={inputs} refresh={onRefresh} />
+        </Card>
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsUsageLimitReset />
+        </Card>
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsUsageLimitMultiplier options={inputs} refresh={onRefresh} />
         </Card>
       </Spin>
     </>

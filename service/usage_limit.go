@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -117,6 +119,202 @@ func (e *usageLimitExceededError) Error() string {
 
 func usagePolicyHasAnyConfiguredLimit(policy setting.GroupUsageLimitPolicy) bool {
 	return policy.RPM != nil || policy.RPD != nil || policy.TPM != nil || policy.TPD != nil || policy.Hourly != nil || policy.Daily != nil || policy.Weekly != nil || policy.Monthly != nil
+}
+
+func copyUsageLimitPolicy(policy setting.GroupUsageLimitPolicy) setting.GroupUsageLimitPolicy {
+	return setting.GroupUsageLimitPolicy{
+		RPM:                cloneNullableInt64(policy.RPM),
+		RPMHideDetails:     policy.RPMHideDetails,
+		RPD:                cloneNullableInt64(policy.RPD),
+		RPDHideDetails:     policy.RPDHideDetails,
+		TPM:                cloneNullableInt64(policy.TPM),
+		TPMHideDetails:     policy.TPMHideDetails,
+		TPD:                cloneNullableInt64(policy.TPD),
+		TPDHideDetails:     policy.TPDHideDetails,
+		Hourly:             cloneNullableInt64(policy.Hourly),
+		HourlyHideDetails:  policy.HourlyHideDetails,
+		Daily:              cloneNullableInt64(policy.Daily),
+		DailyHideDetails:   policy.DailyHideDetails,
+		Weekly:             cloneNullableInt64(policy.Weekly),
+		WeeklyHideDetails:  policy.WeeklyHideDetails,
+		Monthly:            cloneNullableInt64(policy.Monthly),
+		MonthlyHideDetails: policy.MonthlyHideDetails,
+	}
+}
+
+func adjustUsageLimitByMultiplier(limit *int64, multiplier float64) *int64 {
+	if limit == nil {
+		return nil
+	}
+	if multiplier <= 0 {
+		zero := int64(0)
+		return &zero
+	}
+
+	scaled := decimal.NewFromInt(*limit).Mul(decimal.NewFromFloat(multiplier))
+	if multiplier >= 1 {
+		value := scaled.Ceil().IntPart()
+		return &value
+	}
+	value := scaled.Floor().IntPart()
+	return &value
+}
+
+func applyUsageLimitMultipliers(policy setting.GroupUsageLimitPolicy, multipliers map[string]float64) setting.GroupUsageLimitPolicy {
+	effective := copyUsageLimitPolicy(policy)
+	if len(multipliers) == 0 {
+		return effective
+	}
+
+	if multiplier, ok := multipliers["rpm"]; ok {
+		effective.RPM = adjustUsageLimitByMultiplier(effective.RPM, multiplier)
+	}
+	if multiplier, ok := multipliers["rpd"]; ok {
+		effective.RPD = adjustUsageLimitByMultiplier(effective.RPD, multiplier)
+	}
+	if multiplier, ok := multipliers["tpm"]; ok {
+		effective.TPM = adjustUsageLimitByMultiplier(effective.TPM, multiplier)
+	}
+	if multiplier, ok := multipliers["tpd"]; ok {
+		effective.TPD = adjustUsageLimitByMultiplier(effective.TPD, multiplier)
+	}
+	if multiplier, ok := multipliers["hourly"]; ok {
+		effective.Hourly = adjustUsageLimitByMultiplier(effective.Hourly, multiplier)
+	}
+	if multiplier, ok := multipliers["daily"]; ok {
+		effective.Daily = adjustUsageLimitByMultiplier(effective.Daily, multiplier)
+	}
+	if multiplier, ok := multipliers["weekly"]; ok {
+		effective.Weekly = adjustUsageLimitByMultiplier(effective.Weekly, multiplier)
+	}
+	if multiplier, ok := multipliers["monthly"]; ok {
+		effective.Monthly = adjustUsageLimitByMultiplier(effective.Monthly, multiplier)
+	}
+
+	return effective
+}
+
+func resolveUserUsageLimitPolicy(userID int, group string) (setting.GroupUsageLimitPolicy, bool) {
+	policy, found := setting.GetUserGroupUsageLimit(group)
+	if !found {
+		return setting.GroupUsageLimitPolicy{}, false
+	}
+
+	multipliers := setting.ResolveUserUsageLimitMetricMultipliers(userID, group)
+	return applyUsageLimitMultipliers(policy, multipliers), true
+}
+
+func normalizeUsageResetGroups(groupNames []string) []string {
+	normalized := make([]string, 0, len(groupNames))
+	seen := make(map[string]struct{}, len(groupNames))
+	for _, groupName := range groupNames {
+		groupName = strings.TrimSpace(groupName)
+		if groupName == "" {
+			continue
+		}
+		if _, exists := seen[groupName]; exists {
+			continue
+		}
+		seen[groupName] = struct{}{}
+		normalized = append(normalized, groupName)
+	}
+	return normalized
+}
+
+func normalizeUsageResetUserIDs(userIDs []int) []int {
+	normalized := make([]int, 0, len(userIDs))
+	seen := make(map[int]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if userID <= 0 {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		normalized = append(normalized, userID)
+	}
+	return normalized
+}
+
+type ResetUserUsageLimitResult struct {
+	Scope              string `json:"scope"`
+	TargetedUsers      int    `json:"targeted_users"`
+	ResetWindows       int64  `json:"reset_windows"`
+	ResetReservations  int64  `json:"reset_reservations"`
+	SkippedBannedUsers int64  `json:"skipped_banned_users"`
+}
+
+func ResetUserUsageLimits(scope string, groupNames []string, userIDs []int) (*ResetUserUsageLimitResult, error) {
+	scope = strings.TrimSpace(strings.ToLower(scope))
+	switch scope {
+	case setting.UsageLimitTargetAll, setting.UsageLimitTargetGroups, setting.UsageLimitTargetUsers:
+	default:
+		return nil, fmt.Errorf("invalid scope: %s", scope)
+	}
+
+	filter := model.UserIDFilter{}
+	switch scope {
+	case setting.UsageLimitTargetAll:
+		filter.OnlyEnabled = true
+	case setting.UsageLimitTargetGroups:
+		filter.GroupNames = normalizeUsageResetGroups(groupNames)
+		if len(filter.GroupNames) == 0 {
+			return nil, errors.New("group_names cannot be empty")
+		}
+	case setting.UsageLimitTargetUsers:
+		filter.UserIDs = normalizeUsageResetUserIDs(userIDs)
+		if len(filter.UserIDs) == 0 {
+			return nil, errors.New("user_ids cannot be empty")
+		}
+	}
+
+	targetedUserIDs, err := model.ListUserIDs(filter)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ResetUserUsageLimitResult{
+		Scope:         scope,
+		TargetedUsers: len(targetedUserIDs),
+	}
+
+	if len(targetedUserIDs) == 0 {
+		if scope == setting.UsageLimitTargetAll {
+			var enabledCount int64
+			if err := model.DB.Model(&model.User{}).Where("status = ?", common.UserStatusEnabled).Count(&enabledCount).Error; err == nil {
+				result.TargetedUsers = int(enabledCount)
+			}
+		}
+		return result, nil
+	}
+
+	if scope == setting.UsageLimitTargetAll {
+		var totalUsers int64
+		if err := model.DB.Model(&model.User{}).Count(&totalUsers).Error; err == nil {
+			result.SkippedBannedUsers = totalUsers - int64(len(targetedUserIDs))
+		}
+	}
+
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		windowRes := tx.Where("user_id IN ?", targetedUserIDs).Delete(&model.UserUsageWindow{})
+		if windowRes.Error != nil {
+			return windowRes.Error
+		}
+		result.ResetWindows = windowRes.RowsAffected
+
+		reservationRes := tx.Where("user_id IN ?", targetedUserIDs).Delete(&model.UserUsageReservation{})
+		if reservationRes.Error != nil {
+			return reservationRes.Error
+		}
+		result.ResetReservations = reservationRes.RowsAffected
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func startOfWeek(now time.Time) time.Time {
@@ -447,7 +645,7 @@ func ReserveUsageRequest(c *gin.Context) error {
 		return nil
 	}
 
-	policy, found := setting.GetUserGroupUsageLimit(group)
+	policy, found := resolveUserUsageLimitPolicy(userID, group)
 	if !found {
 		return nil
 	}
@@ -514,7 +712,7 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 		return nil
 	}
 
-	policy, found := setting.GetUserGroupUsageLimit(relayInfo.UserGroup)
+	policy, found := resolveUserUsageLimitPolicy(relayInfo.UserId, relayInfo.UserGroup)
 	if !found {
 		return nil
 	}
@@ -824,7 +1022,7 @@ func SettleUsageReservation(relayInfo *relaycommon.RelayInfo, actualTokens int, 
 func GetUserUsageLimitSnapshot(userID int, group string) (*UserUsageLimitSnapshot, error) {
 	now := time.Now()
 	bounds := getUsageWindowBounds(now)
-	policy, found := setting.GetUserGroupUsageLimit(group)
+	policy, found := resolveUserUsageLimitPolicy(userID, group)
 
 	var minuteWindow *model.UserUsageWindow
 	var hourWindow *model.UserUsageWindow

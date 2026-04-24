@@ -96,11 +96,11 @@ export default function RequestRateLimit(props) {
           getFormApi={(formAPI) => (refForm.current = formAPI)}
           style={{ marginBottom: 15 }}
         >
-          <Form.Section text={t('用户分组使用限制')}>
+          <Form.Section text={t('基础使用限制')}>
             <Row>
               <Col xs={24} sm={16}>
                 <Form.TextArea
-                  label={t('用户分组使用限制')}
+                  label={t('用户分组基础使用限制')}
                   placeholder={t(
                     '{\n  "default": {\n    "rpm": 5,\n    "rpm_hide_details": true,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "hourly": 5000,\n    "daily": 20000,\n    "weekly": 30000,\n    "weekly_hide_details": true,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "hourly": null,\n    "daily": null,\n    "weekly": null,\n    "monthly": null\n  }\n}',
                   )}
@@ -144,6 +144,11 @@ export default function RequestRateLimit(props) {
                           )}
                         </li>
                         <li>{t('该配置会替代旧的分组速率限制配置。')}</li>
+                        <li>
+                          {t(
+                            '该项只负责基础限制本身；“重置使用限制”和“使用限制倍率”请在下方独立面板中配置。',
+                          )}
+                        </li>
                       </ul>
                     </div>
                   }
@@ -155,7 +160,7 @@ export default function RequestRateLimit(props) {
             </Row>
             <Row>
               <Button size='default' onClick={onSubmit}>
-                {t('保存使用限制')}
+                {t('保存基础使用限制')}
               </Button>
             </Row>
           </Form.Section>

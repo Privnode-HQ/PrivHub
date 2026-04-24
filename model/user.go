@@ -414,6 +414,39 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	return users, total, nil
 }
 
+type UserIDFilter struct {
+	GroupNames  []string
+	UserIDs     []int
+	OnlyEnabled bool
+}
+
+func ListUserIDs(filter UserIDFilter) ([]int, error) {
+	query := DB.Model(&User{}).Distinct("id")
+	if filter.OnlyEnabled {
+		query = query.Where("status = ?", common.UserStatusEnabled)
+	}
+	if len(filter.GroupNames) > 0 {
+		groupColumn := commonGroupCol
+		if groupColumn == "" {
+			if common.UsingPostgreSQL {
+				groupColumn = `"group"`
+			} else {
+				groupColumn = "`group`"
+			}
+		}
+		query = query.Where(groupColumn+" IN ?", filter.GroupNames)
+	}
+	if len(filter.UserIDs) > 0 {
+		query = query.Where("id IN ?", filter.UserIDs)
+	}
+
+	userIDs := make([]int, 0)
+	if err := query.Pluck("id", &userIDs).Error; err != nil {
+		return nil, err
+	}
+	return userIDs, nil
+}
+
 func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, int64, error) {
 	var users []*User
 	var total int64
