@@ -17,155 +17,311 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
-import { Button, Col, Form, Row, Spin } from '@douyinfe/semi-ui';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  compareObjects,
+  Button,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Space,
+  Spin,
+  Switch,
+  Table,
+  Typography,
+} from '@douyinfe/semi-ui';
+import { Eye, EyeOff, Plus, Trash2 } from 'lucide-react';
+import {
   API,
   showError,
   showSuccess,
   showWarning,
-  verifyJSON,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
+const { Text, Paragraph } = Typography;
+
+const RATE_METRICS = ['rpm', 'rpd', 'tpm', 'tpd'];
+const BUDGET_METRICS = ['hourly', 'daily', 'weekly', 'monthly'];
+const ALL_METRICS = [...RATE_METRICS, ...BUDGET_METRICS];
+
+const METRIC_LABELS = {
+  rpm: 'RPM',
+  rpd: 'RPD',
+  tpm: 'TPM',
+  tpd: 'TPD',
+  hourly: 'Hourly',
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+};
+
+const METRIC_DESCRIPTIONS = {
+  rpm: '请求/分钟',
+  rpd: '请求/天',
+  tpm: 'Token/分钟',
+  tpd: 'Token/天',
+  hourly: '每小时预算',
+  daily: '每日预算',
+  weekly: '每周预算',
+  monthly: '每月预算',
+};
+
+function parseGroupLimits(jsonString) {
+  try {
+    const obj = JSON.parse(jsonString || '{}');
+    return Object.entries(obj).map(([groupName, limits]) => ({
+      groupName,
+      ...ALL_METRICS.reduce((acc, m) => {
+        acc[m] = limits[m] ?? null;
+        acc[`${m}_hide_details`] = !!limits[`${m}_hide_details`];
+        return acc;
+      }, {}),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function serializeGroupLimits(groups) {
+  const obj = {};
+  groups.forEach((g) => {
+    const limits = {};
+    ALL_METRICS.forEach((m) => {
+      limits[m] = g[m];
+      if (g[`${m}_hide_details`]) {
+        limits[`${m}_hide_details`] = true;
+      }
+    });
+    obj[g.groupName] = limits;
+  });
+  return JSON.stringify(obj);
+}
+
 export default function RequestRateLimit(props) {
   const { t } = useTranslation();
-
   const [loading, setLoading] = useState(false);
-  const [inputs, setInputs] = useState({
-    UserGroupUsageLimits: '{}',
-  });
-  const refForm = useRef();
-  const [inputsRow, setInputsRow] = useState(inputs);
-
-  function onSubmit() {
-    const updateArray = compareObjects(inputs, inputsRow);
-    if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
-    const requestQueue = updateArray.map((item) => {
-      const value = inputs[item.key];
-      return API.put('/api/option/', {
-        key: item.key,
-        value,
-      });
-    });
-    setLoading(true);
-    Promise.all(requestQueue)
-      .then((res) => {
-        if (requestQueue.length === 1) {
-          if (res.includes(undefined)) return;
-        } else if (requestQueue.length > 1) {
-          if (res.includes(undefined))
-            return showError(t('部分保存失败，请重试'));
-        }
-
-        for (let i = 0; i < res.length; i++) {
-          if (!res[i].data.success) {
-            return showError(res[i].data.message);
-          }
-        }
-
-        showSuccess(t('保存成功'));
-        props.refresh();
-      })
-      .catch(() => {
-        showError(t('保存失败，请重试'));
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }
+  const [groups, setGroups] = useState([]);
+  const [savedJson, setSavedJson] = useState('{}');
+  const [newGroupName, setNewGroupName] = useState('');
 
   useEffect(() => {
-    const currentInputs = {};
-    for (let key in props.options) {
-      if (Object.keys(inputs).includes(key)) {
-        currentInputs[key] = props.options[key];
-      }
+    const raw = props.options.UserGroupUsageLimits || '{}';
+    setSavedJson(raw);
+    setGroups(parseGroupLimits(raw));
+  }, [props.options.UserGroupUsageLimits]);
+
+  const hasChanges = useMemo(
+    () => serializeGroupLimits(groups) !== serializeGroupLimits(parseGroupLimits(savedJson)),
+    [groups, savedJson],
+  );
+
+  const updateGroup = useCallback((groupName, field, value) => {
+    setGroups((prev) =>
+      prev.map((g) => (g.groupName === groupName ? { ...g, [field]: value } : g)),
+    );
+  }, []);
+
+  const renameGroup = useCallback((oldName, newName) => {
+    setGroups((prev) =>
+      prev.map((g) => (g.groupName === oldName ? { ...g, groupName: newName } : g)),
+    );
+  }, []);
+
+  const addGroup = useCallback((name = '') => {
+    const groupName = name || `group_${Date.now()}`;
+    setGroups((prev) => [
+      ...prev,
+      {
+        groupName,
+        ...ALL_METRICS.reduce((acc, m) => {
+          acc[m] = null;
+          acc[`${m}_hide_details`] = false;
+          return acc;
+        }, {}),
+      },
+    ]);
+  }, []);
+
+  const removeGroup = useCallback((groupName) => {
+    setGroups((prev) => prev.filter((g) => g.groupName !== groupName));
+  }, []);
+
+  const save = useCallback(async () => {
+    const names = groups.map((g) => g.groupName);
+    if (new Set(names).size !== names.length) {
+      showWarning(t('存在重复的分组名称'));
+      return;
     }
-    setInputs(currentInputs);
-    setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
-  }, [props.options]);
+    if (names.some((n) => !n.trim())) {
+      showWarning(t('分组名称不能为空'));
+      return;
+    }
+
+    const value = serializeGroupLimits(groups);
+    setLoading(true);
+    try {
+      const res = await API.put('/api/option/', {
+        key: 'UserGroupUsageLimits',
+        value,
+      });
+      if (!res.data.success) {
+        showError(res.data.message);
+        return;
+      }
+      showSuccess(t('保存成功'));
+      props.refresh();
+    } catch {
+      showError(t('保存失败，请重试'));
+    } finally {
+      setLoading(false);
+    }
+  }, [groups, props.refresh, t]);
+
+  const handleAddGroup = () => {
+    const name = newGroupName.trim();
+    if (!name) {
+      addGroup();
+    } else {
+      if (groups.some((g) => g.groupName === name)) {
+        showWarning(t('分组名称已存在'));
+        return;
+      }
+      addGroup(name);
+      setNewGroupName('');
+    }
+  };
+
+  const metricRows = ALL_METRICS.map((m) => ({
+    key: m,
+    metric: METRIC_LABELS[m],
+    description: t(METRIC_DESCRIPTIONS[m]),
+  }));
+
+  const columns = [
+    {
+      title: t('指标'),
+      dataIndex: 'metric',
+      fixed: 'left',
+      width: 150,
+      render: (text, record) => (
+        <div>
+          <Text strong size='small'>{text}</Text>
+          <br />
+          <Text type='tertiary' size='small'>{record.description}</Text>
+        </div>
+      ),
+    },
+    ...groups.map((group) => ({
+      title: (
+        <Space vertical spacing={2} align='center'>
+          <Input
+            size='small'
+            value={group.groupName}
+            style={{ width: 120, textAlign: 'center' }}
+            onChange={(v) => renameGroup(group.groupName, v)}
+          />
+          <Popconfirm
+            title={t('确认删除该分组？')}
+            onConfirm={() => removeGroup(group.groupName)}
+          >
+            <Button
+              size='small'
+              theme='borderless'
+              type='danger'
+              icon={<Trash2 size={12} />}
+              style={{ padding: '1px 3px' }}
+            />
+          </Popconfirm>
+        </Space>
+      ),
+      dataIndex: group.groupName,
+      width: 160,
+      render: (_, record) => (
+        <Space vertical spacing={2} align='start' style={{ width: '100%' }}>
+          <InputNumber
+            value={group[record.key]}
+            min={0}
+            step={1}
+            size='small'
+            placeholder='∞'
+            style={{ width: '100%' }}
+            onChange={(v) =>
+              updateGroup(
+                group.groupName,
+                record.key,
+                v === '' || v === undefined || v === null ? null : Number(v),
+              )
+            }
+          />
+          <Space align='center' spacing={4}>
+            <Switch
+              size='small'
+              checked={group[`${record.key}_hide_details`]}
+              onChange={(v) => updateGroup(group.groupName, `${record.key}_hide_details`, v)}
+            />
+            <Text type='tertiary' size='small'>
+              {group[`${record.key}_hide_details`] ? <EyeOff size={12} /> : <Eye size={12} />}
+            </Text>
+          </Space>
+        </Space>
+      ),
+    })),
+  ];
 
   return (
-    <>
-      <Spin spinning={loading}>
-        <Form
-          values={inputs}
-          getFormApi={(formAPI) => (refForm.current = formAPI)}
-          style={{ marginBottom: 15 }}
-        >
-          <Form.Section text={t('基础使用限制')}>
-            <Row>
-              <Col xs={24} sm={16}>
-                <Form.TextArea
-                  label={t('用户分组基础使用限制')}
-                  placeholder={t(
-                    '{\n  "default": {\n    "rpm": 5,\n    "rpm_hide_details": true,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "hourly": 5000,\n    "daily": 20000,\n    "weekly": 30000,\n    "weekly_hide_details": true,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "hourly": null,\n    "daily": null,\n    "weekly": null,\n    "monthly": null\n  }\n}',
-                  )}
-                  field={'UserGroupUsageLimits'}
-                  autosize={{ minRows: 5, maxRows: 15 }}
-                  trigger='blur'
-                  stopValidateWithError
-                  rules={[
-                    {
-                      validator: (rule, value) => verifyJSON(value),
-                      message: t('不是合法的 JSON 字符串'),
-                    },
-                  ]}
-                  extraText={
-                    <div>
-                      <p>{t('说明：')}</p>
-                      <ul>
-                        <li>
-                          {t(
-                            '使用 JSON 对象格式，外层键为用户分组名称，值为包含 rpm、rpd、tpm、tpd、hourly、daily、weekly、monthly 以及可选 *_hide_details 布尔字段的对象。',
-                          )}
-                        </li>
-                        <li>
-                          {t(
-                            '限制字段只接受整数或 null；null 表示该指标不限制。*_hide_details 只接受 true 或 false。',
-                          )}
-                        </li>
-                        <li>
-                          {t(
-                            'rpm 和 rpd 表示请求次数限制，tpm 和 tpd 表示 Token 限制，hourly、daily、weekly、monthly 表示预算限制。',
-                          )}
-                        </li>
-                        <li>
-                          {t(
-                            'hourly、daily、weekly、monthly 使用当前站点额度展示单位进行配置，并会在新的“使用限制”页面展示给用户。',
-                          )}
-                        </li>
-                        <li>
-                          {t(
-                            '开启 *_hide_details 后，用户侧仅显示消耗百分比，不显示已用、处理中、剩余和总限制。',
-                          )}
-                        </li>
-                        <li>{t('该配置会替代旧的分组速率限制配置。')}</li>
-                        <li>
-                          {t(
-                            '该项只负责基础限制本身；“重置使用限制”和“使用限制倍率”请在下方独立面板中配置。',
-                          )}
-                        </li>
-                      </ul>
-                    </div>
-                  }
-                  onChange={(value) => {
-                    setInputs({ ...inputs, UserGroupUsageLimits: value });
-                  }}
-                />
-              </Col>
-            </Row>
-            <Row>
-              <Button size='default' onClick={onSubmit}>
-                {t('保存基础使用限制')}
-              </Button>
-            </Row>
-          </Form.Section>
-        </Form>
-      </Spin>
-    </>
+    <Spin spinning={loading}>
+      <Space vertical align='start' style={{ width: '100%' }} spacing='medium'>
+        <div>
+          <Text strong size='normal'>{t('基础使用限制')}</Text>
+          <Paragraph type='secondary' size='small' style={{ marginTop: 4, marginBottom: 0 }}>
+            {t('纵向按指标对比各分组配置。留空表示不限制。')}
+          </Paragraph>
+          <Paragraph type='secondary' size='small' style={{ marginTop: 4, marginBottom: 0 }}>
+            {t('开启隐藏详情后，用户侧仅显示消耗百分比，不显示已用、处理中、剩余和总限制。')}
+          </Paragraph>
+        </div>
+
+        <div style={{ width: '100%', overflow: 'auto' }}>
+          <Table
+            columns={columns}
+            dataSource={metricRows}
+            rowKey='key'
+            pagination={false}
+            size='small'
+            scroll={{ x: Math.max(150 + groups.length * 160, 500) }}
+            empty={
+              <Paragraph type='tertiary' style={{ padding: '24px 0' }}>
+                {t('暂无分组，点击下方按钮添加')}
+              </Paragraph>
+            }
+          />
+        </div>
+
+        <Space>
+          <Input
+            size='small'
+            value={newGroupName}
+            placeholder={t('输入分组名称')}
+            style={{ width: 160 }}
+            onChange={setNewGroupName}
+            onEnterPress={handleAddGroup}
+          />
+          <Button
+            icon={<Plus size={14} />}
+            theme='light'
+            onClick={handleAddGroup}
+          >
+            {t('添加分组')}
+          </Button>
+          <Button
+            loading={loading}
+            disabled={!hasChanges}
+            onClick={save}
+          >
+            {t('保存基础使用限制')}
+          </Button>
+        </Space>
+      </Space>
+    </Spin>
   );
 }
