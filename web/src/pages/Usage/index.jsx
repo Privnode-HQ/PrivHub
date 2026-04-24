@@ -62,19 +62,19 @@ const getStatusColor = (status) => {
 };
 
 const getProgressColor = (percent) => {
-  if (percent >= 90) return 'bg-red-500';
-  if (percent >= 70) return 'bg-amber-500';
-  return 'bg-emerald-500';
+  if (percent >= 90) return 'bg-semi-color-danger';
+  if (percent >= 70) return 'bg-semi-color-warning';
+  return 'bg-semi-color-success';
 };
 
 const getStatusDotColor = (status) => {
   switch (status) {
     case 'blocked':
-      return 'bg-red-500';
+      return 'bg-semi-color-danger';
     case 'unlimited':
-      return 'bg-zinc-300';
+      return 'bg-semi-color-disabled-fill';
     default:
-      return 'bg-emerald-500';
+      return 'bg-semi-color-success';
   }
 };
 
@@ -193,7 +193,7 @@ export default function Usage() {
                   >
                     {t('预算限制')}
                   </Typography.Text>
-                  <div className='divide-y divide-zinc-950/5'>
+                  <div className='divide-y divide-semi-color-border'>
                     {budgetMetrics.map(({ key, titleKey, metric }) => {
                       const percent = metric.consumption_percent ?? 0;
                       const clampedPercent = Math.min(
@@ -228,7 +228,7 @@ export default function Usage() {
                             </Typography.Text>
                           </div>
                           {metric.status !== 'unlimited' && (
-                            <div className='h-2 overflow-hidden rounded-full bg-zinc-100'>
+                            <div className='h-2 overflow-hidden rounded-full bg-semi-color-fill-0'>
                               <div
                                 className={`h-full rounded-full transition-all ${getProgressColor(clampedPercent)}`}
                                 style={{ width: `${clampedPercent}%` }}
@@ -288,7 +288,7 @@ export default function Usage() {
                   <div className='overflow-x-auto'>
                     <table className='w-full'>
                       <thead>
-                        <tr className='border-b border-zinc-950/5'>
+                        <tr className='border-b border-semi-color-border'>
                           <th className='px-4 py-3 text-left'>
                             <Typography.Text
                               type='secondary'
@@ -358,7 +358,7 @@ export default function Usage() {
                               key={key}
                               className={
                                 index < tableMetrics.length - 1
-                                  ? 'border-b border-zinc-950/5'
+                                  ? 'border-b border-semi-color-border'
                                   : ''
                               }
                             >
@@ -394,7 +394,7 @@ export default function Usage() {
                               <td className='px-4 py-3 text-right'>
                                 <div className='flex items-center justify-end gap-2'>
                                   {metric.status !== 'unlimited' && (
-                                    <div className='hidden h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100 sm:block'>
+                                    <div className='hidden h-1.5 w-16 overflow-hidden rounded-full bg-semi-color-fill-0 sm:block'>
                                       <div
                                         className={`h-full rounded-full ${getProgressColor(clampedPercent)}`}
                                         style={{
