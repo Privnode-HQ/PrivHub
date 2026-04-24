@@ -24,15 +24,18 @@ import dayjs from 'dayjs';
 import { renderQuota } from '../../helpers';
 import useUserUsageLimits from '../../hooks/usage/useUserUsageLimits';
 
-const metricDefinitions = [
-  { key: 'rpm', titleKey: '每分钟请求数' },
-  { key: 'rpd', titleKey: '每日请求数' },
-  { key: 'tpm', titleKey: '每分钟 Token' },
-  { key: 'tpd', titleKey: '每日 Token' },
+const budgetMetricDefs = [
   { key: 'hourly', titleKey: '每小时预算' },
   { key: 'daily', titleKey: '每日预算' },
   { key: 'weekly', titleKey: '每周预算' },
   { key: 'monthly', titleKey: '月度预算' },
+];
+
+const tableMetricDefs = [
+  { key: 'rpm', titleKey: '每分钟请求数' },
+  { key: 'rpd', titleKey: '每日请求数' },
+  { key: 'tpm', titleKey: '每分钟 Token' },
+  { key: 'tpd', titleKey: '每日 Token' },
 ];
 
 const formatPlainNumber = (value) =>
@@ -55,6 +58,23 @@ const getStatusColor = (status) => {
       return 'grey';
     default:
       return 'green';
+  }
+};
+
+const getProgressColor = (percent) => {
+  if (percent >= 90) return 'bg-red-500';
+  if (percent >= 70) return 'bg-amber-500';
+  return 'bg-emerald-500';
+};
+
+const getStatusDotColor = (status) => {
+  switch (status) {
+    case 'blocked':
+      return 'bg-red-500';
+    case 'unlimited':
+      return 'bg-zinc-300';
+    default:
+      return 'bg-emerald-500';
   }
 };
 
@@ -95,9 +115,18 @@ export default function Usage() {
     return '-';
   };
 
+  const budgetMetrics = budgetMetricDefs
+    .map((def) => ({ ...def, metric: data?.metrics?.[def.key] }))
+    .filter((m) => m.metric);
+
+  const tableMetrics = tableMetricDefs
+    .map((def) => ({ ...def, metric: data?.metrics?.[def.key] }))
+    .filter((m) => m.metric);
+
   return (
     <div className='mt-[60px] px-2'>
       <div className='mx-auto max-w-7xl space-y-4'>
+        {/* Header */}
         <Card className='!rounded-2xl border-0 shadow-sm'>
           <div className='flex flex-col gap-4 md:flex-row md:items-start md:justify-between'>
             <div className='space-y-2'>
@@ -146,123 +175,263 @@ export default function Usage() {
               {data.no_limits_configured ? (
                 <Card className='!rounded-2xl border-0 shadow-sm'>
                   <Typography.Text type='secondary'>
-                    {t('当前分组未配置任何限制，以下数据仅用于说明当前状态。')}
+                    {t(
+                      '当前分组未配置任何限制，以下数据仅用于说明当前状态。',
+                    )}
                   </Typography.Text>
                 </Card>
               ) : null}
 
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5'>
-                {metricDefinitions.map((definition) => {
-                  const metric = data.metrics?.[definition.key];
-                  if (!metric) {
-                    return null;
-                  }
+              {/* Budget Limits — Progress Bars */}
+              {budgetMetrics.length > 0 && (
+                <Card className='!rounded-2xl border-0 shadow-sm'>
+                  <Typography.Text
+                    strong
+                    type='secondary'
+                    className='!mb-4 !block uppercase tracking-wide'
+                    size='small'
+                  >
+                    {t('预算限制')}
+                  </Typography.Text>
+                  <div className='divide-y divide-zinc-950/5'>
+                    {budgetMetrics.map(({ key, titleKey, metric }) => {
+                      const percent = metric.consumption_percent ?? 0;
+                      const clampedPercent = Math.min(
+                        100,
+                        Math.max(0, percent),
+                      );
 
-                  return (
-                    <Card
-                      key={definition.key}
-                      className='!rounded-2xl border-0 shadow-sm'
-                    >
-                      <div className='space-y-4'>
-                        <div className='flex items-start justify-between gap-3'>
-                          <div className='space-y-1'>
-                            <Typography.Text strong>
-                              {t(definition.titleKey)}
-                            </Typography.Text>
-                            <div>
-                              <Tag color={getStatusColor(metric.status)}>
+                      return (
+                        <div
+                          key={key}
+                          className='space-y-2 py-4 first:pt-0 last:pb-0'
+                        >
+                          <div className='flex items-center justify-between gap-3'>
+                            <div className='flex items-center gap-2'>
+                              <Typography.Text strong className='truncate'>
+                                {t(titleKey)}
+                              </Typography.Text>
+                              <Tag
+                                size='small'
+                                color={getStatusColor(metric.status)}
+                              >
                                 {renderStatus(metric)}
                               </Tag>
                             </div>
+                            <Typography.Text
+                              className='tabular-nums'
+                              type='secondary'
+                            >
+                              {metric.hide_details
+                                ? renderConsumptionPercent(metric)
+                                : `${renderMetricValue(metric, 'used')} / ${renderMetricValue(metric, 'limit')}`}
+                            </Typography.Text>
                           </div>
-                        </div>
-
-                        {metric.hide_details ? (
-                          <div className='space-y-3'>
-                            <div className='rounded-xl bg-zinc-50 px-4 py-3'>
-                              <Typography.Text type='secondary'>
-                                {t('消耗百分比')}
-                              </Typography.Text>
-                              <div className='pt-2'>
-                                <Typography.Title
-                                  heading={3}
-                                  className='!mb-0 tabular-nums'
-                                >
-                                  {renderConsumptionPercent(metric)}
-                                </Typography.Title>
-                              </div>
+                          {metric.status !== 'unlimited' && (
+                            <div className='h-2 overflow-hidden rounded-full bg-zinc-100'>
+                              <div
+                                className={`h-full rounded-full transition-all ${getProgressColor(clampedPercent)}`}
+                                style={{ width: `${clampedPercent}%` }}
+                              />
                             </div>
-
-                            <div className='flex items-start justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('重置时间')}
-                              </Typography.Text>
-                              <Typography.Text className='text-right tabular-nums'>
-                                {metric.reset_at
-                                  ? dayjs(metric.reset_at).format(
-                                      'YYYY-MM-DD HH:mm:ss',
-                                    )
-                                  : '-'}
-                              </Typography.Text>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className='space-y-2'>
+                          )}
+                          {!metric.hide_details && (
                             <div className='flex items-center justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('限制')}
-                              </Typography.Text>
-                              <Typography.Text strong className='tabular-nums'>
-                                {renderMetricValue(metric, 'limit')}
-                              </Typography.Text>
-                            </div>
-
-                            <div className='flex items-center justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('已用')}
-                              </Typography.Text>
-                              <Typography.Text className='tabular-nums'>
-                                {renderMetricValue(metric, 'used')}
-                              </Typography.Text>
-                            </div>
-
-                            <div className='flex items-center justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('处理中')}
-                              </Typography.Text>
-                              <Typography.Text className='tabular-nums'>
-                                {renderMetricValue(metric, 'pending')}
-                              </Typography.Text>
-                            </div>
-
-                            <div className='flex items-center justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('剩余')}
-                              </Typography.Text>
-                              <Typography.Text className='tabular-nums'>
+                              <Typography.Text type='tertiary' size='small'>
+                                {t('剩余')}:{' '}
                                 {renderMetricValue(metric, 'remaining')}
+                                {metric.pending
+                                  ? ` · ${t('处理中')}: ${renderMetricValue(metric, 'pending')}`
+                                  : ''}
                               </Typography.Text>
-                            </div>
-
-                            <div className='flex items-start justify-between gap-3'>
-                              <Typography.Text type='secondary'>
-                                {t('重置时间')}
-                              </Typography.Text>
-                              <Typography.Text className='text-right tabular-nums'>
+                              <Typography.Text
+                                type='tertiary'
+                                size='small'
+                                className='tabular-nums'
+                              >
                                 {metric.reset_at
-                                  ? dayjs(metric.reset_at).format(
-                                      'YYYY-MM-DD HH:mm:ss',
-                                    )
-                                  : '-'}
+                                  ? `${t('重置时间')}: ${dayjs(metric.reset_at).format('MM-DD HH:mm')}`
+                                  : ''}
                               </Typography.Text>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
+                          )}
+                          {metric.hide_details && metric.reset_at && (
+                            <div className='flex justify-end'>
+                              <Typography.Text
+                                type='tertiary'
+                                size='small'
+                                className='tabular-nums'
+                              >
+                                {t('重置时间')}:{' '}
+                                {dayjs(metric.reset_at).format('MM-DD HH:mm')}
+                              </Typography.Text>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
+
+              {/* Request & Token Limits — Compact Table */}
+              {tableMetrics.length > 0 && (
+                <Card className='!rounded-2xl border-0 shadow-sm overflow-hidden'>
+                  <Typography.Text
+                    strong
+                    type='secondary'
+                    className='!mb-4 !block uppercase tracking-wide'
+                    size='small'
+                  >
+                    {t('请求与 Token 限制')}
+                  </Typography.Text>
+                  <div className='overflow-x-auto'>
+                    <table className='w-full'>
+                      <thead>
+                        <tr className='border-b border-zinc-950/5'>
+                          <th className='px-4 py-3 text-left'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('指标')}
+                            </Typography.Text>
+                          </th>
+                          <th className='px-4 py-3 text-center'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('状态')}
+                            </Typography.Text>
+                          </th>
+                          <th className='px-4 py-3 text-right'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('已用')} / {t('限制')}
+                            </Typography.Text>
+                          </th>
+                          <th className='hidden px-4 py-3 text-right sm:table-cell'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('剩余')}
+                            </Typography.Text>
+                          </th>
+                          <th className='px-4 py-3 text-right'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('消耗')}
+                            </Typography.Text>
+                          </th>
+                          <th className='hidden px-4 py-3 text-right md:table-cell'>
+                            <Typography.Text
+                              type='secondary'
+                              size='small'
+                              strong
+                            >
+                              {t('重置时间')}
+                            </Typography.Text>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableMetrics.map(({ key, titleKey, metric }, index) => {
+                          const percent = metric.consumption_percent ?? 0;
+                          const clampedPercent = Math.min(
+                            100,
+                            Math.max(0, percent),
+                          );
+
+                          return (
+                            <tr
+                              key={key}
+                              className={
+                                index < tableMetrics.length - 1
+                                  ? 'border-b border-zinc-950/5'
+                                  : ''
+                              }
+                            >
+                              <td className='px-4 py-3'>
+                                <Typography.Text strong>
+                                  {t(titleKey)}
+                                </Typography.Text>
+                              </td>
+                              <td className='px-4 py-3 text-center'>
+                                <span className='inline-flex items-center gap-1.5'>
+                                  <span
+                                    className={`size-2 rounded-full ${getStatusDotColor(metric.status)}`}
+                                  />
+                                  <Typography.Text size='small'>
+                                    {renderStatus(metric)}
+                                  </Typography.Text>
+                                </span>
+                              </td>
+                              <td className='px-4 py-3 text-right'>
+                                <Typography.Text className='tabular-nums'>
+                                  {metric.hide_details
+                                    ? '-'
+                                    : `${renderMetricValue(metric, 'used')} / ${renderMetricValue(metric, 'limit')}`}
+                                </Typography.Text>
+                              </td>
+                              <td className='hidden px-4 py-3 text-right sm:table-cell'>
+                                <Typography.Text className='tabular-nums'>
+                                  {metric.hide_details
+                                    ? '-'
+                                    : renderMetricValue(metric, 'remaining')}
+                                </Typography.Text>
+                              </td>
+                              <td className='px-4 py-3 text-right'>
+                                <div className='flex items-center justify-end gap-2'>
+                                  {metric.status !== 'unlimited' && (
+                                    <div className='hidden h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100 sm:block'>
+                                      <div
+                                        className={`h-full rounded-full ${getProgressColor(clampedPercent)}`}
+                                        style={{
+                                          width: `${clampedPercent}%`,
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                  <Typography.Text
+                                    className='tabular-nums'
+                                    size='small'
+                                  >
+                                    {renderConsumptionPercent(metric)}
+                                  </Typography.Text>
+                                </div>
+                              </td>
+                              <td className='hidden px-4 py-3 text-right md:table-cell'>
+                                <Typography.Text
+                                  className='tabular-nums'
+                                  type='secondary'
+                                  size='small'
+                                >
+                                  {metric.reset_at
+                                    ? dayjs(metric.reset_at).format(
+                                        'MM-DD HH:mm',
+                                      )
+                                    : '-'}
+                                </Typography.Text>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
             </>
           ) : null}
         </Spin>
