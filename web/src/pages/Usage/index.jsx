@@ -31,6 +31,7 @@ const metricDefinitions = [
   { key: 'tpd', titleKey: '每日 Token' },
   { key: 'hourly', titleKey: '每小时预算' },
   { key: 'daily', titleKey: '每日预算' },
+  { key: 'weekly', titleKey: '每周预算' },
   { key: 'monthly', titleKey: '月度预算' },
 ];
 
@@ -38,6 +39,13 @@ const formatPlainNumber = (value) =>
   Number(value || 0).toLocaleString(undefined, {
     maximumFractionDigits: 0,
   });
+
+const formatPercentage = (value) => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return `${Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 1)}%`;
+};
 
 const getStatusColor = (status) => {
   switch (status) {
@@ -76,6 +84,17 @@ export default function Usage() {
     }
   };
 
+  const renderConsumptionPercent = (metric) => {
+    const formatted = formatPercentage(metric?.consumption_percent);
+    if (formatted) {
+      return formatted;
+    }
+    if (metric?.status === 'unlimited') {
+      return t('不限制');
+    }
+    return '-';
+  };
+
   return (
     <div className='mt-[60px] px-2'>
       <div className='mx-auto max-w-7xl space-y-4'>
@@ -86,7 +105,9 @@ export default function Usage() {
                 {t('使用限制')}
               </Typography.Title>
               <Typography.Text type='secondary'>
-                {t('查看当前分组的请求数、Token 以及每小时、每日、月度预算限制。')}
+                {t(
+                  '查看当前分组的请求数、Token 以及每小时、每日、每周、月度预算限制。',
+                )}
               </Typography.Text>
               {data && (
                 <div className='flex flex-wrap gap-2 pt-1'>
@@ -156,56 +177,87 @@ export default function Usage() {
                           </div>
                         </div>
 
-                        <div className='space-y-2'>
-                          <div className='flex items-center justify-between gap-3'>
-                            <Typography.Text type='secondary'>
-                              {t('限制')}
-                            </Typography.Text>
-                            <Typography.Text strong>
-                              {renderMetricValue(metric, 'limit')}
-                            </Typography.Text>
-                          </div>
+                        {metric.hide_details ? (
+                          <div className='space-y-3'>
+                            <div className='rounded-xl bg-zinc-50 px-4 py-3'>
+                              <Typography.Text type='secondary'>
+                                {t('消耗百分比')}
+                              </Typography.Text>
+                              <div className='pt-2'>
+                                <Typography.Title
+                                  heading={3}
+                                  className='!mb-0 tabular-nums'
+                                >
+                                  {renderConsumptionPercent(metric)}
+                                </Typography.Title>
+                              </div>
+                            </div>
 
-                          <div className='flex items-center justify-between gap-3'>
-                            <Typography.Text type='secondary'>
-                              {t('已用')}
-                            </Typography.Text>
-                            <Typography.Text>
-                              {renderMetricValue(metric, 'used')}
-                            </Typography.Text>
+                            <div className='flex items-start justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('重置时间')}
+                              </Typography.Text>
+                              <Typography.Text className='text-right tabular-nums'>
+                                {metric.reset_at
+                                  ? dayjs(metric.reset_at).format(
+                                      'YYYY-MM-DD HH:mm:ss',
+                                    )
+                                  : '-'}
+                              </Typography.Text>
+                            </div>
                           </div>
+                        ) : (
+                          <div className='space-y-2'>
+                            <div className='flex items-center justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('限制')}
+                              </Typography.Text>
+                              <Typography.Text strong className='tabular-nums'>
+                                {renderMetricValue(metric, 'limit')}
+                              </Typography.Text>
+                            </div>
 
-                          <div className='flex items-center justify-between gap-3'>
-                            <Typography.Text type='secondary'>
-                              {t('处理中')}
-                            </Typography.Text>
-                            <Typography.Text>
-                              {renderMetricValue(metric, 'pending')}
-                            </Typography.Text>
-                          </div>
+                            <div className='flex items-center justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('已用')}
+                              </Typography.Text>
+                              <Typography.Text className='tabular-nums'>
+                                {renderMetricValue(metric, 'used')}
+                              </Typography.Text>
+                            </div>
 
-                          <div className='flex items-center justify-between gap-3'>
-                            <Typography.Text type='secondary'>
-                              {t('剩余')}
-                            </Typography.Text>
-                            <Typography.Text>
-                              {renderMetricValue(metric, 'remaining')}
-                            </Typography.Text>
-                          </div>
+                            <div className='flex items-center justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('处理中')}
+                              </Typography.Text>
+                              <Typography.Text className='tabular-nums'>
+                                {renderMetricValue(metric, 'pending')}
+                              </Typography.Text>
+                            </div>
 
-                          <div className='flex items-start justify-between gap-3'>
-                            <Typography.Text type='secondary'>
-                              {t('重置时间')}
-                            </Typography.Text>
-                            <Typography.Text className='text-right'>
-                              {metric.reset_at
-                                ? dayjs(metric.reset_at).format(
-                                    'YYYY-MM-DD HH:mm:ss',
-                                  )
-                                : '-'}
-                            </Typography.Text>
+                            <div className='flex items-center justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('剩余')}
+                              </Typography.Text>
+                              <Typography.Text className='tabular-nums'>
+                                {renderMetricValue(metric, 'remaining')}
+                              </Typography.Text>
+                            </div>
+
+                            <div className='flex items-start justify-between gap-3'>
+                              <Typography.Text type='secondary'>
+                                {t('重置时间')}
+                              </Typography.Text>
+                              <Typography.Text className='text-right tabular-nums'>
+                                {metric.reset_at
+                                  ? dayjs(metric.reset_at).format(
+                                      'YYYY-MM-DD HH:mm:ss',
+                                    )
+                                  : '-'}
+                              </Typography.Text>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </Card>
                   );

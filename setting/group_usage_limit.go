@@ -14,23 +14,41 @@ import (
 )
 
 type GroupUsageLimitPolicy struct {
-	RPM     *int64 `json:"rpm"`
-	RPD     *int64 `json:"rpd"`
-	TPM     *int64 `json:"tpm"`
-	TPD     *int64 `json:"tpd"`
-	Hourly  *int64 `json:"hourly"`
-	Daily   *int64 `json:"daily"`
-	Monthly *int64 `json:"monthly"`
+	RPM                *int64 `json:"rpm"`
+	RPMHideDetails     bool   `json:"rpm_hide_details,omitempty"`
+	RPD                *int64 `json:"rpd"`
+	RPDHideDetails     bool   `json:"rpd_hide_details,omitempty"`
+	TPM                *int64 `json:"tpm"`
+	TPMHideDetails     bool   `json:"tpm_hide_details,omitempty"`
+	TPD                *int64 `json:"tpd"`
+	TPDHideDetails     bool   `json:"tpd_hide_details,omitempty"`
+	Hourly             *int64 `json:"hourly"`
+	HourlyHideDetails  bool   `json:"hourly_hide_details,omitempty"`
+	Daily              *int64 `json:"daily"`
+	DailyHideDetails   bool   `json:"daily_hide_details,omitempty"`
+	Weekly             *int64 `json:"weekly"`
+	WeeklyHideDetails  bool   `json:"weekly_hide_details,omitempty"`
+	Monthly            *int64 `json:"monthly"`
+	MonthlyHideDetails bool   `json:"monthly_hide_details,omitempty"`
 }
 
 type groupUsageLimitPolicyInput struct {
-	RPM     *int64 `json:"rpm"`
-	RPD     *int64 `json:"rpd"`
-	TPM     *int64 `json:"tpm"`
-	TPD     *int64 `json:"tpd"`
-	Hourly  *int64 `json:"hourly"`
-	Daily   *int64 `json:"daily"`
-	Monthly *int64 `json:"monthly"`
+	RPM                *int64 `json:"rpm"`
+	RPMHideDetails     bool   `json:"rpm_hide_details,omitempty"`
+	RPD                *int64 `json:"rpd"`
+	RPDHideDetails     bool   `json:"rpd_hide_details,omitempty"`
+	TPM                *int64 `json:"tpm"`
+	TPMHideDetails     bool   `json:"tpm_hide_details,omitempty"`
+	TPD                *int64 `json:"tpd"`
+	TPDHideDetails     bool   `json:"tpd_hide_details,omitempty"`
+	Hourly             *int64 `json:"hourly"`
+	HourlyHideDetails  bool   `json:"hourly_hide_details,omitempty"`
+	Daily              *int64 `json:"daily"`
+	DailyHideDetails   bool   `json:"daily_hide_details,omitempty"`
+	Weekly             *int64 `json:"weekly"`
+	WeeklyHideDetails  bool   `json:"weekly_hide_details,omitempty"`
+	Monthly            *int64 `json:"monthly"`
+	MonthlyHideDetails bool   `json:"monthly_hide_details,omitempty"`
 }
 
 var userGroupUsageLimits = map[string]GroupUsageLimitPolicy{}
@@ -46,13 +64,45 @@ func cloneNullableInt64(value *int64) *int64 {
 
 func cloneGroupUsageLimitPolicy(policy GroupUsageLimitPolicy) GroupUsageLimitPolicy {
 	return GroupUsageLimitPolicy{
-		RPM:     cloneNullableInt64(policy.RPM),
-		RPD:     cloneNullableInt64(policy.RPD),
-		TPM:     cloneNullableInt64(policy.TPM),
-		TPD:     cloneNullableInt64(policy.TPD),
-		Hourly:  cloneNullableInt64(policy.Hourly),
-		Daily:   cloneNullableInt64(policy.Daily),
-		Monthly: cloneNullableInt64(policy.Monthly),
+		RPM:                cloneNullableInt64(policy.RPM),
+		RPMHideDetails:     policy.RPMHideDetails,
+		RPD:                cloneNullableInt64(policy.RPD),
+		RPDHideDetails:     policy.RPDHideDetails,
+		TPM:                cloneNullableInt64(policy.TPM),
+		TPMHideDetails:     policy.TPMHideDetails,
+		TPD:                cloneNullableInt64(policy.TPD),
+		TPDHideDetails:     policy.TPDHideDetails,
+		Hourly:             cloneNullableInt64(policy.Hourly),
+		HourlyHideDetails:  policy.HourlyHideDetails,
+		Daily:              cloneNullableInt64(policy.Daily),
+		DailyHideDetails:   policy.DailyHideDetails,
+		Weekly:             cloneNullableInt64(policy.Weekly),
+		WeeklyHideDetails:  policy.WeeklyHideDetails,
+		Monthly:            cloneNullableInt64(policy.Monthly),
+		MonthlyHideDetails: policy.MonthlyHideDetails,
+	}
+}
+
+func (policy GroupUsageLimitPolicy) ShouldHideMetricDetails(metric string) bool {
+	switch metric {
+	case "rpm":
+		return policy.RPMHideDetails
+	case "rpd":
+		return policy.RPDHideDetails
+	case "tpm":
+		return policy.TPMHideDetails
+	case "tpd":
+		return policy.TPDHideDetails
+	case "hourly":
+		return policy.HourlyHideDetails
+	case "daily":
+		return policy.DailyHideDetails
+	case "weekly":
+		return policy.WeeklyHideDetails
+	case "monthly":
+		return policy.MonthlyHideDetails
+	default:
+		return false
 	}
 }
 
@@ -176,15 +226,26 @@ func parseGroupUsageLimitPolicies(jsonStr string) (map[string]GroupUsageLimitPol
 		if err := validateNonNegativeNullableInt(policyInput.Daily, fmt.Sprintf("group %s daily", groupName)); err != nil {
 			return nil, err
 		}
+		if err := validateNonNegativeNullableInt(policyInput.Weekly, fmt.Sprintf("group %s weekly", groupName)); err != nil {
+			return nil, err
+		}
 		if err := validateNonNegativeNullableInt(policyInput.Monthly, fmt.Sprintf("group %s monthly", groupName)); err != nil {
 			return nil, err
 		}
 
 		policy := GroupUsageLimitPolicy{
-			RPM: cloneNullableInt64(policyInput.RPM),
-			RPD: cloneNullableInt64(policyInput.RPD),
-			TPM: cloneNullableInt64(policyInput.TPM),
-			TPD: cloneNullableInt64(policyInput.TPD),
+			RPM:                cloneNullableInt64(policyInput.RPM),
+			RPMHideDetails:     policyInput.RPMHideDetails,
+			RPD:                cloneNullableInt64(policyInput.RPD),
+			RPDHideDetails:     policyInput.RPDHideDetails,
+			TPM:                cloneNullableInt64(policyInput.TPM),
+			TPMHideDetails:     policyInput.TPMHideDetails,
+			TPD:                cloneNullableInt64(policyInput.TPD),
+			TPDHideDetails:     policyInput.TPDHideDetails,
+			HourlyHideDetails:  policyInput.HourlyHideDetails,
+			DailyHideDetails:   policyInput.DailyHideDetails,
+			WeeklyHideDetails:  policyInput.WeeklyHideDetails,
+			MonthlyHideDetails: policyInput.MonthlyHideDetails,
 		}
 		if policyInput.Hourly != nil {
 			normalizedHourly, err := normalizeBudgetDisplayValue(*policyInput.Hourly, "hourly")
@@ -199,6 +260,13 @@ func parseGroupUsageLimitPolicies(jsonStr string) (map[string]GroupUsageLimitPol
 				return nil, fmt.Errorf("group %s daily is invalid: %w", groupName, err)
 			}
 			policy.Daily = &normalizedDaily
+		}
+		if policyInput.Weekly != nil {
+			normalizedWeekly, err := normalizeBudgetDisplayValue(*policyInput.Weekly, "weekly")
+			if err != nil {
+				return nil, fmt.Errorf("group %s weekly is invalid: %w", groupName, err)
+			}
+			policy.Weekly = &normalizedWeekly
 		}
 		if policyInput.Monthly != nil {
 			normalizedMonthly, err := normalizeBudgetDisplayValue(*policyInput.Monthly, "monthly")
@@ -220,10 +288,18 @@ func UserGroupUsageLimits2JSONString() string {
 	serialized := make(map[string]groupUsageLimitPolicyInput, len(userGroupUsageLimits))
 	for groupName, policy := range userGroupUsageLimits {
 		displayPolicy := groupUsageLimitPolicyInput{
-			RPM: cloneNullableInt64(policy.RPM),
-			RPD: cloneNullableInt64(policy.RPD),
-			TPM: cloneNullableInt64(policy.TPM),
-			TPD: cloneNullableInt64(policy.TPD),
+			RPM:                cloneNullableInt64(policy.RPM),
+			RPMHideDetails:     policy.RPMHideDetails,
+			RPD:                cloneNullableInt64(policy.RPD),
+			RPDHideDetails:     policy.RPDHideDetails,
+			TPM:                cloneNullableInt64(policy.TPM),
+			TPMHideDetails:     policy.TPMHideDetails,
+			TPD:                cloneNullableInt64(policy.TPD),
+			TPDHideDetails:     policy.TPDHideDetails,
+			HourlyHideDetails:  policy.HourlyHideDetails,
+			DailyHideDetails:   policy.DailyHideDetails,
+			WeeklyHideDetails:  policy.WeeklyHideDetails,
+			MonthlyHideDetails: policy.MonthlyHideDetails,
 		}
 		if policy.Hourly != nil {
 			displayHourly := normalizeBudgetQuotaForDisplay(*policy.Hourly)
@@ -232,6 +308,10 @@ func UserGroupUsageLimits2JSONString() string {
 		if policy.Daily != nil {
 			displayDaily := normalizeBudgetQuotaForDisplay(*policy.Daily)
 			displayPolicy.Daily = &displayDaily
+		}
+		if policy.Weekly != nil {
+			displayWeekly := normalizeBudgetQuotaForDisplay(*policy.Weekly)
+			displayPolicy.Weekly = &displayWeekly
 		}
 		if policy.Monthly != nil {
 			displayMonthly := normalizeBudgetQuotaForDisplay(*policy.Monthly)

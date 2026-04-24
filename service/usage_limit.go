@@ -23,6 +23,7 @@ const (
 	usageWindowMinute = "minute"
 	usageWindowHour   = "hour"
 	usageWindowDay    = "day"
+	usageWindowWeek   = "week"
 	usageWindowMonth  = "month"
 
 	usageReservationReserved = "reserved"
@@ -43,17 +44,20 @@ type usageReservationWindows struct {
 	Minute *model.UserUsageWindow
 	Hour   *model.UserUsageWindow
 	Day    *model.UserUsageWindow
+	Week   *model.UserUsageWindow
 	Month  *model.UserUsageWindow
 }
 
 type UsageMetricSummary struct {
-	Unit      string     `json:"unit"`
-	Limit     *int64     `json:"limit"`
-	Used      int64      `json:"used"`
-	Pending   int64      `json:"pending"`
-	Remaining *int64     `json:"remaining"`
-	ResetAt   *time.Time `json:"reset_at"`
-	Status    string     `json:"status"`
+	Unit               string     `json:"unit"`
+	Limit              *int64     `json:"limit"`
+	Used               *int64     `json:"used"`
+	Pending            *int64     `json:"pending"`
+	Remaining          *int64     `json:"remaining"`
+	ResetAt            *time.Time `json:"reset_at"`
+	Status             string     `json:"status"`
+	HideDetails        bool       `json:"hide_details"`
+	ConsumptionPercent *float64   `json:"consumption_percent"`
 }
 
 type UsageMetricMap struct {
@@ -63,6 +67,7 @@ type UsageMetricMap struct {
 	TPD     UsageMetricSummary `json:"tpd"`
 	Hourly  UsageMetricSummary `json:"hourly"`
 	Daily   UsageMetricSummary `json:"daily"`
+	Weekly  UsageMetricSummary `json:"weekly"`
 	Monthly UsageMetricSummary `json:"monthly"`
 }
 
@@ -101,6 +106,8 @@ func (e *usageLimitExceededError) Error() string {
 		return fmt.Sprintf("您已达到每小时预算限制：每小时最多可使用 %s，将于 %s 重置", logger.FormatQuota(int(e.Limit)), e.ResetAt.In(time.Local).Format("2006-01-02 15:04:05"))
 	case "daily":
 		return fmt.Sprintf("您已达到每日预算限制：每日最多可使用 %s，将于 %s 重置", logger.FormatQuota(int(e.Limit)), e.ResetAt.In(time.Local).Format("2006-01-02 15:04:05"))
+	case "weekly":
+		return fmt.Sprintf("您已达到每周预算限制：本周最多可使用 %s，将于 %s 重置", logger.FormatQuota(int(e.Limit)), e.ResetAt.In(time.Local).Format("2006-01-02 15:04:05"))
 	case "monthly":
 		return fmt.Sprintf("您已达到月度预算限制：本月最多可使用 %s，将于 %s 重置", logger.FormatQuota(int(e.Limit)), e.ResetAt.In(time.Local).Format("2006-01-02 15:04:05"))
 	default:
@@ -109,7 +116,17 @@ func (e *usageLimitExceededError) Error() string {
 }
 
 func usagePolicyHasAnyConfiguredLimit(policy setting.GroupUsageLimitPolicy) bool {
-	return policy.RPM != nil || policy.RPD != nil || policy.TPM != nil || policy.TPD != nil || policy.Hourly != nil || policy.Daily != nil || policy.Monthly != nil
+	return policy.RPM != nil || policy.RPD != nil || policy.TPM != nil || policy.TPD != nil || policy.Hourly != nil || policy.Daily != nil || policy.Weekly != nil || policy.Monthly != nil
+}
+
+func startOfWeek(now time.Time) time.Time {
+	localNow := now.In(time.Local)
+	dayStart := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, time.Local)
+	weekday := int(dayStart.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	return dayStart.AddDate(0, 0, -(weekday - 1))
 }
 
 func getUsageWindowBounds(now time.Time) map[string]usageWindowBound {
@@ -117,6 +134,7 @@ func getUsageWindowBounds(now time.Time) map[string]usageWindowBound {
 	minuteStart := localNow.Truncate(time.Minute)
 	hourStart := localNow.Truncate(time.Hour)
 	dayStart := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, time.Local)
+	weekStart := startOfWeek(localNow)
 	monthStart := time.Date(localNow.Year(), localNow.Month(), 1, 0, 0, 0, 0, time.Local)
 
 	return map[string]usageWindowBound{
@@ -135,6 +153,11 @@ func getUsageWindowBounds(now time.Time) map[string]usageWindowBound {
 			Start: dayStart,
 			End:   dayStart.Add(24 * time.Hour),
 		},
+		usageWindowWeek: {
+			Kind:  usageWindowWeek,
+			Start: weekStart,
+			End:   weekStart.AddDate(0, 0, 7),
+		},
 		usageWindowMonth: {
 			Kind:  usageWindowMonth,
 			Start: monthStart,
@@ -150,6 +173,10 @@ func getReservationWindowBounds(reservation *model.UserUsageReservation) map[str
 		hourStart = time.Unix(reservation.HourWindowStart, 0).In(time.Local)
 	}
 	dayStart := time.Unix(reservation.DayWindowStart, 0).In(time.Local)
+	weekStart := startOfWeek(minuteStart)
+	if reservation.WeekWindowStart > 0 {
+		weekStart = time.Unix(reservation.WeekWindowStart, 0).In(time.Local)
+	}
 	monthStart := time.Unix(reservation.MonthWindowStart, 0).In(time.Local)
 
 	return map[string]usageWindowBound{
@@ -167,6 +194,11 @@ func getReservationWindowBounds(reservation *model.UserUsageReservation) map[str
 			Kind:  usageWindowDay,
 			Start: dayStart,
 			End:   dayStart.Add(24 * time.Hour),
+		},
+		usageWindowWeek: {
+			Kind:  usageWindowWeek,
+			Start: weekStart,
+			End:   weekStart.AddDate(0, 0, 7),
 		},
 		usageWindowMonth: {
 			Kind:  usageWindowMonth,
@@ -234,6 +266,10 @@ func loadReservationWindowsTx(tx *gorm.DB, reservation *model.UserUsageReservati
 	if err != nil {
 		return nil, err
 	}
+	weekWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, bounds[usageWindowWeek])
+	if err != nil {
+		return nil, err
+	}
 	monthWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, bounds[usageWindowMonth])
 	if err != nil {
 		return nil, err
@@ -243,6 +279,7 @@ func loadReservationWindowsTx(tx *gorm.DB, reservation *model.UserUsageReservati
 		Minute: minuteWindow,
 		Hour:   hourWindow,
 		Day:    dayWindow,
+		Week:   weekWindow,
 		Month:  monthWindow,
 	}, nil
 }
@@ -295,6 +332,7 @@ func expireUserReservationsTx(tx *gorm.DB, userID int, now time.Time) error {
 		windows.Day.RequestUsed += reservation.ReservedRequests
 		windows.Day.TokenReserved -= reservation.ReservedTokens
 		windows.Day.BudgetReserved -= reservation.ReservedBudget
+		windows.Week.BudgetReserved -= reservation.ReservedBudget
 		windows.Month.BudgetReserved -= reservation.ReservedBudget
 
 		if err := saveUsageWindowTx(tx, windows.Minute); err != nil {
@@ -304,6 +342,9 @@ func expireUserReservationsTx(tx *gorm.DB, userID int, now time.Time) error {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Day); err != nil {
+			return err
+		}
+		if err := saveUsageWindowTx(tx, windows.Week); err != nil {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Month); err != nil {
@@ -337,6 +378,37 @@ func computeRemaining(limit *int64, used, pending int64) *int64 {
 	return &remaining
 }
 
+func cloneNullableInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func int64Pointer(value int64) *int64 {
+	cloned := value
+	return &cloned
+}
+
+func computeConsumptionPercent(limit *int64, used, pending int64) *float64 {
+	if limit == nil {
+		return nil
+	}
+	if *limit <= 0 {
+		percent := 100.0
+		return &percent
+	}
+	percent := float64(used+pending) * 100 / float64(*limit)
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	return &percent
+}
+
 func computeMetricStatus(limit *int64, used, pending int64) string {
 	if limit == nil {
 		return "unlimited"
@@ -345,6 +417,24 @@ func computeMetricStatus(limit *int64, used, pending int64) string {
 		return "blocked"
 	}
 	return "available"
+}
+
+func buildUsageMetricSummary(unit string, limit *int64, used, pending int64, resetAt *time.Time, hideDetails bool) UsageMetricSummary {
+	summary := UsageMetricSummary{
+		Unit:               unit,
+		ResetAt:            resetAt,
+		Status:             computeMetricStatus(limit, used, pending),
+		HideDetails:        hideDetails,
+		ConsumptionPercent: computeConsumptionPercent(limit, used, pending),
+	}
+	if hideDetails {
+		return summary
+	}
+	summary.Limit = cloneNullableInt64(limit)
+	summary.Used = int64Pointer(used)
+	summary.Pending = int64Pointer(pending)
+	summary.Remaining = computeRemaining(limit, used, pending)
+	return summary
 }
 
 func ReserveUsageRequest(c *gin.Context) error {
@@ -403,6 +493,7 @@ func ReserveUsageRequest(c *gin.Context) error {
 			MinuteWindowStart: bounds[usageWindowMinute].Start.Unix(),
 			HourWindowStart:   bounds[usageWindowHour].Start.Unix(),
 			DayWindowStart:    bounds[usageWindowDay].Start.Unix(),
+			WeekWindowStart:   bounds[usageWindowWeek].Start.Unix(),
 			MonthWindowStart:  bounds[usageWindowMonth].Start.Unix(),
 			ReservedRequests:  1,
 			Status:            usageReservationReserved,
@@ -465,6 +556,10 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 		if err != nil {
 			return err
 		}
+		weekWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, reservationBounds[usageWindowWeek])
+		if err != nil {
+			return err
+		}
 		monthWindow, err := getOrCreateUsageWindowTx(tx, reservation.UserID, reservationBounds[usageWindowMonth])
 		if err != nil {
 			return err
@@ -521,6 +616,20 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 					return &usageLimitExceededError{Metric: "daily", Limit: *policy.Daily, ResetAt: dayBudgetResetAt}
 				}
 			}
+			if policy.Weekly != nil {
+				weekCheckWindow := weekWindow
+				weekResetAt := reservationBounds[usageWindowWeek].End
+				if !reservationBounds[usageWindowWeek].Start.Equal(currentBounds[usageWindowWeek].Start) {
+					weekCheckWindow, err = getUsageWindowTx(tx, reservation.UserID, currentBounds[usageWindowWeek])
+					if err != nil {
+						return err
+					}
+					weekResetAt = currentBounds[usageWindowWeek].End
+				}
+				if weekCheckWindow.BudgetUsed+weekCheckWindow.BudgetReserved+budgetDelta > *policy.Weekly {
+					return &usageLimitExceededError{Metric: "weekly", Limit: *policy.Weekly, ResetAt: weekResetAt}
+				}
+			}
 			if policy.Monthly != nil {
 				monthCheckWindow := monthWindow
 				monthResetAt := reservationBounds[usageWindowMonth].End
@@ -541,6 +650,7 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 		hourWindow.BudgetReserved += budgetDelta
 		dayWindow.TokenReserved += tokenDelta
 		dayWindow.BudgetReserved += budgetDelta
+		weekWindow.BudgetReserved += budgetDelta
 		monthWindow.BudgetReserved += budgetDelta
 
 		if err := saveUsageWindowTx(tx, minuteWindow); err != nil {
@@ -550,6 +660,9 @@ func ReserveUsageEstimate(c *gin.Context, relayInfo *relaycommon.RelayInfo, meta
 			return err
 		}
 		if err := saveUsageWindowTx(tx, dayWindow); err != nil {
+			return err
+		}
+		if err := saveUsageWindowTx(tx, weekWindow); err != nil {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, monthWindow); err != nil {
@@ -613,6 +726,7 @@ func releaseUsageReservationByID(userID int, reservationID string) error {
 		windows.Day.RequestUsed += reservation.ReservedRequests
 		windows.Day.TokenReserved -= reservation.ReservedTokens
 		windows.Day.BudgetReserved -= reservation.ReservedBudget
+		windows.Week.BudgetReserved -= reservation.ReservedBudget
 		windows.Month.BudgetReserved -= reservation.ReservedBudget
 
 		if err := saveUsageWindowTx(tx, windows.Minute); err != nil {
@@ -622,6 +736,9 @@ func releaseUsageReservationByID(userID int, reservationID string) error {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Day); err != nil {
+			return err
+		}
+		if err := saveUsageWindowTx(tx, windows.Week); err != nil {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Month); err != nil {
@@ -677,6 +794,9 @@ func SettleUsageReservation(relayInfo *relaycommon.RelayInfo, actualTokens int, 
 		windows.Day.BudgetReserved -= reservation.ReservedBudget
 		windows.Day.BudgetUsed += int64(actualBudget)
 
+		windows.Week.BudgetReserved -= reservation.ReservedBudget
+		windows.Week.BudgetUsed += int64(actualBudget)
+
 		windows.Month.BudgetReserved -= reservation.ReservedBudget
 		windows.Month.BudgetUsed += int64(actualBudget)
 
@@ -687,6 +807,9 @@ func SettleUsageReservation(relayInfo *relaycommon.RelayInfo, actualTokens int, 
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Day); err != nil {
+			return err
+		}
+		if err := saveUsageWindowTx(tx, windows.Week); err != nil {
 			return err
 		}
 		if err := saveUsageWindowTx(tx, windows.Month); err != nil {
@@ -706,6 +829,7 @@ func GetUserUsageLimitSnapshot(userID int, group string) (*UserUsageLimitSnapsho
 	var minuteWindow *model.UserUsageWindow
 	var hourWindow *model.UserUsageWindow
 	var dayWindow *model.UserUsageWindow
+	var weekWindow *model.UserUsageWindow
 	var monthWindow *model.UserUsageWindow
 
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
@@ -723,6 +847,10 @@ func GetUserUsageLimitSnapshot(userID int, group string) (*UserUsageLimitSnapsho
 			return err
 		}
 		dayWindow, err = getUsageWindowTx(tx, userID, bounds[usageWindowDay])
+		if err != nil {
+			return err
+		}
+		weekWindow, err = getUsageWindowTx(tx, userID, bounds[usageWindowWeek])
 		if err != nil {
 			return err
 		}
@@ -747,69 +875,14 @@ func GetUserUsageLimitSnapshot(userID int, group string) (*UserUsageLimitSnapsho
 		LegacyGroupRateLimitReplaced: true,
 		NoLimitsConfigured:           noLimitsConfigured,
 		Metrics: UsageMetricMap{
-			RPM: UsageMetricSummary{
-				Unit:      "requests",
-				Limit:     policy.RPM,
-				Used:      minuteWindow.RequestUsed,
-				Pending:   minuteWindow.RequestReserved,
-				Remaining: computeRemaining(policy.RPM, minuteWindow.RequestUsed, minuteWindow.RequestReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowMinute]),
-				Status:    computeMetricStatus(policy.RPM, minuteWindow.RequestUsed, minuteWindow.RequestReserved),
-			},
-			RPD: UsageMetricSummary{
-				Unit:      "requests",
-				Limit:     policy.RPD,
-				Used:      dayWindow.RequestUsed,
-				Pending:   dayWindow.RequestReserved,
-				Remaining: computeRemaining(policy.RPD, dayWindow.RequestUsed, dayWindow.RequestReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowDay]),
-				Status:    computeMetricStatus(policy.RPD, dayWindow.RequestUsed, dayWindow.RequestReserved),
-			},
-			TPM: UsageMetricSummary{
-				Unit:      "tokens",
-				Limit:     policy.TPM,
-				Used:      minuteWindow.TokenUsed,
-				Pending:   minuteWindow.TokenReserved,
-				Remaining: computeRemaining(policy.TPM, minuteWindow.TokenUsed, minuteWindow.TokenReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowMinute]),
-				Status:    computeMetricStatus(policy.TPM, minuteWindow.TokenUsed, minuteWindow.TokenReserved),
-			},
-			TPD: UsageMetricSummary{
-				Unit:      "tokens",
-				Limit:     policy.TPD,
-				Used:      dayWindow.TokenUsed,
-				Pending:   dayWindow.TokenReserved,
-				Remaining: computeRemaining(policy.TPD, dayWindow.TokenUsed, dayWindow.TokenReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowDay]),
-				Status:    computeMetricStatus(policy.TPD, dayWindow.TokenUsed, dayWindow.TokenReserved),
-			},
-			Hourly: UsageMetricSummary{
-				Unit:      "quota",
-				Limit:     policy.Hourly,
-				Used:      hourWindow.BudgetUsed,
-				Pending:   hourWindow.BudgetReserved,
-				Remaining: computeRemaining(policy.Hourly, hourWindow.BudgetUsed, hourWindow.BudgetReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowHour]),
-				Status:    computeMetricStatus(policy.Hourly, hourWindow.BudgetUsed, hourWindow.BudgetReserved),
-			},
-			Daily: UsageMetricSummary{
-				Unit:      "quota",
-				Limit:     policy.Daily,
-				Used:      dayWindow.BudgetUsed,
-				Pending:   dayWindow.BudgetReserved,
-				Remaining: computeRemaining(policy.Daily, dayWindow.BudgetUsed, dayWindow.BudgetReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowDay]),
-				Status:    computeMetricStatus(policy.Daily, dayWindow.BudgetUsed, dayWindow.BudgetReserved),
-			},
-			Monthly: UsageMetricSummary{
-				Unit:      "quota",
-				Limit:     policy.Monthly,
-				Used:      monthWindow.BudgetUsed,
-				Pending:   monthWindow.BudgetReserved,
-				Remaining: computeRemaining(policy.Monthly, monthWindow.BudgetUsed, monthWindow.BudgetReserved),
-				ResetAt:   metricResetTime(bounds[usageWindowMonth]),
-				Status:    computeMetricStatus(policy.Monthly, monthWindow.BudgetUsed, monthWindow.BudgetReserved),
-			},
+			RPM:     buildUsageMetricSummary("requests", policy.RPM, minuteWindow.RequestUsed, minuteWindow.RequestReserved, metricResetTime(bounds[usageWindowMinute]), policy.ShouldHideMetricDetails("rpm")),
+			RPD:     buildUsageMetricSummary("requests", policy.RPD, dayWindow.RequestUsed, dayWindow.RequestReserved, metricResetTime(bounds[usageWindowDay]), policy.ShouldHideMetricDetails("rpd")),
+			TPM:     buildUsageMetricSummary("tokens", policy.TPM, minuteWindow.TokenUsed, minuteWindow.TokenReserved, metricResetTime(bounds[usageWindowMinute]), policy.ShouldHideMetricDetails("tpm")),
+			TPD:     buildUsageMetricSummary("tokens", policy.TPD, dayWindow.TokenUsed, dayWindow.TokenReserved, metricResetTime(bounds[usageWindowDay]), policy.ShouldHideMetricDetails("tpd")),
+			Hourly:  buildUsageMetricSummary("quota", policy.Hourly, hourWindow.BudgetUsed, hourWindow.BudgetReserved, metricResetTime(bounds[usageWindowHour]), policy.ShouldHideMetricDetails("hourly")),
+			Daily:   buildUsageMetricSummary("quota", policy.Daily, dayWindow.BudgetUsed, dayWindow.BudgetReserved, metricResetTime(bounds[usageWindowDay]), policy.ShouldHideMetricDetails("daily")),
+			Weekly:  buildUsageMetricSummary("quota", policy.Weekly, weekWindow.BudgetUsed, weekWindow.BudgetReserved, metricResetTime(bounds[usageWindowWeek]), policy.ShouldHideMetricDetails("weekly")),
+			Monthly: buildUsageMetricSummary("quota", policy.Monthly, monthWindow.BudgetUsed, monthWindow.BudgetReserved, metricResetTime(bounds[usageWindowMonth]), policy.ShouldHideMetricDetails("monthly")),
 		},
 	}
 	return snapshot, nil

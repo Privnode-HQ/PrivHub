@@ -29,6 +29,7 @@ type UserUsageReservation struct {
 	MinuteWindowStart int64     `json:"minute_window_start" gorm:"bigint"`
 	HourWindowStart   int64     `json:"hour_window_start" gorm:"bigint"`
 	DayWindowStart    int64     `json:"day_window_start" gorm:"bigint"`
+	WeekWindowStart   int64     `json:"week_window_start" gorm:"bigint"`
 	MonthWindowStart  int64     `json:"month_window_start" gorm:"bigint"`
 	ReservedRequests  int64     `json:"reserved_requests" gorm:"default:0"`
 	ReservedTokens    int64     `json:"reserved_tokens" gorm:"default:0"`

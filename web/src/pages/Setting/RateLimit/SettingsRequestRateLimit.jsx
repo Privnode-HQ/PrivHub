@@ -102,7 +102,7 @@ export default function RequestRateLimit(props) {
                 <Form.TextArea
                   label={t('用户分组使用限制')}
                   placeholder={t(
-                    '{\n  "default": {\n    "rpm": 5,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "hourly": 5000,\n    "daily": 20000,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "hourly": null,\n    "daily": null,\n    "monthly": null\n  }\n}',
+                    '{\n  "default": {\n    "rpm": 5,\n    "rpm_hide_details": true,\n    "rpd": 20,\n    "tpm": 2000,\n    "tpd": 10000,\n    "hourly": 5000,\n    "daily": 20000,\n    "weekly": 30000,\n    "weekly_hide_details": true,\n    "monthly": 50000\n  },\n  "vip": {\n    "rpm": 20,\n    "rpd": null,\n    "tpm": 20000,\n    "tpd": null,\n    "hourly": null,\n    "daily": null,\n    "weekly": null,\n    "monthly": null\n  }\n}',
                   )}
                   field={'UserGroupUsageLimits'}
                   autosize={{ minRows: 5, maxRows: 15 }}
@@ -120,22 +120,27 @@ export default function RequestRateLimit(props) {
                       <ul>
                         <li>
                           {t(
-                            '使用 JSON 对象格式，外层键为用户分组名称，值为包含 rpm、rpd、tpm、tpd、hourly、daily、monthly 的对象。',
+                            '使用 JSON 对象格式，外层键为用户分组名称，值为包含 rpm、rpd、tpm、tpd、hourly、daily、weekly、monthly 以及可选 *_hide_details 布尔字段的对象。',
                           )}
                         </li>
                         <li>
                           {t(
-                            '每个字段只接受整数或 null；null 表示该指标不限制。',
+                            '限制字段只接受整数或 null；null 表示该指标不限制。*_hide_details 只接受 true 或 false。',
                           )}
                         </li>
                         <li>
                           {t(
-                            'rpm 和 rpd 表示请求次数限制，tpm 和 tpd 表示 Token 限制，hourly、daily、monthly 表示预算限制。',
+                            'rpm 和 rpd 表示请求次数限制，tpm 和 tpd 表示 Token 限制，hourly、daily、weekly、monthly 表示预算限制。',
                           )}
                         </li>
                         <li>
                           {t(
-                            'hourly、daily、monthly 使用当前站点额度展示单位进行配置，并会在新的“使用限制”页面展示给用户。',
+                            'hourly、daily、weekly、monthly 使用当前站点额度展示单位进行配置，并会在新的“使用限制”页面展示给用户。',
+                          )}
+                        </li>
+                        <li>
+                          {t(
+                            '开启 *_hide_details 后，用户侧仅显示消耗百分比，不显示已用、处理中、剩余和总限制。',
                           )}
                         </li>
                         <li>{t('该配置会替代旧的分组速率限制配置。')}</li>
