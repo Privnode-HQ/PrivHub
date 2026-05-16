@@ -116,7 +116,7 @@ func InitEnv() {
 }
 
 func initConstantEnv() {
-	constant.StreamingTimeout = GetEnvOrDefault("STREAMING_TIMEOUT", 300)
+	constant.StreamingTimeout = GetEnvOrDefault("STREAMING_TIMEOUT", 0)
 	constant.DifyDebug = GetEnvOrDefaultBool("DIFY_DEBUG", true)
 	constant.MaxFileDownloadMB = GetEnvOrDefault("MAX_FILE_DOWNLOAD_MB", 20)
 	// ForceStreamOption 覆盖请求参数，强制返回usage信息

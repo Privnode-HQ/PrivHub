@@ -471,6 +471,9 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	} else {
 		client = service.GetHttpClient()
 	}
+	if info.IsStream {
+		client = service.WithoutTotalTimeout(client)
+	}
 
 	var stopPinger context.CancelFunc
 	if info.IsStream {

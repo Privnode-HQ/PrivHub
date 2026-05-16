@@ -307,7 +307,7 @@ docker run --name new-api -d --restart always \
 | `CRYPTO_SECRET` | 暗号化シークレット（Redisに必須） | - |
 | `SQL_DSN** | データベース接続文字列 | - |
 | `REDIS_CONN_STRING` | Redis接続文字列 | - |
-| `STREAMING_TIMEOUT` | ストリーミング応答のタイムアウト時間（秒） | `300` |
+| `STREAMING_TIMEOUT` | 非推奨。ストリーミング応答は `[DONE]`、`message_stop`、または接続終了まで読み取ります | `0` |
 | `AZURE_DEFAULT_API_VERSION` | Azure APIバージョン | `2025-04-01-preview` |
 | `ERROR_LOG_ENABLED` | エラーログスイッチ | `false` |
 

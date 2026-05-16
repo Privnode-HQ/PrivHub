@@ -288,6 +288,9 @@ func doRequest(req *http.Request, info *relaycommon.RelayInfo) (*http.Response, 
 	} else {
 		client = service.GetHttpClient()
 	}
+	if info.IsStream {
+		client = service.WithoutTotalTimeout(client)
+	}
 	resp, err := client.Do(req)
 	if err != nil { // 增加对 client.Do(req) 返回错误的检查
 		return nil, fmt.Errorf("client.Do failed: %w", err)

@@ -38,6 +38,9 @@ func newAwsClient(c *gin.Context, info *relaycommon.RelayInfo) (*bedrockruntime.
 	} else {
 		httpClient = service.GetHttpClient()
 	}
+	if info.IsStream {
+		httpClient = service.WithoutTotalTimeout(httpClient)
+	}
 
 	awsSecret := strings.Split(info.ApiKey, "|")
 	var client *bedrockruntime.Client

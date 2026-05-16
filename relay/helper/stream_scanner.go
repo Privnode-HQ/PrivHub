@@ -3,6 +3,7 @@ package helper
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -27,6 +27,19 @@ const (
 	DefaultPingInterval      = 10 * time.Second
 )
 
+func isTerminalStreamData(data string) bool {
+	if strings.HasPrefix(data, "[DONE]") {
+		return true
+	}
+	var event struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(data), &event); err != nil {
+		return false
+	}
+	return event.Type == "message_stop"
+}
+
 func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string) bool) {
 
 	if resp == nil || dataHandler == nil {
@@ -40,12 +53,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		}
 	}()
 
-	streamingTimeout := time.Duration(constant.StreamingTimeout) * time.Second
-
 	var (
 		stopChan   = make(chan bool, 3) // 增加缓冲区避免阻塞
 		scanner    = bufio.NewScanner(resp.Body)
-		ticker     = time.NewTicker(streamingTimeout)
 		pingTicker *time.Ticker
 		writeMutex sync.Mutex     // Mutex to protect concurrent writes
 		wg         sync.WaitGroup // 用于等待所有 goroutine 退出
@@ -65,7 +75,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	if common.DebugEnabled {
 		// print timeout and ping interval for debugging
 		println("relay timeout seconds:", common.RelayTimeout)
-		println("streaming timeout seconds:", int64(streamingTimeout.Seconds()))
 		println("ping interval seconds:", int64(pingInterval.Seconds()))
 	}
 
@@ -74,9 +83,12 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		// 通知所有 goroutine 停止
 		common.SafeSendBool(stopChan, true)
 
-		ticker.Stop()
 		if pingTicker != nil {
 			pingTicker.Stop()
+		}
+
+		if resp.Body != nil {
+			_ = resp.Body.Close()
 		}
 
 		// 等待所有 goroutine 退出，最多等待5秒
@@ -119,11 +131,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				}
 			}()
 
-			// 添加超时保护，防止 goroutine 无限运行
-			maxPingDuration := 30 * time.Minute // 最大 ping 持续时间
-			pingTimeout := time.NewTimer(maxPingDuration)
-			defer pingTimeout.Stop()
-
 			for {
 				select {
 				case <-pingTicker.C:
@@ -159,9 +166,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				case <-c.Request.Context().Done():
 					// 监听客户端断开连接
 					return
-				case <-pingTimeout.C:
-					logger.LogError(c, "ping goroutine max duration reached")
-					return
 				}
 			}
 		})
@@ -193,49 +197,58 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 			default:
 			}
 
-			ticker.Reset(streamingTimeout)
 			data := scanner.Text()
 			if common.DebugEnabled {
 				println(data)
 			}
 
+			if strings.HasPrefix(data, "[DONE]") {
+				if common.DebugEnabled {
+					println("received [DONE], stopping scanner")
+				}
+				return
+			}
 			if len(data) < 6 {
 				continue
 			}
-			if data[:5] != "data:" && data[:6] != "[DONE]" {
+			if !strings.HasPrefix(data, "data:") {
 				continue
 			}
 			data = data[5:]
 			data = strings.TrimLeft(data, " ")
 			data = strings.TrimSuffix(data, "\r")
-			if !strings.HasPrefix(data, "[DONE]") {
-				info.SetFirstResponseTime()
-
-				// 使用超时机制防止写操作阻塞
-				done := make(chan bool, 1)
-				go func() {
-					writeMutex.Lock()
-					defer writeMutex.Unlock()
-					done <- dataHandler(data)
-				}()
-
-				select {
-				case success := <-done:
-					if !success {
-						return
-					}
-				case <-time.After(10 * time.Second):
-					logger.LogError(c, "data handler timeout")
-					return
-				case <-ctx.Done():
-					return
-				case <-stopChan:
-					return
-				}
-			} else {
-				// done, 处理完成标志，直接退出停止读取剩余数据防止出错
+			if strings.HasPrefix(data, "[DONE]") {
 				if common.DebugEnabled {
 					println("received [DONE], stopping scanner")
+				}
+				return
+			}
+			info.SetFirstResponseTime()
+
+			// 使用超时机制防止写操作阻塞
+			done := make(chan bool, 1)
+			go func() {
+				writeMutex.Lock()
+				defer writeMutex.Unlock()
+				done <- dataHandler(data)
+			}()
+
+			select {
+			case success := <-done:
+				if !success {
+					return
+				}
+			case <-time.After(10 * time.Second):
+				logger.LogError(c, "data handler timeout")
+				return
+			case <-ctx.Done():
+				return
+			case <-stopChan:
+				return
+			}
+			if isTerminalStreamData(data) {
+				if common.DebugEnabled {
+					println("received terminal stream data, stopping scanner")
 				}
 				return
 			}
@@ -248,11 +261,8 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		}
 	})
 
-	// 主循环等待完成或超时
+	// 主循环等待完成或客户端断开，不再用空闲计时器主动关闭上游流。
 	select {
-	case <-ticker.C:
-		// 超时处理逻辑
-		logger.LogError(c, "streaming timeout")
 	case <-stopChan:
 		// 正常结束
 		logger.LogInfo(c, "streaming finished")

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -145,15 +144,13 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any) (*http
 		return nil, err
 	}
 	defer req.Body.Close()
-	// 设置超时时间
-	timeout := time.Second * 15
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), service.LongUpstreamRequestTimeout())
 	defer cancel()
 	// 使用带有超时的 context 创建新的请求
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := service.GetHttpClient().Do(req)
+	resp, err := service.WithoutTotalTimeout(service.GetHttpClient()).Do(req)
 	if err != nil {
 		return nil, err
 	}

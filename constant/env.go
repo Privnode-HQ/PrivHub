@@ -1,5 +1,6 @@
 package constant
 
+// StreamingTimeout is deprecated. Streaming relay reads continue until a terminal event or EOF.
 var StreamingTimeout int
 var DifyDebug bool
 var MaxFileDownloadMB int

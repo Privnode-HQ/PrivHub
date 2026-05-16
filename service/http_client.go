@@ -21,6 +21,8 @@ var (
 	proxyClients    = make(map[string]*http.Client)
 )
 
+const DefaultLongUpstreamRequestTimeout = 10 * time.Minute
+
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	fetchSetting := system_setting.GetFetchSetting()
 	urlStr := req.URL.String()
@@ -33,14 +35,43 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+func upstreamHTTPClientTimeout() time.Duration {
+	if common.RelayTimeout <= 0 {
+		return 0
+	}
+	timeout := time.Duration(common.RelayTimeout) * time.Second
+	if timeout < DefaultLongUpstreamRequestTimeout {
+		return DefaultLongUpstreamRequestTimeout
+	}
+	return timeout
+}
+
+func LongUpstreamRequestTimeout() time.Duration {
+	timeout := upstreamHTTPClientTimeout()
+	if timeout == 0 {
+		return DefaultLongUpstreamRequestTimeout
+	}
+	return timeout
+}
+
+func WithoutTotalTimeout(client *http.Client) *http.Client {
+	if client == nil || client.Timeout == 0 {
+		return client
+	}
+	cloned := *client
+	cloned.Timeout = 0
+	return &cloned
+}
+
 func InitHttpClient() {
-	if common.RelayTimeout == 0 {
+	timeout := upstreamHTTPClientTimeout()
+	if timeout == 0 {
 		httpClient = &http.Client{
 			CheckRedirect: checkRedirect,
 		}
 	} else {
 		httpClient = &http.Client{
-			Timeout:       time.Duration(common.RelayTimeout) * time.Second,
+			Timeout:       timeout,
 			CheckRedirect: checkRedirect,
 		}
 	}
@@ -65,7 +96,7 @@ func ResetProxyClientCache() {
 // NewProxyHttpClient 创建支持代理的 HTTP 客户端
 func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 	if proxyURL == "" {
-		return http.DefaultClient, nil
+		return GetHttpClient(), nil
 	}
 
 	proxyClientLock.Lock()
@@ -88,7 +119,7 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 			},
 			CheckRedirect: checkRedirect,
 		}
-		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
+		client.Timeout = upstreamHTTPClientTimeout()
 		proxyClientLock.Lock()
 		proxyClients[proxyURL] = client
 		proxyClientLock.Unlock()
@@ -122,7 +153,7 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 			},
 			CheckRedirect: checkRedirect,
 		}
-		client.Timeout = time.Duration(common.RelayTimeout) * time.Second
+		client.Timeout = upstreamHTTPClientTimeout()
 		proxyClientLock.Lock()
 		proxyClients[proxyURL] = client
 		proxyClientLock.Unlock()
