@@ -77,6 +77,7 @@ import {
   Package,
   Headphones,
   Inbox,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 // 获取侧边栏Lucide图标组件
@@ -124,6 +125,8 @@ export function getLucideIcon(key, selected = false) {
     case 'user':
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
+    case 'user_migration':
+      return <ArrowRightLeft {...commonProps} color={iconColor} />;
     case 'models':
       return <Package {...commonProps} color={iconColor} />;
     case 'setting':

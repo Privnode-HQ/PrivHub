@@ -60,6 +60,8 @@ import SSOAuthorize from './pages/SSOAuthorize';
 import Messages from './pages/Messages';
 import AdminMessages from './pages/AdminMessages';
 import UserApiKeySearch from './pages/UserApiKeySearch';
+import UserMigration from './pages/UserMigration';
+import Migrate from './pages/Migrate';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -112,6 +114,8 @@ function App() {
             </Suspense>
           }
         />
+        <Route path='/migrate/import/*' element={<Migrate />} />
+        <Route path='/migrate/:migrateId/*' element={<Migrate />} />
         <Route path='/forbidden' element={<Forbidden />} />
         <Route
           path='/console/messages'
@@ -191,6 +195,14 @@ function App() {
             <SupportRoute>
               <UserApiKeySearch />
             </SupportRoute>
+          }
+        />
+        <Route
+          path='/console/user-migration'
+          element={
+            <AdminRoute>
+              <UserMigration />
+            </AdminRoute>
           }
         />
         <Route

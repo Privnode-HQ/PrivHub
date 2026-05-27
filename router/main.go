@@ -18,6 +18,7 @@ func SetRouter(router *gin.Engine, buildFS embed.FS, indexPage []byte) {
 	SetRelayRouter(router)
 	SetVideoRouter(router)
 	SetSSORouter(router)
+	SetMigrateRouter(router)
 	frontendBaseUrl := os.Getenv("FRONTEND_BASE_URL")
 	if common.IsMasterNode && frontendBaseUrl != "" {
 		frontendBaseUrl = ""

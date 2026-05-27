@@ -25,12 +25,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import {
-  hasAdminAccess,
-  isAdmin,
-  isRoot,
-  showError,
-} from '../../helpers';
+import { hasAdminAccess, isAdmin, isRoot, showError } from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -46,6 +41,7 @@ const routerMap = {
   topup: '/console/topup',
   user: '/console/user',
   user_api_key: '/console/user-api-key',
+  user_migration: '/console/user-migration',
   message_manage: '/console/message-management',
   log: '/console/log',
   midjourney: '/console/midjourney',
@@ -213,6 +209,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey: 'user_api_key',
         to: '/user-api-key',
         className: hasAdminAccess() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('用户迁移'),
+        itemKey: 'user_migration',
+        to: '/user-migration',
+        className: isAdmin() ? '' : 'tableHiddle',
       },
       {
         text: t('系统设置'),

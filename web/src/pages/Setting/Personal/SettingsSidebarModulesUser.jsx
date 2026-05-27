@@ -109,6 +109,7 @@ export default function SettingsSidebarModulesUser() {
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
         user_api_key: isSidebarModuleAllowed('admin', 'user_api_key'),
+        user_migration: isSidebarModuleAllowed('admin', 'user_migration'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
       };
     }
@@ -364,6 +365,11 @@ export default function SettingsSidebarModulesUser() {
           key: 'user_api_key',
           title: t('API Key 查用户'),
           description: t('通过 API Key 反查所属用户'),
+        },
+        {
+          key: 'user_migration',
+          title: t('用户迁移'),
+          description: t('迁移任务、导出和导入管理'),
         },
         {
           key: 'setting',
