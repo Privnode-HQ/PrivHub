@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func openQuotaPerUnitMigrationTestDB(t *testing.T) *gorm.DB {
@@ -72,13 +74,14 @@ func TestOptionKeyEqualsQuotesMySQLReservedColumn(t *testing.T) {
 func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) {
 	db := openQuotaPerUnitMigrationTestDB(t)
 
+	overflowQuota := int(math.MaxInt64/2 + 1)
 	options := []Option{
 		{Key: "QuotaPerUnit", Value: strconv.FormatFloat(common.LegacyDefaultQuotaPerUnit, 'f', -1, 64)},
 		{Key: "QuotaForNewUser", Value: "500000"},
 		{Key: "QuotaForInviter", Value: "250000"},
 		{Key: "QuotaForInvitee", Value: "125000"},
 		{Key: "QuotaRemindThreshold", Value: "500000"},
-		{Key: "PreConsumedQuota", Value: "1000"},
+		{Key: "PreConsumedQuota", Value: strconv.FormatInt(int64(overflowQuota), 10)},
 		{Key: "CreemProducts", Value: `[{"productId":"p1","quota":500000,"name":"Basic"}]`},
 		{Key: "UserGroupUsageLimits", Value: `{"default":{"hourly":1}}`},
 	}
@@ -100,7 +103,11 @@ func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) 
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
-	if err := db.Create(&Token{UserId: user.Id, Key: "k", RemainQuota: 500000, UsedQuota: 250000}).Error; err != nil {
+	if err := db.Create(&[]Token{
+		{UserId: user.Id, Key: "safe", RemainQuota: 500000, UsedQuota: 250000},
+		{UserId: user.Id, Key: "unlimited", RemainQuota: int(math.MaxInt64), UsedQuota: 250000, UnlimitedQuota: true},
+		{UserId: user.Id, Key: "overflow", RemainQuota: overflowQuota, UsedQuota: overflowQuota},
+	}).Error; err != nil {
 		t.Fatalf("seed token: %v", err)
 	}
 	if err := db.Create(&Redemption{Quota: 500000}).Error; err != nil {
@@ -129,6 +136,7 @@ func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) 
 	}
 	if err := db.Create(&[]TopUp{
 		{Amount: 500000, PaymentMethod: "creem", TradeNo: "creem"},
+		{Amount: int64(overflowQuota), PaymentMethod: "creem", TradeNo: "overflow"},
 		{Amount: 500000, PaymentMethod: "stripe", TradeNo: "stripe"},
 	}).Error; err != nil {
 		t.Fatalf("seed topups: %v", err)
@@ -161,11 +169,25 @@ func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) 
 	}
 
 	var token Token
-	if err := db.First(&token).Error; err != nil {
+	if err := db.Where(clause.Eq{Column: clause.Column{Name: "key"}, Value: "safe"}).First(&token).Error; err != nil {
 		t.Fatalf("get migrated token: %v", err)
 	}
 	if token.RemainQuota != 1000000 || token.UsedQuota != 500000 {
 		t.Fatalf("unexpected migrated token: %#v", token)
+	}
+	var unlimitedToken Token
+	if err := db.Where(clause.Eq{Column: clause.Column{Name: "key"}, Value: "unlimited"}).First(&unlimitedToken).Error; err != nil {
+		t.Fatalf("get migrated unlimited token: %v", err)
+	}
+	if unlimitedToken.RemainQuota != int(math.MaxInt64) || unlimitedToken.UsedQuota != 500000 {
+		t.Fatalf("unexpected migrated unlimited token: %#v", unlimitedToken)
+	}
+	var overflowToken Token
+	if err := db.Where(clause.Eq{Column: clause.Column{Name: "key"}, Value: "overflow"}).First(&overflowToken).Error; err != nil {
+		t.Fatalf("get migrated overflow token: %v", err)
+	}
+	if overflowToken.RemainQuota != int(math.MaxInt64) || overflowToken.UsedQuota != int(math.MaxInt64) {
+		t.Fatalf("overflow token quotas should clamp instead of overflowing, got %#v", overflowToken)
 	}
 
 	var redemption Redemption
@@ -201,8 +223,11 @@ func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) 
 	if topups[0].PaymentMethod != "creem" || topups[0].Amount != 1000000 {
 		t.Fatalf("expected creem topup amount to double, got %#v", topups[0])
 	}
-	if topups[1].PaymentMethod != "stripe" || topups[1].Amount != 500000 {
-		t.Fatalf("expected stripe amount to remain a display amount, got %#v", topups[1])
+	if topups[1].TradeNo != "overflow" || topups[1].Amount != math.MaxInt64 {
+		t.Fatalf("expected overflow creem topup amount to clamp, got %#v", topups[1])
+	}
+	if topups[2].PaymentMethod != "stripe" || topups[2].Amount != 500000 {
+		t.Fatalf("expected stripe amount to remain a display amount, got %#v", topups[2])
 	}
 
 	if got := mustOptionValue(t, db, "QuotaPerUnit"); got != strconv.FormatFloat(common.DefaultQuotaPerUnit, 'f', -1, 64) {
@@ -210,6 +235,9 @@ func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) 
 	}
 	if got := mustOptionValue(t, db, "QuotaForNewUser"); got != "1000000" {
 		t.Fatalf("expected QuotaForNewUser to double, got %s", got)
+	}
+	if got := mustOptionValue(t, db, "PreConsumedQuota"); got != strconv.FormatInt(math.MaxInt64, 10) {
+		t.Fatalf("expected PreConsumedQuota to clamp, got %s", got)
 	}
 	if got := mustOptionValue(t, db, "UserGroupUsageLimits"); got != `{"default":{"hourly":1}}` {
 		t.Fatalf("UserGroupUsageLimits stores display values and should not be scaled, got %s", got)

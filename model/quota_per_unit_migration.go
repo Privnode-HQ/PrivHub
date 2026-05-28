@@ -80,19 +80,75 @@ func shouldMigrateLegacyDefaultQuotaPerUnitTx(tx *gorm.DB, markerKey string) (bo
 	return math.Abs(quotaPerUnit-common.LegacyDefaultQuotaPerUnit) < 0.000001, nil
 }
 
-func scaleColumnsTx(tx *gorm.DB, modelValue any, multiplier int64, columns ...string) error {
-	updates := make(map[string]interface{}, len(columns))
-	for _, column := range columns {
-		updates[column] = gorm.Expr(column+" * ?", multiplier)
+func quotaScaleBounds(multiplier int64) (int64, int64) {
+	return math.MinInt64 / multiplier, math.MaxInt64 / multiplier
+}
+
+func scaleInt64Value(value int64, multiplier int64) int64 {
+	minValue, maxValue := quotaScaleBounds(multiplier)
+	if value > maxValue {
+		return math.MaxInt64
 	}
-	return tx.Unscoped().Model(modelValue).Where("1 = 1").Updates(updates).Error
+	if value < minValue {
+		return math.MinInt64
+	}
+	return value * multiplier
+}
+
+func scaleColumnScopeTx(scope func() *gorm.DB, multiplier int64, column string) error {
+	minValue, maxValue := quotaScaleBounds(multiplier)
+	if err := scope().
+		Where(column+" > ?", maxValue).
+		Update(column, math.MaxInt64).
+		Error; err != nil {
+		return err
+	}
+	if err := scope().
+		Where(column+" < ?", minValue).
+		Update(column, math.MinInt64).
+		Error; err != nil {
+		return err
+	}
+	return scope().
+		Where(column+" >= ? AND "+column+" <= ?", minValue, maxValue).
+		Update(column, gorm.Expr(column+" * ?", multiplier)).
+		Error
+}
+
+func scaleColumnsTx(tx *gorm.DB, modelValue any, multiplier int64, columns ...string) error {
+	for _, column := range columns {
+		if err := scaleColumnScopeTx(func() *gorm.DB {
+			return tx.Unscoped().Model(modelValue)
+		}, multiplier, column); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func scaleTokenQuotaColumnsTx(tx *gorm.DB, multiplier int64) error {
+	if err := scaleColumnScopeTx(func() *gorm.DB {
+		return tx.Unscoped().Model(&Token{})
+	}, multiplier, "used_quota"); err != nil {
+		return err
+	}
+	return scaleColumnScopeTx(
+		func() *gorm.DB {
+			return tx.Unscoped().Model(&Token{}).Where("unlimited_quota = ?", false)
+		},
+		multiplier,
+		"remain_quota",
+	)
 }
 
 func scaleTopUpRawQuotaAmountsTx(tx *gorm.DB, multiplier int64) error {
-	return tx.Model(&TopUp{}).
-		Where("payment_method IN ?", []string{"creem", ""}).
-		Update("amount", gorm.Expr("amount * ?", multiplier)).
-		Error
+	return scaleColumnScopeTx(
+		func() *gorm.DB {
+			return tx.Model(&TopUp{}).Where("payment_method IN ?", []string{"creem", ""})
+		},
+		multiplier,
+		"amount",
+	)
 }
 
 func scaleIntegerOptionTx(tx *gorm.DB, key string, multiplier int64) error {
@@ -104,7 +160,7 @@ func scaleIntegerOptionTx(tx *gorm.DB, key string, multiplier int64) error {
 	if err != nil {
 		return nil
 	}
-	return upsertOptionTx(tx, key, strconv.FormatInt(parsed*multiplier, 10))
+	return upsertOptionTx(tx, key, strconv.FormatInt(scaleInt64Value(parsed, multiplier), 10))
 }
 
 func scaleJSONNumberValue(value any, multiplier int64) (any, bool) {
@@ -256,7 +312,7 @@ func migrateLegacyDefaultQuotaPerUnitData(db *gorm.DB) error {
 		if err := scaleColumnsTx(tx, &User{}, multiplier, "quota", "used_quota", "aff_quota", "aff_history"); err != nil {
 			return err
 		}
-		if err := scaleColumnsTx(tx, &Token{}, multiplier, "remain_quota", "used_quota"); err != nil {
+		if err := scaleTokenQuotaColumnsTx(tx, multiplier); err != nil {
 			return err
 		}
 		if err := scaleColumnsTx(tx, &Redemption{}, multiplier, "quota"); err != nil {
