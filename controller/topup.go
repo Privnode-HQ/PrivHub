@@ -96,7 +96,8 @@ func GetEpayClient() *epay.Client {
 func getPayMoney(amount int64, group string) float64 {
 	payMoney := getOriginalPayMoney(amount, group)
 	payMoney = applyTopupDiscount(payMoney, amount)
-	return payMoney.InexactFloat64()
+	payMoney = payMoney.Add(calculateEpayProcessingFee(payMoney))
+	return roundMoney(payMoney)
 }
 
 func getOriginalPayMoney(amount int64, group string) decimal.Decimal {
@@ -211,6 +212,7 @@ func RequestEpay(c *gin.Context) {
 		OriginalMoney:    quote.OriginalAmount,
 		PlatformDiscount: quote.PlatformDiscountAmount,
 		CouponDiscount:   quote.CouponDiscountAmount,
+		ProcessingFee:    quote.ProcessingFeeAmount,
 		PayMoney:         quote.FinalPayableAmount,
 	}
 	err = createTopUpOrder(topUp)
@@ -368,7 +370,8 @@ func RequestAmount(c *gin.Context) {
 		return
 	}
 	originalPayMoney := getOriginalPayMoney(req.Amount, group)
-	payMoney := applyTopupDiscount(originalPayMoney, req.Amount).InexactFloat64()
+	payMoneyBeforeFee := applyTopupDiscount(originalPayMoney, req.Amount)
+	payMoney := roundMoney(payMoneyBeforeFee.Add(calculateEpayProcessingFee(payMoneyBeforeFee)))
 	if payMoney <= 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return

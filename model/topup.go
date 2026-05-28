@@ -26,6 +26,7 @@ type TopUp struct {
 	OriginalMoney    float64 `json:"original_money"`
 	PlatformDiscount float64 `json:"platform_discount"`
 	CouponDiscount   float64 `json:"coupon_discount"`
+	ProcessingFee    float64 `json:"processing_fee"`
 	PayMoney         float64 `json:"pay_money"`
 	StripeCouponId   string  `json:"-" gorm:"type:varchar(255)"`
 }

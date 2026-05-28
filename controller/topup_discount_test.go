@@ -243,3 +243,51 @@ func TestResolveTopUpBasePayable(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateEpayProcessingFee(t *testing.T) {
+	tests := []struct {
+		name     string
+		payable  string
+		expected string
+	}{
+		{
+			name:     "below 200 charges fixed plus percentage",
+			payable:  "100",
+			expected: "3.85",
+		},
+		{
+			name:     "199 rounds low tier fee to cents",
+			payable:  "199",
+			expected: "7.32",
+		},
+		{
+			name:     "200 uses standard tier",
+			payable:  "200",
+			expected: "4",
+		},
+		{
+			name:     "499 uses standard tier",
+			payable:  "499",
+			expected: "9.98",
+		},
+		{
+			name:     "500 is free",
+			payable:  "500",
+			expected: "0",
+		},
+		{
+			name:     "non-positive amount has no fee",
+			payable:  "0",
+			expected: "0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateEpayProcessingFee(decimal.RequireFromString(tt.payable))
+			if got.String() != tt.expected {
+				t.Fatalf("expected fee %s, got %s", tt.expected, got.String())
+			}
+		})
+	}
+}

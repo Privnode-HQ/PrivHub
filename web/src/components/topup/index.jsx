@@ -48,6 +48,8 @@ const emptyTopupQuote = {
   base_payable_amount: 0,
   platform_discount_amount: 0,
   coupon_discount_amount: 0,
+  payable_before_fee_amount: 0,
+  processing_fee_amount: 0,
   final_payable_amount: 0,
   min_payable_threshold: 0,
   selected_coupon_id: 0,
@@ -751,15 +753,7 @@ const TopUp = () => {
   const selectPresetAmount = (preset) => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
-
-    // 计算实际支付金额，考虑固定减免
-    const discountAmount =
-      preset.discount ?? topupInfo.discount?.[preset.value] ?? 0;
-    const discountedAmount = Math.max(
-      preset.value * priceRatio - discountAmount,
-      0,
-    );
-    setAmount(discountedAmount);
+    getAmount(preset.value);
   };
 
   // 格式化大数字显示
@@ -834,6 +828,8 @@ const TopUp = () => {
         originalAmount={topupQuote.original_amount || amount}
         platformDiscountAmount={topupQuote.platform_discount_amount || 0}
         couponDiscountAmount={topupQuote.coupon_discount_amount || 0}
+        payableBeforeFeeAmount={topupQuote.payable_before_fee_amount || 0}
+        processingFeeAmount={topupQuote.processing_fee_amount || 0}
         finalPayableAmount={topupQuote.final_payable_amount || amount}
         availableCoupons={topupQuote.available_coupons || []}
         selectedCouponId={selectedCouponId}
