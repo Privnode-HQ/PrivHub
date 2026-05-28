@@ -66,8 +66,6 @@ const buildDefaultSidebarModules = () => ({
     redemption: true,
     topup_coupon: true,
     user: true,
-    user_api_key: true,
-    user_migration: true,
     setting: true,
   },
 });
@@ -205,7 +203,6 @@ const NotificationSettings = ({
         { key: 'topup_coupon', label: t('折扣中心') },
         { key: 'user', label: t('用户管理') },
         { key: 'user_api_key', label: t('API Key 查用户') },
-        { key: 'user_migration', label: t('用户迁移') },
         { key: 'setting', label: t('系统设置') },
       ],
     },

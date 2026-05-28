@@ -76,21 +76,6 @@ func getValidatedSessionUserID(c *gin.Context) (int, error) {
 		_ = session.Save()
 		return 0, errors.New("登录已失效，请重新登录")
 	}
-	if userCache.Status == common.UserStatusDisabled {
-		return 0, errors.New(common.UserBannedMessage(userCache.BanReason))
-	}
 
 	return userId, nil
-}
-
-func getOptionalValidatedSessionUserID(c *gin.Context) int {
-	session := sessions.Default(c)
-	if session.Get("id") == nil {
-		return 0
-	}
-	userID, err := getValidatedSessionUserID(c)
-	if err != nil {
-		return 0
-	}
-	return userID
 }
