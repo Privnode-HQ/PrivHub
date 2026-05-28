@@ -27,6 +27,7 @@ import {
   showWarning,
   verifyJSON,
 } from '../../../helpers';
+import QuotaAmountInput from '../../../components/common/QuotaAmountInput';
 import { useTranslation } from 'react-i18next';
 
 export default function SettingsMonitoring(props) {
@@ -156,18 +157,15 @@ export default function SettingsMonitoring(props) {
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-                <Form.InputNumber
+                <QuotaAmountInput
                   label={t('额度提醒阈值')}
-                  step={1}
-                  min={0}
-                  suffix={'Token'}
+                  value={inputs.QuotaRemindThreshold}
                   extraText={t('低于此额度时将发送邮件提醒用户')}
                   placeholder={''}
-                  field={'QuotaRemindThreshold'}
-                  onChange={(value) =>
+                  onChange={(quota) =>
                     setInputs({
                       ...inputs,
-                      QuotaRemindThreshold: String(value),
+                      QuotaRemindThreshold: String(quota || 0),
                     })
                   }
                 />

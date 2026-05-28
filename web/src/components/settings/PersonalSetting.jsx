@@ -671,8 +671,9 @@ const PersonalSetting = () => {
     try {
       const res = await API.put('/api/user/setting', {
         notify_type: 'email',
-        quota_warning_threshold: parseFloat(
+        quota_warning_threshold: parseInt(
           notificationSettings.warningThreshold,
+          10,
         ),
         notification_email: notificationSettings.notificationEmail,
         accept_unset_model_ratio_model:

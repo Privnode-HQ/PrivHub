@@ -30,6 +30,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { Bell, Settings } from 'lucide-react';
 import { API, showError, showSuccess } from '../../../../helpers';
+import QuotaAmountInput from '../../../common/QuotaAmountInput';
 import { StatusContext } from '../../../../context/Status';
 import { useSidebar } from '../../../../hooks/common/useSidebar';
 import { useUserPermissions } from '../../../../hooks/common/useUserPermissions';
@@ -228,12 +229,12 @@ const NotificationSettings = ({
       </Space>
 
       <Form style={{ marginTop: 24 }}>
-        <Form.InputNumber
+        <QuotaAmountInput
           label={t('预警阈值')}
-          min={1}
           value={notificationSettings.warningThreshold}
-          onChange={(value) =>
-            handleNotificationSettingChange('warningThreshold', value)
+          minQuota={1}
+          onChange={(quota) =>
+            handleNotificationSettingChange('warningThreshold', quota || 0)
           }
           extraText={t('当剩余额度低于此数值时，系统将通过站内和邮件提醒您')}
         />

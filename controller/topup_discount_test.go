@@ -137,56 +137,36 @@ func TestGetStripeMajorUnitAmount(t *testing.T) {
 }
 
 func TestGetStripeCheckoutQuantity(t *testing.T) {
-	originalDisplayType := operation_setting.GetQuotaDisplayType()
 	originalQuotaPerUnit := common.QuotaPerUnit
 	defer func() {
-		operation_setting.GetGeneralSetting().QuotaDisplayType = originalDisplayType
 		common.QuotaPerUnit = originalQuotaPerUnit
 	}()
 
 	tests := []struct {
 		name         string
-		displayType  string
 		quotaPerUnit float64
 		amount       int64
 		expected     int64
-		expectError  bool
 	}{
 		{
 			name:         "currency display keeps integer amount",
-			displayType:  operation_setting.QuotaDisplayTypeUSD,
-			quotaPerUnit: 500000,
+			quotaPerUnit: common.DefaultQuotaPerUnit,
 			amount:       20,
 			expected:     20,
 		},
 		{
-			name:         "tokens display converts to stripe quantity",
-			displayType:  operation_setting.QuotaDisplayTypeTokens,
+			name:         "quota per unit does not change checkout quantity",
 			quotaPerUnit: 500000,
 			amount:       1000000,
-			expected:     2,
-		},
-		{
-			name:         "tokens display requires whole stripe unit",
-			displayType:  operation_setting.QuotaDisplayTypeTokens,
-			quotaPerUnit: 500000,
-			amount:       750000,
-			expectError:  true,
+			expected:     1000000,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			operation_setting.GetGeneralSetting().QuotaDisplayType = tt.displayType
 			common.QuotaPerUnit = tt.quotaPerUnit
 
 			got, err := getStripeCheckoutQuantity(tt.amount)
-			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

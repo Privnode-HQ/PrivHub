@@ -631,9 +631,5 @@ func getStripeOriginalPayMoneyWithPrice(priceInfo *stripePriceContext, amount in
 }
 
 func getStripeMinTopup() int64 {
-	minTopup := setting.StripeMinTopUp
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		minTopup = minTopup * int(common.QuotaPerUnit)
-	}
-	return int64(minTopup)
+	return int64(setting.StripeMinTopUp)
 }

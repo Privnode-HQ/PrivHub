@@ -33,6 +33,27 @@ func normalizeOptionKey(key string) string {
 	}
 }
 
+func legacyExchangeRateOptionKey() string {
+	return strings.Join([]string{"USD", "Exchange", "Rate"}, "")
+}
+
+func normalizeOptionValue(key string, value string) string {
+	switch key {
+	case "DisplayInCurrencyEnabled":
+		return "true"
+	case "general_setting.quota_display_type":
+		return operation_setting.NormalizeQuotaDisplayType(value)
+	case "QuotaPerUnit":
+		quotaPerUnit, err := strconv.ParseFloat(value, 64)
+		if err != nil || quotaPerUnit <= 0 || quotaPerUnit == common.LegacyDefaultQuotaPerUnit {
+			return strconv.FormatFloat(common.DefaultQuotaPerUnit, 'f', -1, 64)
+		}
+		return strconv.FormatFloat(quotaPerUnit, 'f', -1, 64)
+	default:
+		return value
+	}
+}
+
 func AllOption() ([]*Option, error) {
 	var options []*Option
 	var err error
@@ -93,7 +114,6 @@ func InitOptionMap() {
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
-	common.OptionMap["USDExchangeRate"] = strconv.FormatFloat(operation_setting.USDExchangeRate, 'f', -1, 64)
 	common.OptionMap["MinTopUp"] = strconv.Itoa(operation_setting.MinTopUp)
 	common.OptionMap["StripeMinTopUp"] = strconv.Itoa(setting.StripeMinTopUp)
 	common.OptionMap["StripeApiSecret"] = setting.StripeApiSecret
@@ -180,6 +200,9 @@ func loadOptionsFromDatabase() {
 	legacyOptions := make(map[string]string)
 	for _, option := range options {
 		normalizedKey := normalizeOptionKey(option.Key)
+		if normalizedKey == legacyExchangeRateOptionKey() {
+			continue
+		}
 		if normalizedKey == option.Key {
 			normalizedOptions[normalizedKey] = option.Value
 			continue
@@ -211,6 +234,7 @@ func SyncOptions(frequency int) {
 
 func UpdateOption(key string, value string) error {
 	key = normalizeOptionKey(key)
+	value = normalizeOptionValue(key, value)
 	// Save to database first
 	option := Option{
 		Key: key,
@@ -228,6 +252,7 @@ func UpdateOption(key string, value string) error {
 
 func updateOptionMap(key string, value string) (err error) {
 	key = normalizeOptionKey(key)
+	value = normalizeOptionValue(key, value)
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
 	common.OptionMap[key] = value
@@ -287,14 +312,9 @@ func updateOptionMap(key string, value string) (err error) {
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
-			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
-			// true -> USD, false -> TOKENS
-			newVal := "USD"
-			if !boolValue {
-				newVal = "TOKENS"
-			}
+			common.DisplayInCurrencyEnabled = true
 			if cfg := config.GlobalConfig.Get("general_setting"); cfg != nil {
-				_ = config.UpdateConfigFromMap(cfg, map[string]string{"quota_display_type": newVal})
+				_ = config.UpdateConfigFromMap(cfg, map[string]string{"quota_display_type": operation_setting.QuotaDisplayTypeUSD})
 			}
 		case "DisplayTokenStatEnabled":
 			common.DisplayTokenStatEnabled = boolValue
@@ -372,8 +392,6 @@ func updateOptionMap(key string, value string) (err error) {
 		operation_setting.EpayKey = value
 	case "Price":
 		operation_setting.Price, _ = strconv.ParseFloat(value, 64)
-	case "USDExchangeRate":
-		operation_setting.USDExchangeRate, _ = strconv.ParseFloat(value, 64)
 	case "MinTopUp":
 		operation_setting.MinTopUp, _ = strconv.Atoi(value)
 	case "StripeApiSecret":
@@ -485,7 +503,7 @@ func updateOptionMap(key string, value string) (err error) {
 	case "ChannelDisableThreshold":
 		common.ChannelDisableThreshold, _ = strconv.ParseFloat(value, 64)
 	case "QuotaPerUnit":
-		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
+		common.QuotaPerUnit, _ = strconv.ParseFloat(normalizeOptionValue(key, value), 64)
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
 	case "AutomaticDisableKeywords":

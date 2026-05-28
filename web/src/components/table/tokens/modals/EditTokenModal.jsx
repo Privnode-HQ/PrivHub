@@ -24,10 +24,10 @@ import {
   showSuccess,
   timestamp2string,
   renderGroupOption,
-  renderQuotaWithPrompt,
   getModelCategories,
   selectFilter,
 } from '../../../../helpers';
+import QuotaAmountInput from '../../../common/QuotaAmountInput';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   Button,
@@ -422,10 +422,7 @@ const EditTokenModal = (props) => {
                                               'groups',
                                             ) || [];
                                           const next = [...current];
-                                          const [moved] = next.splice(
-                                            index,
-                                            1,
-                                          );
+                                          const [moved] = next.splice(index, 1);
                                           next.splice(index - 1, 0, moved);
                                           formApiRef.current?.setValue(
                                             'groups',
@@ -446,10 +443,7 @@ const EditTokenModal = (props) => {
                                               'groups',
                                             ) || [];
                                           const next = [...current];
-                                          const [moved] = next.splice(
-                                            index,
-                                            1,
-                                          );
+                                          const [moved] = next.splice(index, 1);
                                           next.splice(index + 1, 0, moved);
                                           formApiRef.current?.setValue(
                                             'groups',
@@ -586,26 +580,27 @@ const EditTokenModal = (props) => {
                 </div>
                 <Row gutter={12}>
                   <Col span={24}>
-                    <Form.AutoComplete
+                    <QuotaAmountInput
                       field='remain_quota'
                       label={t('额度')}
                       placeholder={t('请输入额度')}
-                      type='number'
                       disabled={values.unlimited_quota}
-                      extraText={renderQuotaWithPrompt(values.remain_quota)}
+                      minQuota={0}
                       rules={
                         values.unlimited_quota
                           ? []
-                          : [{ required: true, message: t('请输入额度') }]
+                          : [
+                              { required: true, message: t('请输入额度') },
+                              {
+                                validator: (rule, value) => {
+                                  const quota = Number(value);
+                                  return Number.isFinite(quota) && quota >= 0
+                                    ? Promise.resolve()
+                                    : Promise.reject(t('额度不能小于0'));
+                                },
+                              },
+                            ]
                       }
-                      data={[
-                        { value: 500000, label: '1$' },
-                        { value: 5000000, label: '10$' },
-                        { value: 25000000, label: '50$' },
-                        { value: 50000000, label: '100$' },
-                        { value: 250000000, label: '500$' },
-                        { value: 500000000, label: '1000$' },
-                      ]}
                     />
                   </Col>
                   <Col span={24}>

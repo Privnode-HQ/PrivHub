@@ -31,6 +31,7 @@ import {
 import { Eye, EyeOff, Plus, Search, Trash2 } from 'lucide-react';
 import {
   API,
+  getCurrencyConfig,
   showError,
   showSuccess,
   showWarning,
@@ -101,12 +102,19 @@ function countConfiguredLimits(group) {
 }
 
 function MetricRow({ metric, group, updateGroup, t }) {
+  const isBudgetMetric = BUDGET_METRICS.includes(metric);
+  const { symbol, type } = getCurrencyConfig();
+
   return (
     <div className='flex items-center justify-between gap-3 py-2.5 px-1'>
       <div className='min-w-0 flex-shrink-0' style={{ width: 140 }}>
-        <Text strong size='small'>{METRIC_LABELS[metric]}</Text>
+        <Text strong size='small'>
+          {METRIC_LABELS[metric]}
+        </Text>
         <br />
-        <Text type='tertiary' size='small'>{t(METRIC_DESCRIPTIONS[metric])}</Text>
+        <Text type='tertiary' size='small'>
+          {t(METRIC_DESCRIPTIONS[metric])}
+        </Text>
       </div>
       <div className='flex items-center gap-3 flex-1 justify-end'>
         <InputNumber
@@ -115,6 +123,8 @@ function MetricRow({ metric, group, updateGroup, t }) {
           step={1}
           size='small'
           placeholder='∞'
+          prefix={isBudgetMetric ? symbol : undefined}
+          suffix={isBudgetMetric ? type : undefined}
           style={{ width: 140 }}
           onChange={(v) =>
             updateGroup(
@@ -128,10 +138,16 @@ function MetricRow({ metric, group, updateGroup, t }) {
           <Switch
             size='small'
             checked={group[`${metric}_hide_details`]}
-            onChange={(v) => updateGroup(group.groupName, `${metric}_hide_details`, v)}
+            onChange={(v) =>
+              updateGroup(group.groupName, `${metric}_hide_details`, v)
+            }
           />
           <Text type='tertiary' size='small'>
-            {group[`${metric}_hide_details`] ? <EyeOff size={12} /> : <Eye size={12} />}
+            {group[`${metric}_hide_details`] ? (
+              <EyeOff size={12} />
+            ) : (
+              <Eye size={12} />
+            )}
           </Text>
         </Space>
       </div>
@@ -171,32 +187,66 @@ function GroupDetailPanel({ group, updateGroup, renameGroup, removeGroup, t }) {
       </div>
 
       <div className='mb-5'>
-        <Text strong size='small' className='mb-2 block' style={{ color: 'var(--semi-color-text-2)' }}>
+        <Text
+          strong
+          size='small'
+          className='mb-2 block'
+          style={{ color: 'var(--semi-color-text-2)' }}
+        >
           {t('速率限制')}
         </Text>
-        <div className='rounded-lg' style={{ border: '1px solid var(--semi-color-border)' }}>
+        <div
+          className='rounded-lg'
+          style={{ border: '1px solid var(--semi-color-border)' }}
+        >
           {RATE_METRICS.map((m, i) => (
             <div
               key={m}
-              style={i < RATE_METRICS.length - 1 ? { borderBottom: '1px solid var(--semi-color-border)' } : undefined}
+              style={
+                i < RATE_METRICS.length - 1
+                  ? { borderBottom: '1px solid var(--semi-color-border)' }
+                  : undefined
+              }
             >
-              <MetricRow metric={m} group={group} updateGroup={updateGroup} t={t} />
+              <MetricRow
+                metric={m}
+                group={group}
+                updateGroup={updateGroup}
+                t={t}
+              />
             </div>
           ))}
         </div>
       </div>
 
       <div>
-        <Text strong size='small' className='mb-2 block' style={{ color: 'var(--semi-color-text-2)' }}>
+        <Text
+          strong
+          size='small'
+          className='mb-2 block'
+          style={{ color: 'var(--semi-color-text-2)' }}
+        >
           {t('预算限制')}
         </Text>
-        <div className='rounded-lg' style={{ border: '1px solid var(--semi-color-border)' }}>
+        <div
+          className='rounded-lg'
+          style={{ border: '1px solid var(--semi-color-border)' }}
+        >
           {BUDGET_METRICS.map((m, i) => (
             <div
               key={m}
-              style={i < BUDGET_METRICS.length - 1 ? { borderBottom: '1px solid var(--semi-color-border)' } : undefined}
+              style={
+                i < BUDGET_METRICS.length - 1
+                  ? { borderBottom: '1px solid var(--semi-color-border)' }
+                  : undefined
+              }
             >
-              <MetricRow metric={m} group={group} updateGroup={updateGroup} t={t} />
+              <MetricRow
+                metric={m}
+                group={group}
+                updateGroup={updateGroup}
+                t={t}
+              />
             </div>
           ))}
         </div>
@@ -225,7 +275,9 @@ export default function RequestRateLimit(props) {
   }, [props.options.UserGroupUsageLimits]);
 
   const hasChanges = useMemo(
-    () => serializeGroupLimits(groups) !== serializeGroupLimits(parseGroupLimits(savedJson)),
+    () =>
+      serializeGroupLimits(groups) !==
+      serializeGroupLimits(parseGroupLimits(savedJson)),
     [groups, savedJson],
   );
 
@@ -242,13 +294,17 @@ export default function RequestRateLimit(props) {
 
   const updateGroup = useCallback((groupName, field, value) => {
     setGroups((prev) =>
-      prev.map((g) => (g.groupName === groupName ? { ...g, [field]: value } : g)),
+      prev.map((g) =>
+        g.groupName === groupName ? { ...g, [field]: value } : g,
+      ),
     );
   }, []);
 
   const renameGroup = useCallback((oldName, newName) => {
     setGroups((prev) =>
-      prev.map((g) => (g.groupName === oldName ? { ...g, groupName: newName } : g)),
+      prev.map((g) =>
+        g.groupName === oldName ? { ...g, groupName: newName } : g,
+      ),
     );
     setSelectedGroupName((prev) => (prev === oldName ? newName : prev));
   }, []);
@@ -269,15 +325,18 @@ export default function RequestRateLimit(props) {
     setSelectedGroupName(groupName);
   }, []);
 
-  const removeGroup = useCallback((groupName) => {
-    setGroups((prev) => {
-      const next = prev.filter((g) => g.groupName !== groupName);
-      if (selectedGroupName === groupName) {
-        setSelectedGroupName(next.length > 0 ? next[0].groupName : null);
-      }
-      return next;
-    });
-  }, [selectedGroupName]);
+  const removeGroup = useCallback(
+    (groupName) => {
+      setGroups((prev) => {
+        const next = prev.filter((g) => g.groupName !== groupName);
+        if (selectedGroupName === groupName) {
+          setSelectedGroupName(next.length > 0 ? next[0].groupName : null);
+        }
+        return next;
+      });
+    },
+    [selectedGroupName],
+  );
 
   const save = useCallback(async () => {
     const names = groups.map((g) => g.groupName);
@@ -328,12 +387,24 @@ export default function RequestRateLimit(props) {
     <Spin spinning={loading}>
       <Space vertical align='start' style={{ width: '100%' }} spacing='medium'>
         <div>
-          <Text strong size='normal'>{t('基础使用限制')}</Text>
-          <Paragraph type='secondary' size='small' style={{ marginTop: 4, marginBottom: 0 }}>
+          <Text strong size='normal'>
+            {t('基础使用限制')}
+          </Text>
+          <Paragraph
+            type='secondary'
+            size='small'
+            style={{ marginTop: 4, marginBottom: 0 }}
+          >
             {t('为每个分组配置速率和预算限制。留空表示不限制。')}
           </Paragraph>
-          <Paragraph type='secondary' size='small' style={{ marginTop: 4, marginBottom: 0 }}>
-            {t('开启隐藏详情后，用户侧仅显示消耗百分比，不显示已用、处理中、剩余和总限制。')}
+          <Paragraph
+            type='secondary'
+            size='small'
+            style={{ marginTop: 4, marginBottom: 0 }}
+          >
+            {t(
+              '开启隐藏详情后，用户侧仅显示消耗百分比，不显示已用、处理中、剩余和总限制。',
+            )}
           </Paragraph>
         </div>
 
@@ -354,7 +425,10 @@ export default function RequestRateLimit(props) {
             }}
           >
             {/* Search */}
-            <div className='p-2' style={{ borderBottom: '1px solid var(--semi-color-border)' }}>
+            <div
+              className='p-2'
+              style={{ borderBottom: '1px solid var(--semi-color-border)' }}
+            >
               <Input
                 size='small'
                 prefix={<Search size={14} />}
@@ -366,12 +440,17 @@ export default function RequestRateLimit(props) {
             </div>
 
             {/* Group count */}
-            <div className='px-3 py-1.5' style={{ borderBottom: '1px solid var(--semi-color-border)' }}>
+            <div
+              className='px-3 py-1.5'
+              style={{ borderBottom: '1px solid var(--semi-color-border)' }}
+            >
               <Text type='tertiary' size='small'>
                 {searchQuery.trim()
-                  ? t('{{filtered}} / {{total}} 个分组', { filtered: filteredGroups.length, total: groups.length })
-                  : t('{{total}} 个分组', { total: groups.length })
-                }
+                  ? t('{{filtered}} / {{total}} 个分组', {
+                      filtered: filteredGroups.length,
+                      total: groups.length,
+                    })
+                  : t('{{total}} 个分组', { total: groups.length })}
               </Text>
             </div>
 
@@ -379,7 +458,9 @@ export default function RequestRateLimit(props) {
             <div className='flex-1 overflow-y-auto'>
               {filteredGroups.length === 0 && groups.length > 0 && (
                 <div className='p-3 text-center'>
-                  <Text type='tertiary' size='small'>{t('无匹配分组')}</Text>
+                  <Text type='tertiary' size='small'>
+                    {t('无匹配分组')}
+                  </Text>
                 </div>
               )}
               {filteredGroups.map((group) => {
@@ -390,8 +471,12 @@ export default function RequestRateLimit(props) {
                     key={group.groupName}
                     className='px-3 py-2 cursor-pointer flex items-center justify-between'
                     style={{
-                      background: isSelected ? 'var(--semi-color-primary-light-default)' : undefined,
-                      borderLeft: isSelected ? '3px solid var(--semi-color-primary)' : '3px solid transparent',
+                      background: isSelected
+                        ? 'var(--semi-color-primary-light-default)'
+                        : undefined,
+                      borderLeft: isSelected
+                        ? '3px solid var(--semi-color-primary)'
+                        : '3px solid transparent',
                     }}
                     onClick={() => setSelectedGroupName(group.groupName)}
                   >
@@ -403,7 +488,11 @@ export default function RequestRateLimit(props) {
                     >
                       {group.groupName}
                     </Text>
-                    <Text type='tertiary' size='small' style={{ flexShrink: 0, marginLeft: 8 }}>
+                    <Text
+                      type='tertiary'
+                      size='small'
+                      style={{ flexShrink: 0, marginLeft: 8 }}
+                    >
                       {configured}/{ALL_METRICS.length}
                     </Text>
                   </div>
@@ -412,7 +501,10 @@ export default function RequestRateLimit(props) {
             </div>
 
             {/* Add group */}
-            <div className='p-2 flex gap-1' style={{ borderTop: '1px solid var(--semi-color-border)' }}>
+            <div
+              className='p-2 flex gap-1'
+              style={{ borderTop: '1px solid var(--semi-color-border)' }}
+            >
               <Input
                 size='small'
                 value={newGroupName}
@@ -431,7 +523,10 @@ export default function RequestRateLimit(props) {
           </div>
 
           {/* Right panel — Group detail */}
-          <div className='flex-1 overflow-y-auto' style={{ background: 'var(--semi-color-bg-0)' }}>
+          <div
+            className='flex-1 overflow-y-auto'
+            style={{ background: 'var(--semi-color-bg-0)' }}
+          >
             {groups.length === 0 ? (
               <div className='flex items-center justify-center h-full'>
                 <Paragraph type='tertiary' style={{ padding: '24px 0' }}>
@@ -450,11 +545,7 @@ export default function RequestRateLimit(props) {
           </div>
         </div>
 
-        <Button
-          loading={loading}
-          disabled={!hasChanges}
-          onClick={save}
-        >
+        <Button loading={loading} disabled={!hasChanges} onClick={save}>
           {t('保存基础使用限制')}
         </Button>
       </Space>

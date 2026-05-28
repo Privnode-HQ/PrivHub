@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/shopspring/decimal"
 )
 
@@ -110,63 +109,20 @@ func normalizeBudgetDisplayValue(value int64, field string) (int64, error) {
 	if value < 0 {
 		return 0, fmt.Errorf("%s must be null or a non-negative integer", field)
 	}
-	switch operation_setting.GetQuotaDisplayType() {
-	case operation_setting.QuotaDisplayTypeTokens:
-		return value, nil
-	case operation_setting.QuotaDisplayTypeCNY:
-		rate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
-		if rate.LessThanOrEqual(decimal.Zero) {
-			return 0, fmt.Errorf("usd exchange rate must be greater than 0")
-		}
-		return decimal.NewFromInt(value).
-			Div(rate).
-			Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Round(0).
-			IntPart(), nil
-	case operation_setting.QuotaDisplayTypeCustom:
-		rate := decimal.NewFromFloat(operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate))
-		if rate.LessThanOrEqual(decimal.Zero) {
-			return 0, fmt.Errorf("custom currency exchange rate must be greater than 0")
-		}
-		return decimal.NewFromInt(value).
-			Div(rate).
-			Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Round(0).
-			IntPart(), nil
-	default:
-		return decimal.NewFromInt(value).
-			Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Round(0).
-			IntPart(), nil
-	}
+	return decimal.NewFromInt(value).
+		Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Round(0).
+		IntPart(), nil
 }
 
 func normalizeBudgetQuotaForDisplay(value int64) int64 {
 	if value <= 0 {
 		return 0
 	}
-	switch operation_setting.GetQuotaDisplayType() {
-	case operation_setting.QuotaDisplayTypeTokens:
-		return value
-	case operation_setting.QuotaDisplayTypeCNY:
-		return decimal.NewFromInt(value).
-			Div(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Mul(decimal.NewFromFloat(operation_setting.USDExchangeRate)).
-			Round(0).
-			IntPart()
-	case operation_setting.QuotaDisplayTypeCustom:
-		rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
-		return decimal.NewFromInt(value).
-			Div(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Mul(decimal.NewFromFloat(rate)).
-			Round(0).
-			IntPart()
-	default:
-		return decimal.NewFromInt(value).
-			Div(decimal.NewFromFloat(common.QuotaPerUnit)).
-			Round(0).
-			IntPart()
-	}
+	return decimal.NewFromInt(value).
+		Div(decimal.NewFromFloat(common.QuotaPerUnit)).
+		Round(0).
+		IntPart()
 }
 
 func validateNonNegativeNullableInt(value *int64, field string) error {

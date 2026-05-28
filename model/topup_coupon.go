@@ -62,8 +62,6 @@ func DefaultTopUpCouponCurrencyCode() string {
 	switch operation_setting.GetQuotaDisplayType() {
 	case operation_setting.QuotaDisplayTypeCNY:
 		return "CNY"
-	case operation_setting.QuotaDisplayTypeCustom:
-		return "CUSTOM"
 	default:
 		return "USD"
 	}

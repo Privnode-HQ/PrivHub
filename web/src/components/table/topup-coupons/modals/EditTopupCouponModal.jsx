@@ -42,7 +42,7 @@ const getDefaultCouponCurrencyCode = () => {
   const quotaDisplayType = (localStorage.getItem('quota_display_type') || 'USD')
     .trim()
     .toUpperCase();
-  return quotaDisplayType === 'TOKENS' ? 'USD' : quotaDisplayType;
+  return quotaDisplayType === 'CNY' ? 'CNY' : 'USD';
 };
 
 const getInitValues = () => ({
@@ -80,9 +80,7 @@ const EditTopupCouponModal = ({
           valid_from: data.valid_from
             ? new Date(data.valid_from * 1000)
             : new Date(),
-          expires_at: data.expires_at
-            ? new Date(data.expires_at * 1000)
-            : null,
+          expires_at: data.expires_at ? new Date(data.expires_at * 1000) : null,
         });
       } else {
         showError(message);
@@ -224,9 +222,7 @@ const EditTopupCouponModal = ({
                     placeholder={t('请输入用户 ID')}
                     min={1}
                     precision={0}
-                    rules={[
-                      { required: true, message: t('请输入用户 ID') },
-                    ]}
+                    rules={[{ required: true, message: t('请输入用户 ID') }]}
                   />
                 </Col>
                 <Col span={24}>
@@ -236,9 +232,7 @@ const EditTopupCouponModal = ({
                     placeholder={t('请输入优惠金额')}
                     min={0.01}
                     step={0.01}
-                    rules={[
-                      { required: true, message: t('请输入优惠金额') },
-                    ]}
+                    rules={[{ required: true, message: t('请输入优惠金额') }]}
                   />
                 </Col>
                 <Col span={24}>

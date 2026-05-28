@@ -19,13 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  API,
-  showError,
-  showSuccess,
-  renderQuota,
-  renderQuotaWithPrompt,
-} from '../../../../helpers';
+import { API, showError, showSuccess, renderQuota } from '../../../../helpers';
+import QuotaAmountInput from '../../../common/QuotaAmountInput';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   Button,
@@ -41,7 +36,6 @@ import {
   Row,
   Col,
   Input,
-  InputNumber,
 } from '@douyinfe/semi-ui';
 import {
   IconUser,
@@ -287,14 +281,22 @@ const EditUserModal = (props) => {
                       </Col>
 
                       <Col span={10}>
-                        <Form.InputNumber
+                        <QuotaAmountInput
                           field='quota'
                           label={t('剩余额度')}
                           placeholder={t('请输入新的剩余额度')}
-                          step={500000}
-                          extraText={renderQuotaWithPrompt(values.quota || 0)}
-                          rules={[{ required: true, message: t('请输入额度') }]}
-                          style={{ width: '100%' }}
+                          minQuota={0}
+                          rules={[
+                            { required: true, message: t('请输入额度') },
+                            {
+                              validator: (rule, value) => {
+                                const quota = Number(value);
+                                return Number.isFinite(quota) && quota >= 0
+                                  ? Promise.resolve()
+                                  : Promise.reject(t('额度不能小于0'));
+                              },
+                            },
+                          ]}
                         />
                       </Col>
 
@@ -387,13 +389,12 @@ const EditUserModal = (props) => {
             );
           })()}
         </div>
-        <InputNumber
+        <QuotaAmountInput
           placeholder={t('需要添加的额度（支持负数）')}
           value={addQuotaLocal}
           onChange={setAddQuotaLocal}
-          style={{ width: '100%' }}
+          allowNegative
           showClear
-          step={500000}
         />
       </Modal>
     </>

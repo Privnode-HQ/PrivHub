@@ -45,7 +45,10 @@ import {
 import { IconGift } from '@douyinfe/semi-icons';
 import Turnstile from 'react-turnstile';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { formatCurrencyAmountByCode, getCurrencyConfig } from '../../helpers/render';
+import {
+  formatCurrencyAmountByCode,
+  getCurrencyConfig,
+} from '../../helpers/render';
 
 const { Text } = Typography;
 
@@ -400,22 +403,6 @@ const RechargeCard = ({
                     label={
                       <div className='flex items-center gap-2'>
                         <span>{t('选择充值额度')}</span>
-                        {(() => {
-                          const { symbol, rate, type } = getCurrencyConfig();
-                          if (type === 'USD') return null;
-
-                          return (
-                            <span
-                              style={{
-                                color: 'var(--semi-color-text-2)',
-                                fontSize: '12px',
-                                fontWeight: 'normal',
-                              }}
-                            >
-                              (1 $ = {rate.toFixed(2)} {symbol})
-                            </span>
-                          );
-                        })()}
                       </div>
                     }
                   >
@@ -433,37 +420,11 @@ const RechargeCard = ({
                         const save = Math.min(discountAmountRaw, originalPrice);
                         const hasDiscount = save > 0;
 
-                        // 根据当前货币类型换算显示金额和数量
-                        const { symbol, rate, type } = getCurrencyConfig();
-                        const statusStr = localStorage.getItem('status');
-                        let usdRate = 7; // 默认CNY汇率
-                        try {
-                          if (statusStr) {
-                            const s = JSON.parse(statusStr);
-                            usdRate = s?.usd_exchange_rate || 7;
-                          }
-                        } catch (e) {}
-
-                        let displayValue = preset.value; // 显示的数量
-                        let displayActualPay = actualPay;
-                        let displaySave = save;
-                        let displayDiscount = save;
-
-                        if (type === 'USD') {
-                          // 数量保持USD，价格从CNY转USD
-                          displayActualPay = actualPay / usdRate;
-                          displaySave = save / usdRate;
-                          displayDiscount = save / usdRate;
-                        } else if (type === 'CNY') {
-                          // 数量转CNY，价格已是CNY
-                          displayValue = preset.value * usdRate;
-                        } else if (type === 'CUSTOM') {
-                          // 数量和价格都转自定义货币
-                          displayValue = preset.value * rate;
-                          displayActualPay = (actualPay / usdRate) * rate;
-                          displaySave = (save / usdRate) * rate;
-                          displayDiscount = (save / usdRate) * rate;
-                        }
+                        const { symbol } = getCurrencyConfig();
+                        const displayValue = preset.value;
+                        const displayActualPay = actualPay;
+                        const displaySave = save;
+                        const displayDiscount = save;
 
                         return (
                           <Card
@@ -536,10 +497,11 @@ const RechargeCard = ({
                             {product.name}
                           </div>
                           <div className='text-sm text-gray-600 mb-2'>
-                            {t('充值额度')}: {product.quota}
+                            {t('充值额度')}: {renderQuota(product.quota)}
                           </div>
                           <div className='text-lg font-semibold text-blue-600'>
-                            {product.currency === 'EUR' ? '€' : '$'}{product.price}
+                            {product.currency === 'EUR' ? '€' : '$'}
+                            {product.price}
                           </div>
                         </Card>
                       ))}

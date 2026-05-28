@@ -109,7 +109,7 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 			if hideErrorDetails {
 				message = sanitizedUpstreamErrorMessage(resp.StatusCode)
 			}
-			newApiErr.Err = fmt.Errorf(message)
+			newApiErr.Err = errors.New(message)
 		}
 		return
 	}

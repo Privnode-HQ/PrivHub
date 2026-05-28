@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v81"
@@ -86,15 +85,7 @@ func getStripeCheckoutQuantity(amount int64) (int64, error) {
 	if amount <= 0 {
 		return 0, nil
 	}
-	if operation_setting.GetQuotaDisplayType() != operation_setting.QuotaDisplayTypeTokens {
-		return amount, nil
-	}
-
-	quotaPerUnit := int64(decimal.NewFromFloat(common.QuotaPerUnit).IntPart())
-	if quotaPerUnit <= 0 || amount%quotaPerUnit != 0 {
-		return 0, invalidStripeQuantityStep(decimal.NewFromInt(quotaPerUnit).StringFixed(0))
-	}
-	return amount / quotaPerUnit, nil
+	return amount, nil
 }
 
 func getStripeCurrencyDivisor(currency stripe.Currency) decimal.Decimal {
@@ -119,10 +110,4 @@ func getStripeCurrencyDivisor(currency stripe.Currency) decimal.Decimal {
 	default:
 		return decimal.NewFromInt(100)
 	}
-}
-
-type invalidStripeQuantityStep string
-
-func (s invalidStripeQuantityStep) Error() string {
-	return "Stripe 充值数量必须为 " + string(s) + " 的整数倍"
 }

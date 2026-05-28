@@ -132,7 +132,7 @@ const TopUp = () => {
     )
       .trim()
       .toUpperCase();
-    return quotaDisplayType === 'TOKENS' ? 'USD' : quotaDisplayType;
+    return quotaDisplayType === 'CNY' ? 'CNY' : 'USD';
   };
 
   const topUp = async () => {

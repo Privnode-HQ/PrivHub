@@ -280,6 +280,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err = migrateLegacyDefaultQuotaPerUnitData(DB); err != nil {
+		return err
+	}
 	if err = BackfillUserCAHIDs(); err != nil {
 		return err
 	}
@@ -352,6 +355,9 @@ func migrateDBFast() error {
 func migrateLOGDB() error {
 	var err error
 	if err = LOG_DB.AutoMigrate(&Log{}, &AdminAuditLog{}); err != nil {
+		return err
+	}
+	if err = migrateLegacyDefaultQuotaPerUnitLogData(LOG_DB); err != nil {
 		return err
 	}
 	return nil

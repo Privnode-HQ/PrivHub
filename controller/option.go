@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
@@ -63,6 +64,16 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
+	case "general_setting.quota_display_type":
+		normalizedValue := operation_setting.NormalizeQuotaDisplayType(option.Value.(string))
+		if strings.ToUpper(strings.TrimSpace(option.Value.(string))) != normalizedValue {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "额度展示货币仅支持 USD 或 CNY",
+			})
+			return
+		}
+		option.Value = normalizedValue
 	case "EmailVerificationEnabled":
 		if option.Value == "true" && (strings.TrimSpace(common.PostmarkServerToken) == "" || strings.TrimSpace(common.PostmarkSenderEmail) == "") {
 			c.JSON(http.StatusOK, gin.H{

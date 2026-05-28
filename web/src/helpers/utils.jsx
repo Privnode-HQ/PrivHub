@@ -703,18 +703,6 @@ export const calculateModelPrice = ({
     let symbol = '$';
     if (currency === 'CNY') {
       symbol = '¥';
-    } else if (currency === 'CUSTOM') {
-      try {
-        const statusStr = localStorage.getItem('status');
-        if (statusStr) {
-          const s = JSON.parse(statusStr);
-          symbol = s?.custom_currency_symbol || '¤';
-        } else {
-          symbol = '¤';
-        }
-      } catch (e) {
-        symbol = '¤';
-      }
     }
     return {
       inputPrice: `${symbol}${numInput.toFixed(precision)}`,
@@ -825,7 +813,6 @@ export const createCardProPagination = ({
 const DEFAULT_PRICING_FILTERS = {
   search: '',
   showWithRecharge: false,
-  currency: 'USD',
   showRatio: false,
   viewMode: 'card',
   tokenUnit: 'M',
@@ -854,7 +841,12 @@ export const resetPricingFilters = ({
 }) => {
   handleChange?.(DEFAULT_PRICING_FILTERS.search);
   setShowWithRecharge?.(DEFAULT_PRICING_FILTERS.showWithRecharge);
-  setCurrency?.(DEFAULT_PRICING_FILTERS.currency);
+  setCurrency?.(
+    String(localStorage.getItem('quota_display_type') || '').toUpperCase() ===
+      'CNY'
+      ? 'CNY'
+      : 'USD',
+  );
   setShowRatio?.(DEFAULT_PRICING_FILTERS.showRatio);
   setViewMode?.(DEFAULT_PRICING_FILTERS.viewMode);
   setTokenUnit?.(DEFAULT_PRICING_FILTERS.tokenUnit);

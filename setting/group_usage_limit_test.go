@@ -3,6 +3,9 @@ package setting
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 func TestUserGroupUsageLimitsRoundTripSupportsWeeklyAndHideDetails(t *testing.T) {
@@ -63,5 +66,44 @@ func TestUserGroupUsageLimitsRoundTripSupportsWeeklyAndHideDetails(t *testing.T)
 	}
 	if groupPolicy["rpm_hide_details"] != true || groupPolicy["weekly_hide_details"] != true {
 		t.Fatalf("unexpected serialized hide-details flags: %#v", groupPolicy)
+	}
+}
+
+func TestUserGroupUsageLimitBudgetUsesDisplayCurrencyWithoutExchangeRate(t *testing.T) {
+	originalPolicies := UserGroupUsageLimits2JSONString()
+	originalDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	originalQuotaPerUnit := common.QuotaPerUnit
+	t.Cleanup(func() {
+		if err := UpdateUserGroupUsageLimitsByJSONString(originalPolicies); err != nil {
+			t.Errorf("restore usage limit policies: %v", err)
+		}
+		operation_setting.GetGeneralSetting().QuotaDisplayType = originalDisplayType
+		common.QuotaPerUnit = originalQuotaPerUnit
+	})
+
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	common.QuotaPerUnit = common.DefaultQuotaPerUnit
+
+	if err := UpdateUserGroupUsageLimitsByJSONString(`{"default":{"hourly":2,"daily":3}}`); err != nil {
+		t.Fatalf("UpdateUserGroupUsageLimitsByJSONString returned error: %v", err)
+	}
+
+	policy, found := GetUserGroupUsageLimit("default")
+	if !found {
+		t.Fatalf("expected default group policy to exist")
+	}
+	if policy.Hourly == nil || *policy.Hourly != int64(2*common.DefaultQuotaPerUnit) {
+		t.Fatalf("expected hourly to use quotaPerUnit without exchange, got %#v", policy.Hourly)
+	}
+	if policy.Daily == nil || *policy.Daily != int64(3*common.DefaultQuotaPerUnit) {
+		t.Fatalf("expected daily to use quotaPerUnit without exchange, got %#v", policy.Daily)
+	}
+
+	var serialized map[string]map[string]int64
+	if err := json.Unmarshal([]byte(UserGroupUsageLimits2JSONString()), &serialized); err != nil {
+		t.Fatalf("unmarshal serialized policies: %v", err)
+	}
+	if serialized["default"]["hourly"] != 2 || serialized["default"]["daily"] != 3 {
+		t.Fatalf("expected display values to round trip without exchange, got %#v", serialized)
 	}
 }

@@ -25,8 +25,8 @@ import {
   showError,
   showSuccess,
   renderQuota,
-  renderQuotaWithPrompt,
 } from '../../../../helpers';
+import QuotaAmountInput from '../../../common/QuotaAmountInput';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   Button,
@@ -105,6 +105,11 @@ const EditRedemptionModal = (props) => {
     let localInputs = { ...values };
     localInputs.count = parseInt(localInputs.count) || 0;
     localInputs.quota = parseInt(localInputs.quota) || 0;
+    if (localInputs.quota <= 0) {
+      showError(t('额度必须大于0'));
+      setLoading(false);
+      return;
+    }
     localInputs.name = name;
     if (!localInputs.expired_time) {
       localInputs.expired_time = 0;
@@ -286,33 +291,21 @@ const EditRedemptionModal = (props) => {
 
                   <Row gutter={12}>
                     <Col span={12}>
-                      <Form.AutoComplete
+                      <QuotaAmountInput
                         field='quota'
                         label={t('额度')}
                         placeholder={t('请输入额度')}
-                        style={{ width: '100%' }}
-                        type='number'
+                        minQuota={1}
                         rules={[
                           { required: true, message: t('请输入额度') },
                           {
-                            validator: (rule, v) => {
-                              const num = parseInt(v, 10);
-                              return num > 0
+                            validator: (rule, value) => {
+                              const quota = Number(value);
+                              return Number.isFinite(quota) && quota > 0
                                 ? Promise.resolve()
                                 : Promise.reject(t('额度必须大于0'));
                             },
                           },
-                        ]}
-                        extraText={renderQuotaWithPrompt(
-                          Number(values.quota) || 0,
-                        )}
-                        data={[
-                          { value: 500000, label: '1$' },
-                          { value: 5000000, label: '10$' },
-                          { value: 25000000, label: '50$' },
-                          { value: 50000000, label: '100$' },
-                          { value: 250000000, label: '500$' },
-                          { value: 500000000, label: '1000$' },
                         ]}
                         showClear
                       />
