@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm/clause"
 )
 
 // MigrateConsoleSetting 迁移旧的控制台相关配置到 console_setting.*
@@ -96,7 +97,11 @@ func MigrateConsoleSetting(c *gin.Context) {
 
 	// 删除旧键记录
 	oldKeys := []string{"ApiInfo", "Announcements", "FAQ", "UptimeKumaUrl", "UptimeKumaSlug"}
-	model.DB.Where("key IN ?", oldKeys).Delete(&model.Option{})
+	values := make([]interface{}, 0, len(oldKeys))
+	for _, key := range oldKeys {
+		values = append(values, key)
+	}
+	model.DB.Where(clause.IN{Column: clause.Column{Name: "key"}, Values: values}).Delete(&model.Option{})
 
 	// 重新加载 OptionMap
 	model.InitOptionMap()

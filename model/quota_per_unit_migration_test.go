@@ -3,10 +3,12 @@ package model
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/glebarez/sqlite"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -39,11 +41,32 @@ func openQuotaPerUnitMigrationTestDB(t *testing.T) *gorm.DB {
 
 func mustOptionValue(t *testing.T, db *gorm.DB, key string) string {
 	t.Helper()
-	var option Option
-	if err := db.Where("key = ?", key).First(&option).Error; err != nil {
+	value, found, err := getOptionValueTx(db, key)
+	if err != nil {
 		t.Fatalf("get option %s: %v", key, err)
 	}
-	return option.Value
+	if !found {
+		t.Fatalf("option %s not found", key)
+	}
+	return value
+}
+
+func TestOptionKeyEqualsQuotesMySQLReservedColumn(t *testing.T) {
+	db, err := gorm.Open(mysql.New(mysql.Config{
+		DSN:                       "gorm:gorm@tcp(localhost:9910)/gorm?charset=utf8&parseTime=True&loc=Local",
+		SkipInitializeWithVersion: true,
+	}), &gorm.Config{
+		DryRun:               true,
+		DisableAutomaticPing: true,
+	})
+	if err != nil {
+		t.Fatalf("open dry-run mysql db: %v", err)
+	}
+
+	stmt := db.Where(optionKeyEquals("QuotaPerUnit")).First(&Option{}).Statement
+	if !strings.Contains(stmt.SQL.String(), "`key` = ?") {
+		t.Fatalf("expected MySQL SQL to quote options.key, got %s", stmt.SQL.String())
+	}
 }
 
 func TestMigrateLegacyDefaultQuotaPerUnitDataScalesRawQuotaFields(t *testing.T) {

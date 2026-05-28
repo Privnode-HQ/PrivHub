@@ -28,9 +28,13 @@ func quotaPerUnitMigrationMultiplier() (int64, error) {
 	return rounded.IntPart(), nil
 }
 
+func optionKeyEquals(key string) clause.Eq {
+	return clause.Eq{Column: clause.Column{Name: "key"}, Value: key}
+}
+
 func getOptionValueTx(tx *gorm.DB, key string) (string, bool, error) {
 	var option Option
-	err := tx.Where("key = ?", key).First(&option).Error
+	err := tx.Where(optionKeyEquals(key)).First(&option).Error
 	if err == nil {
 		return option.Value, true, nil
 	}
