@@ -3,6 +3,8 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -29,6 +31,26 @@ type TopUp struct {
 	ProcessingFee    float64 `json:"processing_fee"`
 	PayMoney         float64 `json:"pay_money"`
 	StripeCouponId   string  `json:"-" gorm:"type:varchar(255)"`
+}
+
+type UserPaidQuotaBreakdown struct {
+	UserId             int
+	CAHID              string
+	Username           string
+	TotalQuota         int64
+	RemainQuota        int64
+	RemainPaidQuota    int64
+	RemainNonPaidQuota int64
+	TotalPaidQuota     int64
+}
+
+type topUpPaidQuotaRow struct {
+	PaymentMethod string  `gorm:"column:payment_method"`
+	Amount        int64   `gorm:"column:amount"`
+	Money         float64 `gorm:"column:money"`
+	OriginalMoney float64 `gorm:"column:original_money"`
+	ProcessingFee float64 `gorm:"column:processing_fee"`
+	PayMoney      float64 `gorm:"column:pay_money"`
 }
 
 func (topUp *TopUp) Insert() error {
@@ -436,6 +458,141 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	}
 
 	return nil
+}
+
+func nonNegativeInt64(value int64) int64 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func saturatingAddInt64(a int64, b int64) int64 {
+	if a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	return a + b
+}
+
+func decimalToNonNegativeInt64Floor(value decimal.Decimal) int64 {
+	if !value.GreaterThan(decimal.Zero) {
+		return 0
+	}
+	maxInt64Decimal := decimal.NewFromInt(math.MaxInt64)
+	if value.GreaterThan(maxInt64Decimal) {
+		return math.MaxInt64
+	}
+	return value.IntPart()
+}
+
+func calculateTopUpGrantedQuota(row topUpPaidQuotaRow) int64 {
+	quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	switch strings.ToLower(strings.TrimSpace(row.PaymentMethod)) {
+	case "creem", "":
+		return nonNegativeInt64(row.Amount)
+	case "stripe":
+		return decimalToNonNegativeInt64Floor(decimal.NewFromFloat(row.Money).Mul(quotaPerUnit))
+	default:
+		return decimalToNonNegativeInt64Floor(decimal.NewFromInt(row.Amount).Mul(quotaPerUnit))
+	}
+}
+
+func calculateTopUpActualPaidQuota(row topUpPaidQuotaRow) int64 {
+	grantedQuota := calculateTopUpGrantedQuota(row)
+	if grantedQuota <= 0 {
+		return 0
+	}
+
+	originalMoney := decimal.NewFromFloat(row.OriginalMoney)
+	if !originalMoney.GreaterThan(decimal.Zero) {
+		// Legacy rows may not have payable snapshots. Keep their historical full-credit behavior.
+		return grantedQuota
+	}
+
+	paidBusinessMoney := decimal.NewFromFloat(row.PayMoney).Sub(decimal.NewFromFloat(row.ProcessingFee))
+	if !paidBusinessMoney.GreaterThan(decimal.Zero) {
+		return 0
+	}
+
+	paidQuota := decimalToNonNegativeInt64Floor(
+		decimal.NewFromInt(grantedQuota).Mul(paidBusinessMoney).Div(originalMoney),
+	)
+	if paidQuota > grantedQuota {
+		return grantedQuota
+	}
+	return paidQuota
+}
+
+func calculateRemainingPaidQuotaBreakdown(remainQuota int64, usedQuota int64, paidQuota int64) (totalQuota int64, remainPaidQuota int64, remainNonPaidQuota int64) {
+	remainQuota = nonNegativeInt64(remainQuota)
+	usedQuota = nonNegativeInt64(usedQuota)
+	paidQuota = nonNegativeInt64(paidQuota)
+
+	totalQuota = saturatingAddInt64(remainQuota, usedQuota)
+	if remainQuota == 0 || totalQuota == 0 || paidQuota == 0 {
+		return totalQuota, 0, remainQuota
+	}
+
+	nonPaidTotal := int64(0)
+	if totalQuota > paidQuota {
+		nonPaidTotal = totalQuota - paidQuota
+	}
+	if remainQuota > nonPaidTotal {
+		remainPaidQuota = remainQuota - nonPaidTotal
+	}
+	if remainPaidQuota > paidQuota {
+		remainPaidQuota = paidQuota
+	}
+	if remainPaidQuota > remainQuota {
+		remainPaidQuota = remainQuota
+	}
+	remainNonPaidQuota = remainQuota - remainPaidQuota
+	return totalQuota, remainPaidQuota, remainNonPaidQuota
+}
+
+func GetUserTotalActualPaidQuota(userId int) (int64, error) {
+	var topUps []topUpPaidQuotaRow
+	err := DB.Model(&TopUp{}).
+		Select("payment_method, amount, money, original_money, processing_fee, pay_money").
+		Where("user_id = ? AND status = ?", userId, common.TopUpStatusSuccess).
+		Find(&topUps).Error
+	if err != nil {
+		return 0, err
+	}
+
+	total := int64(0)
+	for _, topUp := range topUps {
+		total = saturatingAddInt64(total, calculateTopUpActualPaidQuota(topUp))
+	}
+	return total, nil
+}
+
+func GetUserPaidQuotaBreakdownByCAHID(cahID string) (*UserPaidQuotaBreakdown, error) {
+	user, err := GetUserByCAHID(cahID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	totalPaidQuota, err := GetUserTotalActualPaidQuota(user.Id)
+	if err != nil {
+		return nil, err
+	}
+	totalQuota, remainPaidQuota, remainNonPaidQuota := calculateRemainingPaidQuotaBreakdown(
+		int64(user.Quota),
+		int64(user.UsedQuota),
+		totalPaidQuota,
+	)
+
+	return &UserPaidQuotaBreakdown{
+		UserId:             user.Id,
+		CAHID:              user.CAHID,
+		Username:           user.Username,
+		TotalQuota:         totalQuota,
+		RemainQuota:        nonNegativeInt64(int64(user.Quota)),
+		RemainPaidQuota:    remainPaidQuota,
+		RemainNonPaidQuota: remainNonPaidQuota,
+		TotalPaidQuota:     totalPaidQuota,
+	}, nil
 }
 
 // GetUserTotalPaidQuota returns the total quota that a user obtained via successful top-ups.

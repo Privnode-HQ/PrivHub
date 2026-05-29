@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -56,6 +57,40 @@ func GetRemainActualPaidAmount(c *gin.Context) {
 	}
 
 	common.ApiSuccess(c, gin.H{"remain_actual_paid_amount": remainActualPaid})
+}
+
+func GetAdminUserRemainActualPaidAmountByCAHID(c *gin.Context) {
+	breakdown, err := model.GetUserPaidQuotaBreakdownByCAHID(c.Param("cah_id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	data := gin.H{
+		"cah_id":                       breakdown.CAHID,
+		"user_id":                      breakdown.UserId,
+		"username":                     breakdown.Username,
+		"quota_per_unit":               common.QuotaPerUnit,
+		"user_total_quota":             breakdown.TotalQuota,
+		"user_remain_quota":            breakdown.RemainQuota,
+		"user_remain_paid_quota":       breakdown.RemainPaidQuota,
+		"user_remain_non_paid_quota":   breakdown.RemainNonPaidQuota,
+		"user_total_actual_paid_quota": breakdown.TotalPaidQuota,
+	}
+
+	rateRaw := strings.TrimSpace(c.Query("rate"))
+	if rateRaw != "" {
+		rate, err := decimal.NewFromString(rateRaw)
+		if err != nil || rate.IsNegative() || rate.GreaterThan(decimal.NewFromInt(1)) {
+			common.ApiErrorMsg(c, "rate 必须是 0 到 1 之间的小数")
+			return
+		}
+		adjusted := decimal.NewFromInt(breakdown.RemainPaidQuota).Mul(rate).IntPart()
+		data["rate"] = rate.String()
+		data["user_remain_paid_quota_adjusted"] = adjusted
+	}
+
+	common.ApiSuccess(c, data)
 }
 
 type selfQuotaTakeAwayRequest struct {

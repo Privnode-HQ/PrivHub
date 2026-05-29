@@ -20,6 +20,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), middleware.AdminAudit(), controller.TestStatus)
 		apiRouter.POST("/admin/users/:cah_id/verification_code", middleware.AdminAuth(), middleware.AdminAudit(), controller.SendAdminUserVerificationCode)
+		apiRouter.GET("/admin/users/:cah_id/remain_actual_paid_amount", middleware.AdminAuth(), middleware.AdminAudit(), controller.GetAdminUserRemainActualPaidAmountByCAHID)
 		adminServiceAccountRoute := apiRouter.Group("/admin/service-accounts")
 		adminServiceAccountRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
 		{
