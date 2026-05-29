@@ -39,6 +39,7 @@ import PasswordResetForm from './components/auth/PasswordResetForm';
 import PasswordResetConfirm from './components/auth/PasswordResetConfirm';
 import Channel from './pages/Channel';
 import Token from './pages/Token';
+import CAH from './pages/CAH';
 import Redemption from './pages/Redemption';
 import TopupCoupon from './pages/TopupCoupon';
 import TopUp from './pages/TopUp';
@@ -150,6 +151,14 @@ function App() {
           element={
             <PrivateRoute>
               <Token />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/cah'
+          element={
+            <PrivateRoute>
+              <CAH />
             </PrivateRoute>
           }
         />

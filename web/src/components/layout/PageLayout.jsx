@@ -62,6 +62,7 @@ const PageLayout = () => {
     '/console/messages',
     '/console/message-management',
     '/console/token',
+    '/console/cah',
     '/console/midjourney',
     '/console/task',
     '/console/models',
