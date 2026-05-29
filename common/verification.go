@@ -1,6 +1,9 @@
 package common
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +33,20 @@ func GenerateVerificationCode(length int) string {
 		return code
 	}
 	return code[:length]
+}
+
+func GenerateHexVerificationCode(length int) (string, error) {
+	if length <= 0 {
+		return "", errors.New("verification code length must be positive")
+	}
+
+	raw := make([]byte, (length+1)/2)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+
+	code := strings.ToUpper(hex.EncodeToString(raw))
+	return code[:length], nil
 }
 
 func RegisterVerificationCodeWithKey(key string, code string, purpose string) {

@@ -86,8 +86,19 @@
 | GET | /api/user/:id | 管理员 | 获取单个用户信息 |
 | POST | /api/user/ | 管理员 | 创建用户 |
 | POST | /api/user/manage | 管理员 | 冻结/重置等管理操作 |
+| POST | /api/admin/users/:cah_id/verification_code | 管理员 | 按 CAH 向已绑定邮箱的用户发送并返回 8 位十六进制人工核验验证码 |
 | PUT | /api/user/ | 管理员 | 更新用户 |
 | DELETE | /api/user/:id | 管理员 | 删除用户 |
+
+`POST /api/admin/users/:cah_id/verification_code` 请求体：
+
+```json
+{
+  "purpose": "账号迁移人工确认"
+}
+```
+
+`purpose` 会写入邮件正文；该接口拒绝登录、注册、密码重置、邮箱绑定或两步验证等身份认证用途。目标用户必须已经绑定邮箱，否则返回错误。发送成功后，响应 `data.code` 会包含同一枚验证码。
 
 ## 6. 站点选项 (Root)
 | 方法 | 路径 | 鉴权 | 说明 |
