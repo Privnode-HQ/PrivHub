@@ -61,6 +61,7 @@ import SSOAuthorize from './pages/SSOAuthorize';
 import Messages from './pages/Messages';
 import AdminMessages from './pages/AdminMessages';
 import UserApiKeySearch from './pages/UserApiKeySearch';
+import AdminServiceAccount from './pages/AdminServiceAccount';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -200,6 +201,14 @@ function App() {
             <SupportRoute>
               <UserApiKeySearch />
             </SupportRoute>
+          }
+        />
+        <Route
+          path='/console/admin-service-accounts'
+          element={
+            <AdminRoute>
+              <AdminServiceAccount />
+            </AdminRoute>
           }
         />
         <Route

@@ -113,6 +113,7 @@ func InitEnv() {
 
 	// Initialize SSO JWT
 	InitSSOJWT()
+	InitAdminServiceAccountJWT()
 }
 
 func initConstantEnv() {

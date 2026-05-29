@@ -97,6 +97,32 @@ func matchesUserIdentifier(identifier string, userID int, cahID string) bool {
 	return normalizedCAHID != "" && normalizedCAHID == model.NormalizeCAHID(cahID)
 }
 
+func extractBearerCredential(authorization string) (string, bool) {
+	fields := strings.Fields(strings.TrimSpace(authorization))
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
+		return "", false
+	}
+	return strings.TrimSpace(fields[1]), fields[1] != ""
+}
+
+func tryAdminServiceAccountAuth(c *gin.Context, authorization string) (*model.User, *model.AdminServiceAccount, bool, error) {
+	credential, ok := extractBearerCredential(authorization)
+	if !ok || strings.Count(credential, ".") != 2 {
+		return nil, nil, false, nil
+	}
+	user, account, _, err := model.ValidateAdminServiceAccountJWT(credential, time.Now())
+	if err != nil {
+		return nil, nil, true, err
+	}
+	if !model.IsClientIPAllowedByAdminServiceAccount(account, c.ClientIP()) {
+		return nil, nil, true, fmt.Errorf("您的 IP 不在 Service Account 允许访问的列表中")
+	}
+	if err = account.TouchAccessedAt(common.GetTimestamp()); err != nil {
+		common.SysLog("failed to update admin service account accessed time: " + err.Error())
+	}
+	return user, account, true, nil
+}
+
 func authHelper(c *gin.Context, minRole int) {
 	session := sessions.Default(c)
 	username := session.Get("username")
@@ -105,6 +131,8 @@ func authHelper(c *gin.Context, minRole int) {
 	id := session.Get("id")
 	status := session.Get("status")
 	useAccessToken := false
+	useAdminServiceAccount := false
+	var adminServiceAccount *model.AdminServiceAccount
 	var userCache *model.UserBase
 	impersonationState := service.GetImpersonationSessionState(session)
 	accessLinkState := service.GetAccessLinkSessionState(session)
@@ -119,7 +147,28 @@ func authHelper(c *gin.Context, minRole int) {
 			c.Abort()
 			return
 		}
-		user := model.ValidateAccessToken(accessToken)
+		user, serviceAccount, triedServiceAccount, err := tryAdminServiceAccountAuth(c, accessToken)
+		if triedServiceAccount {
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"success": false,
+					"message": "无权进行此操作，Admin Service Account 无效：" + err.Error(),
+				})
+				c.Abort()
+				return
+			}
+			username = user.Username
+			cahID = user.CAHID
+			role = user.Role
+			id = user.Id
+			status = user.Status
+			useAccessToken = true
+			useAdminServiceAccount = true
+			adminServiceAccount = serviceAccount
+			userCache = user.ToBaseUser()
+		} else {
+			user = model.ValidateAccessToken(accessToken)
+		}
 		if user != nil && user.Username != "" {
 			if !validUserInfo(user.Username, user.Role) {
 				c.JSON(http.StatusOK, gin.H{
@@ -167,15 +216,18 @@ func authHelper(c *gin.Context, minRole int) {
 		status = session.Get("status")
 		impersonationState = service.GetImpersonationSessionState(session)
 	}
-	// get header New-Api-User
-	apiUserIdStr := c.Request.Header.Get("New-Api-User")
-	if apiUserIdStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": "无权进行此操作，未提供 New-Api-User",
-		})
-		c.Abort()
-		return
+	apiUserIdStr := ""
+	if !useAdminServiceAccount {
+		// get header New-Api-User
+		apiUserIdStr = c.Request.Header.Get("New-Api-User")
+		if apiUserIdStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": "无权进行此操作，未提供 New-Api-User",
+			})
+			c.Abort()
+			return
+		}
 	}
 	if !useAccessToken {
 		userId := id.(int)
@@ -191,7 +243,7 @@ func authHelper(c *gin.Context, minRole int) {
 		}
 		cahID = userCache.CAHID
 	}
-	if !matchesUserIdentifier(apiUserIdStr, id.(int), fmt.Sprintf("%v", cahID)) && !service.MatchesImpersonationHeaderAlias(session, apiUserIdStr) {
+	if !useAdminServiceAccount && !matchesUserIdentifier(apiUserIdStr, id.(int), fmt.Sprintf("%v", cahID)) && !service.MatchesImpersonationHeaderAlias(session, apiUserIdStr) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": "无权进行此操作，New-Api-User 与登录用户不匹配",
@@ -247,13 +299,22 @@ func authHelper(c *gin.Context, minRole int) {
 			return
 		}
 	}
+	groupValue := session.Get("group")
+	if userCache != nil {
+		groupValue = userCache.Group
+	}
 	c.Set("username", username)
 	c.Set("cah_id", cahID)
 	c.Set("role", role)
 	c.Set("id", id)
-	c.Set("group", session.Get("group"))
-	c.Set("user_group", session.Get("group"))
+	c.Set("group", groupValue)
+	c.Set("user_group", groupValue)
 	c.Set("use_access_token", useAccessToken)
+	c.Set("use_admin_service_account", useAdminServiceAccount)
+	if adminServiceAccount != nil {
+		c.Set("admin_service_account_id", adminServiceAccount.ServiceAccountID)
+		c.Set("admin_service_account_name", adminServiceAccount.Name)
+	}
 	c.Set("impersonation_active", impersonationState.Active)
 	c.Set("impersonation_grant_id", impersonationState.GrantID)
 	c.Set("impersonation_read_only", impersonationState.ReadOnly)

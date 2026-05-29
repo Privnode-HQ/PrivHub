@@ -8,6 +8,7 @@ import (
 )
 
 var SSOJWTSecret string
+var AdminServiceAccountJWTSecret string
 
 // InitSSOJWT 初始化 SSO JWT 密钥
 func InitSSOJWT() {
@@ -15,6 +16,14 @@ func InitSSOJWT() {
 	if SSOJWTSecret == "" {
 		// 如果未设置，使用 SESSION_SECRET
 		SSOJWTSecret = SessionSecret
+	}
+}
+
+// InitAdminServiceAccountJWT 初始化管理员 Service Account JWT 密钥。
+func InitAdminServiceAccountJWT() {
+	AdminServiceAccountJWTSecret = os.Getenv("ADMIN_SERVICE_ACCOUNT_JWT_SECRET")
+	if AdminServiceAccountJWTSecret == "" {
+		AdminServiceAccountJWTSecret = CryptoSecret
 	}
 }
 

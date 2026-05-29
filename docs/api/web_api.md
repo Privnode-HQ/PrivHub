@@ -100,6 +100,17 @@
 
 `purpose` 会写入邮件正文；该接口拒绝登录、注册、密码重置、邮箱绑定或两步验证等身份认证用途。目标用户必须已经绑定邮箱，否则返回错误。发送成功后，响应 `data.code` 会包含同一枚验证码。
 
+### 5.4 Admin Service Account
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| GET | /api/admin/service-accounts/ | 管理员 | 分页列出管理员 Service Account |
+| POST | /api/admin/service-accounts/ | 管理员 | 创建 Service Account 并返回一次性 JWT 凭据 |
+| PUT | /api/admin/service-accounts/:id | 管理员 | 更新 Service Account 名称、说明、状态或 IP 白名单 |
+| POST | /api/admin/service-accounts/:id/rotate | 管理员 | 轮换 JWT 凭据并立即废弃旧凭据 |
+| DELETE | /api/admin/service-accounts/:id | 管理员 | 删除 Service Account 并撤销凭据 |
+
+ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `New-Api-User` 请求头。JWT 载荷包含 Service Account ID、绑定管理员、创建者、作用域、`jti`、签发/生效/过期时间等审计字段。
+
 ## 6. 站点选项 (Root)
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|

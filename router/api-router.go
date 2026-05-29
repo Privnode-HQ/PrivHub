@@ -20,6 +20,15 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), middleware.AdminAudit(), controller.TestStatus)
 		apiRouter.POST("/admin/users/:cah_id/verification_code", middleware.AdminAuth(), middleware.AdminAudit(), controller.SendAdminUserVerificationCode)
+		adminServiceAccountRoute := apiRouter.Group("/admin/service-accounts")
+		adminServiceAccountRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
+		{
+			adminServiceAccountRoute.GET("/", controller.GetAdminServiceAccounts)
+			adminServiceAccountRoute.POST("/", middleware.CriticalRateLimit(), controller.CreateAdminServiceAccount)
+			adminServiceAccountRoute.PUT("/:id", controller.UpdateAdminServiceAccount)
+			adminServiceAccountRoute.POST("/:id/rotate", middleware.CriticalRateLimit(), controller.RotateAdminServiceAccountCredential)
+			adminServiceAccountRoute.DELETE("/:id", controller.DeleteAdminServiceAccount)
+		}
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)

@@ -109,6 +109,7 @@ export default function SettingsSidebarModulesUser() {
         redemption: isSidebarModuleAllowed('admin', 'redemption'),
         user: isSidebarModuleAllowed('admin', 'user'),
         user_api_key: isSidebarModuleAllowed('admin', 'user_api_key'),
+        service_account: isSidebarModuleAllowed('admin', 'service_account'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
       };
     }
@@ -364,6 +365,11 @@ export default function SettingsSidebarModulesUser() {
           key: 'user_api_key',
           title: t('API Key 查用户'),
           description: t('通过 API Key 反查所属用户'),
+        },
+        {
+          key: 'service_account',
+          title: t('Service Account'),
+          description: t('管理员自动化 JWT 凭据'),
         },
         {
           key: 'setting',

@@ -70,6 +70,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       topup_coupon: true,
       user: true,
       user_api_key: true,
+      service_account: true,
       setting: true,
     },
   });
@@ -108,6 +109,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       topup_coupon: true,
       user: true,
       user_api_key: true,
+      service_account: true,
       setting: true,
       ...(config?.admin || {}),
     },
@@ -174,6 +176,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         topup_coupon: true,
         user: true,
         user_api_key: true,
+        service_account: true,
         setting: true,
       },
     };
@@ -315,6 +318,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           key: 'user_api_key',
           title: t('API Key 查用户'),
           description: t('通过 API Key 反查所属用户'),
+        },
+        {
+          key: 'service_account',
+          title: t('Service Account'),
+          description: t('管理员自动化 JWT 凭据'),
         },
         {
           key: 'setting',

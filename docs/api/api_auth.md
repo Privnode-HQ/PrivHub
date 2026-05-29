@@ -38,6 +38,24 @@
 *   如果用户权限不足，则会返回 `403 Forbidden` 错误，并提示“无权进行此操作，权限不足”。
 *   如果用户信息无效，则会返回 `403 Forbidden` 错误，并提示“无权进行此操作，用户信息无效”。
 
+### Admin Service Account (ASA)
+
+管理员可以在 Web 控制台的 **Admin Service Account** 页面创建 ASA，并获得一次性显示的 JWT 凭据。ASA JWT 用于管理员自动化调用现有 Web API，调用时只需要提供标准 Bearer Token：
+
+```http
+Authorization: Bearer <asa_jwt>
+```
+
+使用 ASA JWT 时不需要、也不应该额外传递 `New-Api-User` 请求头。后端会从 JWT 与数据库中的 Service Account 记录解析管理员身份，并验证：
+
+* JWT 签名、`iss`、`aud`、`exp`、`nbf`、`iat`、`jti`；
+* `token_use=admin_service_account`、版本号、Service Account ID；
+* Service Account 当前为启用状态、未被删除、未过期、未被轮换；
+* 绑定用户仍然存在、处于启用状态，并且仍然是管理员或超级管理员；
+* 如果配置了 IP 白名单，请求来源 IP 必须匹配白名单。
+
+ASA JWT 的载荷包含管理员自动化审计所需信息，包括 Service Account ID/名称、绑定管理员的用户 ID、CAH ID、用户名、角色、创建者 ID/CAH ID/用户名、作用域、签发时间、启用时间、过期时间和唯一 `jti`。JWT 凭据只在创建或轮换时返回一次；后端仅保存凭据哈希，无法再次取回原文。
+
 ## Curl 示例
 
 假设您的 Access Token 为 `access_token`，用户 ID 为 `123`，要访问的 API 接口为 `/api/user/self`，则可以使用以下 curl 命令：
@@ -50,3 +68,11 @@ curl -X GET \
 ```
 
 请将 `access_token`、`123` 和 `https://your-domain.com` 替换为实际的值。
+
+使用 ASA JWT 调用管理员接口时：
+
+```bash
+curl -X GET \
+  -H "Authorization: Bearer <asa_jwt>" \
+  https://your-domain.com/api/user/self
+```
