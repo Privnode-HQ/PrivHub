@@ -163,8 +163,7 @@ func buildAdminUserVerificationCodeEmailContent(systemName string, purpose strin
 	systemName = resolveAdminUserVerificationCodeSystemName(systemName)
 
 	return fmt.Sprintf(
-		"您收到此邮件，是因为管理员正在通过 **%s** 发起一次人工核验。\n\n## 验证码用途\n\n%s\n\n## 验证码\n\n`%s`\n\n此验证码仅用于上述用途，不是登录验证码、密码重置验证码、邮箱绑定验证码或两步验证验证码，也不能用于登录或找回账户。如果您不清楚该用途，请忽略本邮件并联系管理员。",
-		html.EscapeString(systemName),
+		"感谢您选择 Privnode，您的 %s 一次性验证代码是：\n\n ## `%s` \n\n 请勿与他人分享此验证代码。",
 		html.EscapeString(strings.TrimSpace(purpose)),
 		strings.ToUpper(strings.TrimSpace(code)),
 	)
