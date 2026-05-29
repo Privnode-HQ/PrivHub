@@ -60,8 +60,6 @@ type TopUpQuoteData struct {
 	BasePayableAmount      float64            `json:"base_payable_amount"`
 	PlatformDiscountAmount float64            `json:"platform_discount_amount"`
 	CouponDiscountAmount   float64            `json:"coupon_discount_amount"`
-	PayableBeforeFeeAmount float64            `json:"payable_before_fee_amount"`
-	ProcessingFeeAmount    float64            `json:"processing_fee_amount"`
 	FinalPayableAmount     float64            `json:"final_payable_amount"`
 	MinPayableThreshold    float64            `json:"min_payable_threshold"`
 	SelectedCouponId       int                `json:"selected_coupon_id,omitempty"`
@@ -367,24 +365,16 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	}
 
 	quote.AvailableCoupons = eligibleCoupons
-	payableBeforeFee := basePayable
+	finalPayable := basePayable
 	if selectedCoupon != nil {
 		couponDiscount := decimal.NewFromFloat(selectedCoupon.DeductionAmount)
 		quote.SelectedCouponId = selectedCoupon.Id
 		quote.CouponDiscountAmount = roundMoney(couponDiscount)
-		payableBeforeFee = basePayable.Sub(couponDiscount)
+		finalPayable = basePayable.Sub(couponDiscount)
 	}
 
-	if !payableBeforeFee.GreaterThan(decimal.Zero) {
+	if !finalPayable.GreaterThan(decimal.Zero) {
 		return nil, errors.New("充值金额过低")
-	}
-	quote.PayableBeforeFeeAmount = roundMoney(payableBeforeFee)
-
-	finalPayable := payableBeforeFee
-	if req.PaymentMethod != PaymentMethodStripe && req.PaymentMethod != PaymentMethodCreem {
-		processingFee := calculateEpayProcessingFee(payableBeforeFee)
-		quote.ProcessingFeeAmount = roundMoney(processingFee)
-		finalPayable = finalPayable.Add(processingFee)
 	}
 	quote.FinalPayableAmount = roundMoney(finalPayable)
 

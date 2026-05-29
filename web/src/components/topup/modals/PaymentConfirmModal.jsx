@@ -18,16 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import {
-  Modal,
-  Typography,
-  Card,
-  Select,
-  Skeleton,
-  Tooltip,
-} from '@douyinfe/semi-ui';
+import { Modal, Typography, Card, Select, Skeleton } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
-import { CreditCard, HelpCircle } from 'lucide-react';
+import { CreditCard } from 'lucide-react';
 import { formatCurrencyAmountByCode } from '../../../helpers';
 
 const { Text } = Typography;
@@ -50,8 +43,6 @@ const PaymentConfirmModal = ({
   originalAmount,
   platformDiscountAmount,
   couponDiscountAmount,
-  payableBeforeFeeAmount,
-  processingFeeAmount,
   finalPayableAmount,
   availableCoupons,
   selectedCouponId,
@@ -66,27 +57,12 @@ const PaymentConfirmModal = ({
       : 0;
   const normalizedCouponDiscount =
     couponDiscountAmount && couponDiscountAmount > 0 ? couponDiscountAmount : 0;
-  const normalizedProcessingFee =
-    processingFeeAmount && processingFeeAmount > 0 ? processingFeeAmount : 0;
   const normalizedFinalAmount =
     finalPayableAmount && finalPayableAmount > 0 ? finalPayableAmount : 0;
-  const normalizedPayableBeforeFee =
-    payableBeforeFeeAmount && payableBeforeFeeAmount > 0
-      ? payableBeforeFeeAmount
-      : Math.max(normalizedFinalAmount - normalizedProcessingFee, 0);
   const hasAnyDiscount =
     normalizedPlatformDiscount > 0 || normalizedCouponDiscount > 0;
   const showStripeCurrencySelector =
     payWay === 'stripe' && (supportedCurrencyCodes?.length || 0) > 1;
-  const showProcessingFee = payWay && payWay !== 'stripe' && payWay !== 'creem';
-  const processingFeeTooltip = (
-    <div className='space-y-1 text-xs'>
-      <div className='font-medium'>{t('易支付手续费标准')}</div>
-      <div>{t('充值 200 以下：¥0.35 + 3.5%')}</div>
-      <div>{t('充值 200 至 499.99：2%')}</div>
-      <div>{t('充值 500 以上：免手续费')}</div>
-    </div>
-  );
   return (
     <Modal
       title={
@@ -224,46 +200,6 @@ const PaymentConfirmModal = ({
                     </Text>
                   </div>
                 )}
-              </>
-            )}
-            {showProcessingFee && !amountLoading && (
-              <>
-                <div className='flex justify-between items-center'>
-                  <Text className='text-slate-500 dark:text-slate-400'>
-                    {t('应付小计')}：
-                  </Text>
-                  <Text className='text-slate-500 dark:text-slate-400'>
-                    {formatCurrencyAmountByCode(
-                      normalizedPayableBeforeFee,
-                      currencyCode,
-                    )}
-                  </Text>
-                </div>
-                <div className='flex justify-between items-center'>
-                  <div className='flex items-center gap-1'>
-                    <Text className='text-slate-500 dark:text-slate-400'>
-                      {t('手续费')}：
-                    </Text>
-                    <Tooltip content={processingFeeTooltip} position='top'>
-                      <span className='inline-flex cursor-help items-center text-slate-400 dark:text-slate-500'>
-                        <HelpCircle size={16} strokeWidth={2} />
-                      </span>
-                    </Tooltip>
-                  </div>
-                  <Text
-                    className={
-                      normalizedProcessingFee > 0
-                        ? 'text-orange-600 dark:text-orange-400'
-                        : 'text-slate-500 dark:text-slate-400'
-                    }
-                  >
-                    {normalizedProcessingFee > 0 ? '+ ' : ''}
-                    {formatCurrencyAmountByCode(
-                      normalizedProcessingFee,
-                      currencyCode,
-                    )}
-                  </Text>
-                </div>
               </>
             )}
             <div className='flex justify-between items-center'>

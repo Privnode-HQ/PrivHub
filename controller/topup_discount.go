@@ -6,14 +6,6 @@ import (
 	"github.com/stripe/stripe-go/v81"
 )
 
-var (
-	epayProcessingFeeLowThreshold  = decimal.NewFromInt(200)
-	epayProcessingFeeFreeThreshold = decimal.NewFromInt(500)
-	epayProcessingFeeLowFixed      = decimal.RequireFromString("0.35")
-	epayProcessingFeeLowRate       = decimal.RequireFromString("0.035")
-	epayProcessingFeeStandardRate  = decimal.RequireFromString("0.02")
-)
-
 func getTopupDiscountRule(originalAmount int64) (operation_setting.AmountDiscountRule, bool) {
 	rule, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]
 	return rule, ok
@@ -45,20 +37,6 @@ func resolveTopUpBasePayable(originalBase, discountedBase, platformDiscount deci
 		return originalBase, decimal.Zero
 	}
 	return discountedBase, platformDiscount
-}
-
-func calculateEpayProcessingFee(payable decimal.Decimal) decimal.Decimal {
-	if !payable.GreaterThan(decimal.Zero) {
-		return decimal.Zero
-	}
-
-	if payable.LessThan(epayProcessingFeeLowThreshold) {
-		return payable.Mul(epayProcessingFeeLowRate).Add(epayProcessingFeeLowFixed).Round(2)
-	}
-	if payable.LessThan(epayProcessingFeeFreeThreshold) {
-		return payable.Mul(epayProcessingFeeStandardRate).Round(2)
-	}
-	return decimal.Zero
 }
 
 func getStripeMinorUnitAmount(payMoney decimal.Decimal, currency stripe.Currency) int64 {
