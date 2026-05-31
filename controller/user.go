@@ -1409,6 +1409,7 @@ type UpdateUserSettingRequest struct {
 	GotifyPriority             int     `json:"gotify_priority,omitempty"`
 	AcceptUnsetModelRatioModel bool    `json:"accept_unset_model_ratio_model"`
 	RecordIpLog                bool    `json:"record_ip_log"`
+	AllowTrainingDataGroups    bool    `json:"allow_training_data_groups"`
 }
 
 func UpdateUserSetting(c *gin.Context) {
@@ -1458,18 +1459,13 @@ func UpdateUserSetting(c *gin.Context) {
 		return
 	}
 
-	// 构建设置
-	settings := dto.UserSetting{
-		NotifyType:            dto.NotifyTypeEmail,
-		QuotaWarningThreshold: req.QuotaWarningThreshold,
-		AcceptUnsetRatioModel: req.AcceptUnsetModelRatioModel,
-		RecordIpLog:           req.RecordIpLog,
-	}
-
-	// 如果提供了通知邮箱，添加到设置中
-	if req.NotificationEmail != "" {
-		settings.NotificationEmail = req.NotificationEmail
-	}
+	settings := user.GetSetting()
+	settings.NotifyType = dto.NotifyTypeEmail
+	settings.QuotaWarningThreshold = req.QuotaWarningThreshold
+	settings.NotificationEmail = req.NotificationEmail
+	settings.AcceptUnsetRatioModel = req.AcceptUnsetModelRatioModel
+	settings.RecordIpLog = req.RecordIpLog
+	settings.AllowTrainingDataGroups = req.AllowTrainingDataGroups
 
 	// 更新用户设置
 	user.SetSetting(settings)

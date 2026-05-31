@@ -56,7 +56,7 @@ func SetRelayRouter(router *gin.Engine) {
 	}
 
 	playgroundRouter := router.Group("/pg")
-	playgroundRouter.Use(middleware.UserAuth(), middleware.Distribute())
+	playgroundRouter.Use(middleware.UserAuth(), middleware.Distribute(), middleware.LangfuseCapture())
 	{
 		playgroundRouter.POST("/chat/completions", controller.Playground)
 	}
@@ -74,7 +74,7 @@ func SetRelayRouter(router *gin.Engine) {
 	{
 		//http router
 		httpRouter := relayV1Router.Group("")
-		httpRouter.Use(middleware.Distribute())
+		httpRouter.Use(middleware.Distribute(), middleware.LangfuseCapture())
 
 		// claude related routes
 		httpRouter.POST("/messages", func(c *gin.Context) {
@@ -162,7 +162,7 @@ func SetRelayRouter(router *gin.Engine) {
 	//relayMjRouter.Use()
 
 	relaySunoRouter := router.Group("/suno")
-	relaySunoRouter.Use(middleware.TokenAuth(), middleware.Distribute())
+	relaySunoRouter.Use(middleware.TokenAuth(), middleware.Distribute(), middleware.LangfuseCapture())
 	{
 		relaySunoRouter.POST("/submit/:action", controller.RelayTask)
 		relaySunoRouter.POST("/fetch", controller.RelayTask)
@@ -172,7 +172,7 @@ func SetRelayRouter(router *gin.Engine) {
 	relayGeminiRouter := router.Group("/v1beta")
 	relayGeminiRouter.Use(middleware.TokenAuth())
 	relayGeminiRouter.Use(middleware.ModelRequestRateLimit())
-	relayGeminiRouter.Use(middleware.Distribute())
+	relayGeminiRouter.Use(middleware.Distribute(), middleware.LangfuseCapture())
 	{
 		// Gemini API 路径格式: /v1beta/models/{model_name}:{action}
 		relayGeminiRouter.POST("/models/*path", func(c *gin.Context) {
@@ -183,7 +183,7 @@ func SetRelayRouter(router *gin.Engine) {
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
 	relayMjRouter.GET("/image/:id", relay.RelayMidjourneyImage)
-	relayMjRouter.Use(middleware.TokenAuth(), middleware.Distribute())
+	relayMjRouter.Use(middleware.TokenAuth(), middleware.Distribute(), middleware.LangfuseCapture())
 	{
 		relayMjRouter.POST("/submit/action", controller.RelayMidjourney)
 		relayMjRouter.POST("/submit/shorten", controller.RelayMidjourney)

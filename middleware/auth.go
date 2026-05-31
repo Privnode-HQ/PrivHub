@@ -500,6 +500,11 @@ func TokenAuth() func(c *gin.Context) {
 			common.SetContextKey(c, constant.ContextKeyUsingGroups, usingGroups)
 		}
 
+		if err := service.ValidateTrainingDataGroupConsent(userGroup, usingGroups, userCache.GetSetting()); err != nil {
+			abortWithOpenAiMessage(c, http.StatusForbidden, err.Error())
+			return
+		}
+
 		common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 
 		err = SetupContextForToken(c, token, parts...)

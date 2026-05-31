@@ -38,6 +38,10 @@ services:
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX  # Google Analytics 的测量 ID (Google Analytics Measurement ID)
 #      - UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # Umami 网站 ID (Umami Website ID)
 #      - UMAMI_SCRIPT_URL=https://analytics.umami.is/script.js  # Umami 脚本 URL，默认为官方地址 (Umami Script URL, defaults to official URL)
+#      - LANGFUSE_PUBLIC_KEY=pk-lf-...  # 分组采集率大于0且用户同意后，发送采样请求到 Langfuse
+#      - LANGFUSE_SECRET_KEY=sk-lf-...
+#      - LANGFUSE_BASE_URL=https://cloud.langfuse.com
+#      - LANGFUSE_TRACING_ENVIRONMENT=production
 
     depends_on:
       - redis

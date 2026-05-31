@@ -3,6 +3,7 @@ package ratio_setting
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
@@ -17,6 +18,10 @@ var groupRatio = map[string]float64{
 }
 
 var groupRatioMutex sync.RWMutex
+
+var groupCaptureRate = map[string]float64{}
+
+var groupCaptureRateMutex sync.RWMutex
 
 var (
 	GroupGroupRatio = map[string]map[string]float64{
@@ -36,6 +41,7 @@ var defaultGroupSpecialUsableGroup = map[string]map[string]string{
 
 type GroupRatioSetting struct {
 	GroupRatio              map[string]float64                      `json:"group_ratio"`
+	GroupCaptureRate        map[string]float64                      `json:"group_capture_rate"`
 	GroupGroupRatio         map[string]map[string]float64           `json:"group_group_ratio"`
 	GroupSpecialUsableGroup *types.RWMap[string, map[string]string] `json:"group_special_usable_group"`
 }
@@ -49,6 +55,7 @@ func init() {
 	groupRatioSetting = GroupRatioSetting{
 		GroupSpecialUsableGroup: groupSpecialUsableGroup,
 		GroupRatio:              groupRatio,
+		GroupCaptureRate:        groupCaptureRate,
 		GroupGroupRatio:         GroupGroupRatio,
 	}
 
@@ -74,6 +81,17 @@ func GetGroupRatioCopy() map[string]float64 {
 	return groupRatioCopy
 }
 
+func GetGroupCaptureRateCopy() map[string]float64 {
+	groupCaptureRateMutex.RLock()
+	defer groupCaptureRateMutex.RUnlock()
+
+	groupCaptureRateCopy := make(map[string]float64)
+	for k, v := range groupCaptureRate {
+		groupCaptureRateCopy[k] = v
+	}
+	return groupCaptureRateCopy
+}
+
 func ContainsGroupRatio(name string) bool {
 	groupRatioMutex.RLock()
 	defer groupRatioMutex.RUnlock()
@@ -93,12 +111,34 @@ func GroupRatio2JSONString() string {
 	return string(jsonBytes)
 }
 
+func GroupCaptureRate2JSONString() string {
+	groupCaptureRateMutex.RLock()
+	defer groupCaptureRateMutex.RUnlock()
+
+	jsonBytes, err := json.Marshal(groupCaptureRate)
+	if err != nil {
+		common.SysLog("error marshalling group capture rate: " + err.Error())
+	}
+	return string(jsonBytes)
+}
+
 func UpdateGroupRatioByJSONString(jsonStr string) error {
 	groupRatioMutex.Lock()
 	defer groupRatioMutex.Unlock()
 
 	groupRatio = make(map[string]float64)
 	return json.Unmarshal([]byte(jsonStr), &groupRatio)
+}
+
+func UpdateGroupCaptureRateByJSONString(jsonStr string) error {
+	groupCaptureRateMutex.Lock()
+	defer groupCaptureRateMutex.Unlock()
+
+	groupCaptureRate = make(map[string]float64)
+	if strings.TrimSpace(jsonStr) == "" {
+		return nil
+	}
+	return json.Unmarshal([]byte(jsonStr), &groupCaptureRate)
 }
 
 func GetGroupRatio(name string) float64 {
@@ -111,6 +151,17 @@ func GetGroupRatio(name string) float64 {
 		return 1
 	}
 	return ratio
+}
+
+func GetGroupCaptureRate(name string) float64 {
+	groupCaptureRateMutex.RLock()
+	defer groupCaptureRateMutex.RUnlock()
+
+	rate, ok := groupCaptureRate[name]
+	if !ok {
+		return 0
+	}
+	return rate
 }
 
 func GetGroupGroupRatio(userGroup, usingGroup string) (float64, bool) {
@@ -156,6 +207,23 @@ func CheckGroupRatio(jsonStr string) error {
 	for name, ratio := range checkGroupRatio {
 		if ratio < 0 {
 			return errors.New("group ratio must be not less than 0: " + name)
+		}
+	}
+	return nil
+}
+
+func CheckGroupCaptureRate(jsonStr string) error {
+	if strings.TrimSpace(jsonStr) == "" {
+		return nil
+	}
+	checkGroupCaptureRate := make(map[string]float64)
+	err := json.Unmarshal([]byte(jsonStr), &checkGroupCaptureRate)
+	if err != nil {
+		return err
+	}
+	for name, rate := range checkGroupCaptureRate {
+		if rate < 0 || rate > 1 {
+			return errors.New("group capture rate must be between 0 and 1: " + name)
 		}
 	}
 	return nil

@@ -97,6 +97,19 @@ func Distribute() func(c *gin.Context) {
 							abortWithOpenAiMessage(c, http.StatusForbidden, "无权访问该分组")
 							return
 						}
+						userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+						if userGroup == "" {
+							userGroup = usingGroup
+						}
+						userSetting, settingErr := model.GetUserSetting(c.GetInt("id"), false)
+						if settingErr != nil {
+							abortWithOpenAiMessage(c, http.StatusInternalServerError, "无法读取用户隐私设置")
+							return
+						}
+						if consentErr := service.ValidateTrainingDataGroupConsent(userGroup, []string{playgroundRequest.Group}, userSetting); consentErr != nil {
+							abortWithOpenAiMessage(c, http.StatusForbidden, consentErr.Error())
+							return
+						}
 						usingGroup = playgroundRequest.Group
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}

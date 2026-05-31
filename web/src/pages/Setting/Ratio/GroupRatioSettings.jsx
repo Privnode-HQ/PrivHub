@@ -34,6 +34,7 @@ export default function GroupRatioSettings(props) {
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     GroupRatio: '',
+    GroupCaptureRate: '',
     UserUsableGroups: '',
     GroupGroupRatio: '',
     'group_ratio_setting.group_special_usable_group': '',
@@ -42,6 +43,26 @@ export default function GroupRatioSettings(props) {
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
+
+  const verifyCaptureRateJSON = (value) => {
+    if (!value || value.trim() === '') {
+      return true;
+    }
+    if (!verifyJSON(value)) {
+      return false;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      return Object.values(parsed).every((rate) => {
+        const numberRate = Number(rate);
+        return (
+          Number.isFinite(numberRate) && numberRate >= 0 && numberRate <= 1
+        );
+      });
+    } catch (error) {
+      return false;
+    }
+  };
 
   async function onSubmit() {
     try {
@@ -141,6 +162,32 @@ export default function GroupRatioSettings(props) {
         <Row gutter={16}>
           <Col xs={24} sm={16}>
             <Form.TextArea
+              label={t('分组采集率')}
+              placeholder={t(
+                '为一个 JSON 文本，键为分组名称，值为 0 到 1 的采集率',
+              )}
+              extraText={t(
+                '设置后，该分组的令牌调用会按采集率采集提示与补全并发送到 Langfuse。0 或留空表示不采集，1 表示全部采集，例如：{"vip": 0.1, "test": 1}',
+              )}
+              field={'GroupCaptureRate'}
+              autosize={{ minRows: 4, maxRows: 10 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyCaptureRateJSON(value),
+                  message: t('必须是合法 JSON，且采集率必须在 0 到 1 之间'),
+                },
+              ]}
+              onChange={(value) =>
+                setInputs({ ...inputs, GroupCaptureRate: value })
+              }
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
               label={t('用户可选分组')}
               placeholder={t('为一个 JSON 文本，键为分组名称，值为分组描述')}
               extraText={t(
@@ -205,7 +252,10 @@ export default function GroupRatioSettings(props) {
                 },
               ]}
               onChange={(value) =>
-                setInputs({ ...inputs, 'group_ratio_setting.group_special_usable_group': value })
+                setInputs({
+                  ...inputs,
+                  'group_ratio_setting.group_special_usable_group': value,
+                })
               }
             />
           </Col>

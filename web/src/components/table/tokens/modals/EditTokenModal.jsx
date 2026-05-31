@@ -66,6 +66,26 @@ const EditTokenModal = (props) => {
   const [groups, setGroups] = useState([]);
   const isEdit = props.editingToken.id !== undefined;
 
+  const getBlockedGroup = (selectedGroups) => {
+    if (!Array.isArray(selectedGroups)) {
+      return null;
+    }
+    return groups.find(
+      (group) => group.disabled && selectedGroups.includes(group.value),
+    );
+  };
+
+  const validateSelectedGroups = (selectedGroups) => {
+    const blockedGroup = getBlockedGroup(selectedGroups);
+    if (!blockedGroup) {
+      return true;
+    }
+    showError(
+      `${blockedGroup.value} ${t('需要先在用户设置 > 安全设置中允许数据采集分组')}`,
+    );
+    return false;
+  };
+
   const getInitValues = () => ({
     name: '',
     remain_quota: 0,
@@ -131,11 +151,21 @@ const EditTokenModal = (props) => {
     let res = await API.get(`/api/user/self/groups`);
     const { success, message, data } = res.data;
     if (success) {
-      let localGroupOptions = Object.entries(data).map(([group, info]) => ({
-        label: info.desc,
-        value: group,
-        ratio: info.ratio,
-      }));
+      let localGroupOptions = Object.entries(data).map(([group, info]) => {
+        const requiresConsent = Boolean(info.requires_training_data_consent);
+        const trainingAllowed = Boolean(info.training_data_allowed);
+        const disabled = requiresConsent && !trainingAllowed;
+        return {
+          label: info.desc,
+          value: group,
+          ratio: info.ratio,
+          capture_rate: Number(info.capture_rate || 0),
+          disabled,
+          disabledReason: disabled
+            ? t('需先在用户设置 > 安全设置中允许数据采集分组')
+            : undefined,
+        };
+      });
       if (statusState?.status?.default_use_auto_group) {
         if (localGroupOptions.some((group) => group.value === 'auto')) {
           localGroupOptions.sort((a, b) => (a.value === 'auto' ? -1 : 1));
@@ -217,6 +247,10 @@ const EditTokenModal = (props) => {
       localInputs.groups = Array.isArray(localInputs.groups)
         ? localInputs.groups.filter((g) => g && g.trim() !== '')
         : [];
+      if (!validateSelectedGroups(localInputs.groups)) {
+        setLoading(false);
+        return;
+      }
       localInputs.group = localInputs.groups[0] || '';
       if (localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
@@ -258,6 +292,10 @@ const EditTokenModal = (props) => {
         localInputs.groups = Array.isArray(localInputs.groups)
           ? localInputs.groups.filter((g) => g && g.trim() !== '')
           : [];
+        if (!validateSelectedGroups(localInputs.groups)) {
+          setLoading(false);
+          return;
+        }
         localInputs.group = localInputs.groups[0] || '';
 
         if (localInputs.expired_time !== -1) {

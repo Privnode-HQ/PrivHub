@@ -19,10 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import {
+  Banner,
   Button,
   Card,
   Input,
   Space,
+  Switch,
+  Tag,
   Typography,
   Avatar,
   Tabs,
@@ -68,7 +71,61 @@ const AccountManagement = ({
   onPasskeyDelete,
   onBackToPayAsYouGo,
   backToPayAsYouGoLoading,
+  allowTrainingDataGroups,
+  groupCaptureRates = [],
+  onTrainingDataGroupChange,
+  captureConsentSaving,
 }) => {
+  const formatCaptureRate = (rate) => {
+    const percentage = Number(rate || 0) * 100;
+    if (!Number.isFinite(percentage)) {
+      return '0.00%';
+    }
+    const fractionDigits =
+      Number.isInteger(percentage) && percentage >= 1 ? 0 : 2;
+    return `${percentage.toFixed(fractionDigits)}%`;
+  };
+
+  const handleTrainingDataGroupChange = (checked) => {
+    if (captureConsentSaving || !onTrainingDataGroupChange) {
+      return;
+    }
+
+    if (checked) {
+      Modal.confirm({
+        title: t('允许使用数据采集分组？'),
+        content: (
+          <div className='space-y-2 text-sm text-gray-600'>
+            <div>
+              {t(
+                '开启后，令牌可以选择采集率大于 0 的分组，请求中的提示与补全会按对应采集率发送到 Langfuse。',
+              )}
+            </div>
+            <div className='font-medium text-amber-700'>
+              {t(
+                '即使之后关闭此开关，也无法在这里删除已经发送到 Langfuse 的历史记录。',
+              )}
+            </div>
+          </div>
+        ),
+        okText: t('允许并保存'),
+        cancelText: t('取消'),
+        onOk: () => onTrainingDataGroupChange(true),
+      });
+      return;
+    }
+
+    Modal.confirm({
+      title: t('关闭数据采集分组访问？'),
+      content: t(
+        '关闭后，令牌不能再选择采集率大于 0 的分组；已经发送到 Langfuse 的记录不会被删除。',
+      ),
+      okText: t('关闭并保存'),
+      cancelText: t('取消'),
+      onOk: () => onTrainingDataGroupChange(false),
+    });
+  };
+
   const renderAccountInfo = (accountId, label) => {
     if (!accountId || accountId === '') {
       return <span className='text-gray-500'>{t('未绑定')}</span>;
@@ -601,6 +658,90 @@ const AccountManagement = ({
                     >
                       {passkeyEnabled ? t('解绑 Passkey') : t('注册 Passkey')}
                     </Button>
+                  </div>
+                </Card>
+
+                {/* 数据采集分组 */}
+                <Card className='!rounded-xl w-full'>
+                  <div className='flex flex-col gap-4'>
+                    <div className='flex flex-col sm:flex-row items-start sm:justify-between gap-4'>
+                      <div className='flex items-start w-full sm:w-auto'>
+                        <div className='w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mr-4 flex-shrink-0'>
+                          <IconShield size='large' className='text-slate-600' />
+                        </div>
+                        <div>
+                          <Typography.Title heading={6} className='mb-1'>
+                            {t('数据采集分组')}
+                          </Typography.Title>
+                          <Typography.Text type='tertiary' className='text-sm'>
+                            {t(
+                              '允许令牌选择会将提示与补全按采集率发送到 Langfuse 的分组',
+                            )}
+                          </Typography.Text>
+                        </div>
+                      </div>
+                      <div className='flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end'>
+                        <Typography.Text type='tertiary' className='text-sm'>
+                          {allowTrainingDataGroups ? t('已允许') : t('未允许')}
+                        </Typography.Text>
+                        <Switch
+                          checked={Boolean(allowTrainingDataGroups)}
+                          loading={captureConsentSaving}
+                          onChange={handleTrainingDataGroupChange}
+                        />
+                      </div>
+                    </div>
+
+                    <Banner
+                      type='warning'
+                      className='!rounded-xl'
+                      description={t(
+                        '开启后，新请求可能被记录用于质量评估或训练数据准备；即使之后关闭开关，也无法从这里删除已经发送到 Langfuse 的历史记录。',
+                      )}
+                    />
+
+                    <div className='rounded-xl border border-gray-200 overflow-hidden'>
+                      <div className='grid grid-cols-[minmax(0,1fr)_96px] gap-3 bg-gray-50 px-3 py-2 text-xs text-gray-500'>
+                        <span>{t('分组')}</span>
+                        <span className='text-right'>{t('采集率')}</span>
+                      </div>
+                      {groupCaptureRates.length > 0 ? (
+                        <div className='divide-y divide-gray-100'>
+                          {groupCaptureRates.map((item) => {
+                            const captureRate = Number(item.captureRate || 0);
+                            return (
+                              <div
+                                key={item.group}
+                                className='grid grid-cols-[minmax(0,1fr)_96px] gap-3 px-3 py-2'
+                              >
+                                <div className='min-w-0'>
+                                  <div className='font-medium truncate'>
+                                    {item.group === 'auto'
+                                      ? t('智能熔断')
+                                      : item.group}
+                                  </div>
+                                  <div className='text-xs text-gray-500 truncate'>
+                                    {item.desc}
+                                  </div>
+                                </div>
+                                <div className='flex justify-end items-center'>
+                                  <Tag
+                                    color={captureRate > 0 ? 'orange' : 'grey'}
+                                    shape='circle'
+                                  >
+                                    {formatCaptureRate(captureRate)}
+                                  </Tag>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className='px-3 py-4 text-sm text-gray-500'>
+                          {t('暂无可用分组')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </Card>
 

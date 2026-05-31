@@ -102,7 +102,10 @@ const PersonalSetting = () => {
     notificationEmail: '',
     acceptUnsetModelRatioModel: false,
     recordIpLog: false,
+    allowTrainingDataGroups: false,
   });
+  const [groupCaptureRates, setGroupCaptureRates] = useState([]);
+  const [captureConsentSaving, setCaptureConsentSaving] = useState(false);
   const requiredActionPromptKeyRef = useRef('');
   const requiredActions = userState?.user?.required_actions || [];
   const requiredActionKey = [...requiredActions].sort().join('|');
@@ -156,6 +159,7 @@ const PersonalSetting = () => {
     })();
 
     getUserData();
+    loadGroupCaptureRates();
     loadImpersonationHistory();
 
     isPasskeySupported()
@@ -194,6 +198,7 @@ const PersonalSetting = () => {
         acceptUnsetModelRatioModel:
           settings.accept_unset_model_ratio_model || false,
         recordIpLog: settings.record_ip_log || false,
+        allowTrainingDataGroups: settings.allow_training_data_groups || false,
       });
     }
   }, [userState?.user?.setting]);
@@ -326,6 +331,30 @@ const PersonalSetting = () => {
       await loadPasskeyStatus();
     } else {
       showError(message);
+    }
+  };
+
+  const loadGroupCaptureRates = async () => {
+    try {
+      const res = await API.get('/api/user/self/groups');
+      const { success, data } = res.data;
+      if (!success || !data) {
+        return;
+      }
+      const groups = Object.entries(data)
+        .map(([group, info]) => ({
+          group,
+          desc: info.desc || group,
+          captureRate: Number(info.capture_rate || 0),
+          requiresConsent: Boolean(info.requires_training_data_consent),
+        }))
+        .sort(
+          (a, b) =>
+            b.captureRate - a.captureRate || a.group.localeCompare(b.group),
+        );
+      setGroupCaptureRates(groups);
+    } catch (error) {
+      // 保持页面可用，分组采集率仅作为安全设置的辅助信息展示。
     }
   };
 
@@ -667,28 +696,46 @@ const PersonalSetting = () => {
     }));
   };
 
-  const saveNotificationSettings = async () => {
+  const saveUserSettings = async (overrides = {}) => {
+    const nextSettings = {
+      ...notificationSettings,
+      ...overrides,
+    };
     try {
       const res = await API.put('/api/user/setting', {
         notify_type: 'email',
-        quota_warning_threshold: parseInt(
-          notificationSettings.warningThreshold,
-          10,
-        ),
-        notification_email: notificationSettings.notificationEmail,
-        accept_unset_model_ratio_model:
-          notificationSettings.acceptUnsetModelRatioModel,
-        record_ip_log: notificationSettings.recordIpLog,
+        quota_warning_threshold: parseInt(nextSettings.warningThreshold, 10),
+        notification_email: nextSettings.notificationEmail,
+        accept_unset_model_ratio_model: nextSettings.acceptUnsetModelRatioModel,
+        record_ip_log: nextSettings.recordIpLog,
+        allow_training_data_groups: nextSettings.allowTrainingDataGroups,
       });
 
       if (res.data.success) {
         showSuccess(t('设置保存成功'));
+        setNotificationSettings(nextSettings);
         await getUserData();
+        await loadGroupCaptureRates();
+        return true;
       } else {
         showError(res.data.message);
       }
     } catch (error) {
       showError(t('设置保存失败'));
+    }
+    return false;
+  };
+
+  const saveNotificationSettings = async () => {
+    await saveUserSettings();
+  };
+
+  const saveTrainingDataGroupSetting = async (allowTrainingDataGroups) => {
+    setCaptureConsentSaving(true);
+    try {
+      await saveUserSettings({ allowTrainingDataGroups });
+    } finally {
+      setCaptureConsentSaving(false);
     }
   };
 
@@ -854,6 +901,12 @@ const PersonalSetting = () => {
               onPasskeyDelete={handleRemovePasskey}
               onBackToPayAsYouGo={backToPayAsYouGo}
               backToPayAsYouGoLoading={backToPayAsYouGoLoading}
+              allowTrainingDataGroups={
+                notificationSettings.allowTrainingDataGroups
+              }
+              groupCaptureRates={groupCaptureRates}
+              onTrainingDataGroupChange={saveTrainingDataGroupSetting}
+              captureConsentSaving={captureConsentSaving}
             />
 
             {/* 右侧：其他设置 */}

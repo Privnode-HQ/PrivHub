@@ -719,6 +719,16 @@ export function renderRatio(ratio) {
   );
 }
 
+function formatCaptureRate(rate) {
+  const percentage = Number(rate || 0) * 100;
+  if (!Number.isFinite(percentage)) {
+    return '0.00%';
+  }
+  const fractionDigits =
+    Number.isInteger(percentage) && percentage >= 1 ? 0 : 2;
+  return `${percentage.toFixed(fractionDigits)}%`;
+}
+
 const measureTextWidth = (
   text,
   style = {
@@ -854,8 +864,28 @@ export const renderGroupOption = (item) => {
         <Typography.Text type='secondary' size='small'>
           {label}
         </Typography.Text>
+        {item.disabledReason ? (
+          <Typography.Text type='warning' size='small'>
+            {item.disabledReason}
+          </Typography.Text>
+        ) : null}
       </div>
-      {item.ratio && renderRatio(item.ratio)}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: '4px',
+          flexShrink: 0,
+        }}
+      >
+        {item.ratio && renderRatio(item.ratio)}
+        {Number(item.capture_rate || 0) > 0 ? (
+          <Tag color={disabled ? 'grey' : 'orange'} shape='circle'>
+            {i18next.t('采集')} {formatCaptureRate(item.capture_rate)}
+          </Tag>
+        ) : null}
+      </div>
     </div>
   );
 };

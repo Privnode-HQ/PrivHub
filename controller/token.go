@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -160,12 +161,22 @@ func AddToken(c *gin.Context) {
 	}
 
 	orderedGroups := token.GetOrderedGroups()
+	userId := c.GetInt("id")
+	userGroup, _ := model.GetUserGroup(userId, false)
+	userSetting, _ := model.GetUserSetting(userId, false)
+	if err := service.ValidateTrainingDataGroupConsent(userGroup, orderedGroups, userSetting); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 	primaryGroup := ""
 	if len(orderedGroups) > 0 {
 		primaryGroup = orderedGroups[0]
 	}
 	cleanToken := model.Token{
-		UserId:             c.GetInt("id"),
+		UserId:             userId,
 		Name:               token.Name,
 		Key:                key,
 		CreatedTime:        common.GetTimestamp(),
@@ -244,9 +255,29 @@ func UpdateToken(c *gin.Context) {
 		}
 	}
 	if statusOnly != "" {
+		if token.Status == common.TokenStatusEnabled {
+			userGroup, _ := model.GetUserGroup(userId, false)
+			userSetting, _ := model.GetUserSetting(userId, false)
+			if err := service.ValidateTrainingDataGroupConsent(userGroup, cleanToken.GetOrderedGroups(), userSetting); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": err.Error(),
+				})
+				return
+			}
+		}
 		cleanToken.Status = token.Status
 	} else {
 		orderedGroups := token.GetOrderedGroups()
+		userGroup, _ := model.GetUserGroup(userId, false)
+		userSetting, _ := model.GetUserSetting(userId, false)
+		if err := service.ValidateTrainingDataGroupConsent(userGroup, orderedGroups, userSetting); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 		primaryGroup := ""
 		if len(orderedGroups) > 0 {
 			primaryGroup = orderedGroups[0]
