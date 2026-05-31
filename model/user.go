@@ -565,6 +565,21 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	return &user, err
 }
 
+func GetUserByIdUnscoped(id int, selectAll bool) (*User, error) {
+	if id == 0 {
+		return nil, errors.New("id 为空！")
+	}
+	user := User{Id: id}
+	query := DB.Unscoped()
+	var err error
+	if selectAll {
+		err = query.First(&user, "id = ?", id).Error
+	} else {
+		err = query.Omit("password", "access_token").First(&user, "id = ?", id).Error
+	}
+	return &user, err
+}
+
 func GetUserByCAHID(cahID string, selectAll bool) (*User, error) {
 	normalized := NormalizeCAHID(cahID)
 	if !IsValidCAHID(normalized) {

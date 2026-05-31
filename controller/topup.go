@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -421,6 +422,80 @@ func GetAllTopUps(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(topups)
 	common.ApiSuccess(c, pageInfo)
+}
+
+func GetAdminTopUpByTradeNo(c *gin.Context) {
+	tradeNo := strings.TrimSpace(c.Param("trade_no"))
+	if tradeNo == "" {
+		common.ApiErrorMsg(c, "充值单号不能为空")
+		return
+	}
+
+	topUp := model.GetTopUpByTradeNo(tradeNo)
+	if topUp == nil {
+		common.ApiErrorMsg(c, "充值订单不存在")
+		return
+	}
+
+	user, err := model.GetUserByIdUnscoped(topUp.UserId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.SetAdminAuditMeta(c, model.AdminAuditMeta{
+		Resource:   "topup",
+		Action:     "get",
+		TargetType: "topup",
+		TargetId:   topUp.Id,
+		TargetName: topUp.TradeNo,
+		Details: map[string]interface{}{
+			"trade_no": topUp.TradeNo,
+			"user_id":  user.Id,
+			"cah_id":   user.CAHID,
+		},
+	})
+
+	common.ApiSuccess(c, gin.H{
+		"topup": topUp,
+		"user":  buildAdminTopUpUserData(user),
+	})
+}
+
+func buildAdminTopUpUserData(user *model.User) gin.H {
+	data := gin.H{
+		"id":                   user.Id,
+		"cah_id":               user.CAHID,
+		"username":             user.Username,
+		"display_name":         user.DisplayName,
+		"role":                 user.Role,
+		"status":               user.Status,
+		"email":                user.Email,
+		"force_password_reset": user.ForcePasswordReset,
+		"force_email_bind":     user.ForceEmailBind,
+		"github_id":            user.GitHubId,
+		"discord_id":           user.DiscordId,
+		"oidc_id":              user.OidcId,
+		"wechat_id":            user.WeChatId,
+		"telegram_id":          user.TelegramId,
+		"linux_do_id":          user.LinuxDOId,
+		"quota":                user.Quota,
+		"used_quota":           user.UsedQuota,
+		"request_count":        user.RequestCount,
+		"group":                user.Group,
+		"aff_code":             user.AffCode,
+		"aff_count":            user.AffCount,
+		"aff_quota":            user.AffQuota,
+		"aff_history_quota":    user.AffHistoryQuota,
+		"inviter_id":           user.InviterId,
+		"remark":               user.Remark,
+		"stripe_customer":      user.StripeCustomer,
+		"deleted":              user.DeletedAt.Valid,
+	}
+	if user.DeletedAt.Valid {
+		data["deleted_at"] = user.DeletedAt.Time.Unix()
+	}
+	return data
 }
 
 type AdminCompleteTopupRequest struct {

@@ -84,6 +84,7 @@
 | GET | /api/user/ | 管理员 | 获取全部用户列表 |
 | GET | /api/user/search | 管理员 | 搜索用户 |
 | GET | /api/user/:id | 管理员 | 获取单个用户信息 |
+| GET | /api/admin/topups/:trade_no | 管理员 | 根据充值单号获取充值详情和关联用户信息 |
 | POST | /api/user/ | 管理员 | 创建用户 |
 | POST | /api/user/manage | 管理员 | 冻结/重置等管理操作 |
 | POST | /api/admin/users/:cah_id/verification_code | 管理员 | 按 CAH 向已绑定邮箱的用户发送并返回 8 位十六进制人工核验验证码 |
@@ -99,6 +100,8 @@
 ```
 
 `purpose` 会写入邮件正文；该接口拒绝登录、注册、密码重置、邮箱绑定或两步验证等身份认证用途。目标用户必须已经绑定邮箱，否则返回错误。发送成功后，响应 `data.code` 会包含同一枚验证码。
+
+`GET /api/admin/topups/:trade_no` 响应中的 `data.topup` 为充值订单记录，`data.user` 为关联用户信息；用户信息不返回密码或 `access_token`。即使用户已被软删除，接口仍会返回用户摘要并标记 `deleted: true`。
 
 ### 5.4 Admin Service Account
 | 方法 | 路径 | 鉴权 | 说明 |
@@ -217,4 +220,4 @@ ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `
 
 ---
 
-> **更新日期**：2025.07.17
+> **更新日期**：2026.05.31
