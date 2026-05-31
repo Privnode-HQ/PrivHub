@@ -405,6 +405,12 @@ func inferAuditTarget(resource string, c *gin.Context, body map[string]interface
 	if id, ok := readAuditInt(body["coupon_id"]); ok {
 		return "topup_coupon", id, inferAuditTargetName("topup_coupon", body)
 	}
+	if id, ok := readAuditInt(body["campaign_id"]); ok {
+		return "topup_promotion", id, inferAuditTargetName("topup_promotion", body)
+	}
+	if id, ok := readAuditInt(body["promotion_code_id"]); ok {
+		return "topup_promotion_code", id, inferAuditTargetName("topup_promotion_code", body)
+	}
 	return targetType, 0, inferAuditTargetName(resource, body)
 }
 

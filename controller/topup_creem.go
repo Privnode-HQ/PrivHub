@@ -122,7 +122,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 		OriginalMoney: selectedProduct.Price,
 		PayMoney:      selectedProduct.Price,
 	}
-	err = createTopUpOrder(topUp)
+	err = createTopUpOrder(topUp, model.NormalizeTopUpCouponCurrencyCode(selectedProduct.Currency))
 	if err != nil {
 		log.Printf("创建Creem订单失败: %v", err)
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})

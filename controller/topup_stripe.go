@@ -177,7 +177,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		PayMoney:         quote.FinalPayableAmount,
 		StripeCouponId:   stripeCouponId,
 	}
-	err = createTopUpOrder(topUp)
+	err = createTopUpOrder(topUp, quote.CurrencyCode)
 	if err != nil {
 		if cleanupErr := cleanupStripeCouponByID(stripeCouponId); cleanupErr != nil {
 			log.Printf("清理 Stripe 临时优惠券失败: %v", cleanupErr)

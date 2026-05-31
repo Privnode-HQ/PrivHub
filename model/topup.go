@@ -14,23 +14,28 @@ import (
 )
 
 type TopUp struct {
-	Id               int     `json:"id"`
-	UserId           int     `json:"user_id" gorm:"index"`
-	Amount           int64   `json:"amount"`
-	Money            float64 `json:"money"`
-	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod    string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime       int64   `json:"create_time"`
-	CompleteTime     int64   `json:"complete_time"`
-	Status           string  `json:"status"`
-	CouponId         int     `json:"coupon_id" gorm:"index"`
-	CouponName       string  `json:"coupon_name" gorm:"type:varchar(100)"`
-	OriginalMoney    float64 `json:"original_money"`
-	PlatformDiscount float64 `json:"platform_discount"`
-	CouponDiscount   float64 `json:"coupon_discount"`
-	ProcessingFee    float64 `json:"processing_fee"`
-	PayMoney         float64 `json:"pay_money"`
-	StripeCouponId   string  `json:"-" gorm:"type:varchar(255)"`
+	Id                    int     `json:"id"`
+	UserId                int     `json:"user_id" gorm:"index"`
+	Amount                int64   `json:"amount"`
+	Money                 float64 `json:"money"`
+	TradeNo               string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod         string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime            int64   `json:"create_time"`
+	CompleteTime          int64   `json:"complete_time"`
+	Status                string  `json:"status"`
+	CouponId              int     `json:"coupon_id" gorm:"index"`
+	CouponName            string  `json:"coupon_name" gorm:"type:varchar(100)"`
+	OriginalMoney         float64 `json:"original_money"`
+	PlatformDiscount      float64 `json:"platform_discount"`
+	CouponDiscount        float64 `json:"coupon_discount"`
+	PromotionCampaignId   int     `json:"promotion_campaign_id" gorm:"index"`
+	PromotionCodeId       int     `json:"promotion_code_id" gorm:"index"`
+	PromotionCode         string  `json:"promotion_code" gorm:"type:varchar(64);index"`
+	PromotionDiscount     float64 `json:"promotion_discount"`
+	PromotionRedemptionId int     `json:"promotion_redemption_id" gorm:"index"`
+	ProcessingFee         float64 `json:"processing_fee"`
+	PayMoney              float64 `json:"pay_money"`
+	StripeCouponId        string  `json:"-" gorm:"type:varchar(255)"`
 }
 
 type UserPaidQuotaBreakdown struct {
@@ -118,6 +123,9 @@ func Recharge(referenceId string, customerId string) (err error) {
 		if err := MarkTopUpCouponUsedTx(tx, topUp); err != nil {
 			return err
 		}
+		if err := MarkTopUpPromotionUsedTx(tx, topUp); err != nil {
+			return err
+		}
 
 		quota = topUp.Money * common.QuotaPerUnit
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
@@ -141,6 +149,9 @@ func Recharge(referenceId string, customerId string) (err error) {
 	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
 	if topUp.CouponId != 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("本次充值核销优惠券 %s，抵扣金额 %.2f", topUp.CouponName, topUp.CouponDiscount))
+	}
+	if topUp.PromotionCode != "" {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("本次充值核销促销码 %s，抵扣金额 %.2f", topUp.PromotionCode, topUp.PromotionDiscount))
 	}
 	if rebateResult != nil {
 		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
@@ -337,6 +348,9 @@ func ManualCompleteTopUp(tradeNo string) error {
 		if err := MarkTopUpCouponUsedTx(tx, topUp); err != nil {
 			return err
 		}
+		if err := MarkTopUpPromotionUsedTx(tx, topUp); err != nil {
+			return err
+		}
 
 		// 增加用户额度（立即写库，保持一致性）
 		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
@@ -366,6 +380,9 @@ func ManualCompleteTopUp(tradeNo string) error {
 	RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney))
 	if processedTopUp.CouponId != 0 {
 		RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单核销优惠券 %s，抵扣金额 %.2f", processedTopUp.CouponName, processedTopUp.CouponDiscount))
+	}
+	if processedTopUp.PromotionCode != "" {
+		RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单核销促销码 %s，抵扣金额 %.2f", processedTopUp.PromotionCode, processedTopUp.PromotionDiscount))
 	}
 	if rebateResult != nil {
 		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))
@@ -403,6 +420,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 		if err := MarkTopUpCouponUsedTx(tx, topUp); err != nil {
+			return err
+		}
+		if err := MarkTopUpPromotionUsedTx(tx, topUp); err != nil {
 			return err
 		}
 
@@ -452,6 +472,9 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money))
 	if topUp.CouponId != 0 {
 		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("本次充值核销优惠券 %s，抵扣金额 %.2f", topUp.CouponName, topUp.CouponDiscount))
+	}
+	if topUp.PromotionCode != "" {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("本次充值核销促销码 %s，抵扣金额 %.2f", topUp.PromotionCode, topUp.PromotionDiscount))
 	}
 	if rebateResult != nil {
 		RecordLog(rebateResult.InviterId, LogTypeSystem, fmt.Sprintf("邀请用户 %s 充值返利 %s", rebateResult.InviteeUsername, logger.LogQuota(rebateResult.RewardQuota)))

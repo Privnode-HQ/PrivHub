@@ -71,6 +71,7 @@ type EpayRequest struct {
 	PaymentMethod string `json:"payment_method"`
 	TopUpCode     string `json:"top_up_code"`
 	CouponId      int    `json:"coupon_id"`
+	PromotionCode string `json:"promotion_code"`
 }
 
 type AmountRequest struct {
@@ -137,12 +138,17 @@ func RequestEpay(c *gin.Context) {
 		PaymentMethod: req.PaymentMethod,
 		Amount:        req.Amount,
 		CouponId:      req.CouponId,
+		PromotionCode: req.PromotionCode,
 	})
 	if err != nil {
 		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
 		return
 	}
 	if err := validateSelectedCoupon(req.CouponId, quote); err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	if err := validateSelectedPromotion(req.PromotionCode, quote); err != nil {
 		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
 		return
 	}
@@ -181,26 +187,33 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 	topUp := &model.TopUp{
-		UserId:           id,
-		Amount:           req.Amount,
-		Money:            payMoney,
-		TradeNo:          tradeNo,
-		PaymentMethod:    req.PaymentMethod,
-		CreateTime:       time.Now().Unix(),
-		Status:           common.TopUpStatusPending,
-		CouponId:         req.CouponId,
-		OriginalMoney:    quote.OriginalAmount,
-		PlatformDiscount: quote.PlatformDiscountAmount,
-		CouponDiscount:   quote.CouponDiscountAmount,
-		PayMoney:         quote.FinalPayableAmount,
+		UserId:              id,
+		Amount:              req.Amount,
+		Money:               payMoney,
+		TradeNo:             tradeNo,
+		PaymentMethod:       req.PaymentMethod,
+		CreateTime:          time.Now().Unix(),
+		Status:              common.TopUpStatusPending,
+		CouponId:            req.CouponId,
+		OriginalMoney:       quote.OriginalAmount,
+		PlatformDiscount:    quote.PlatformDiscountAmount,
+		CouponDiscount:      quote.CouponDiscountAmount,
+		PromotionCampaignId: quote.PromotionCampaignId,
+		PromotionCodeId:     quote.PromotionCodeId,
+		PromotionCode:       quote.PromotionCode,
+		PromotionDiscount:   quote.PromotionDiscountAmount,
+		PayMoney:            quote.FinalPayableAmount,
 	}
-	err = createTopUpOrder(topUp)
+	err = createTopUpOrder(topUp, quote.CurrencyCode)
 	if err != nil {
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
 	if req.CouponId != 0 {
 		model.RecordLog(id, model.LogTypeTopup, fmt.Sprintf("创建充值订单并使用优惠券 %s，抵扣 %.2f %s", topUp.CouponName, topUp.CouponDiscount, quote.CurrencyCode))
+	}
+	if quote.PromotionCode != "" {
+		model.RecordLog(id, model.LogTypeTopup, fmt.Sprintf("创建充值订单并使用促销码 %s，抵扣 %.2f %s", quote.PromotionCode, quote.PromotionDiscountAmount, quote.CurrencyCode))
 	}
 	c.JSON(200, gin.H{"message": "success", "data": params, "url": uri})
 }
@@ -293,6 +306,9 @@ func EpayNotify(c *gin.Context) {
 				return err
 			}
 			if err := model.MarkTopUpCouponUsedTx(tx, topUp); err != nil {
+				return err
+			}
+			if err := model.MarkTopUpPromotionUsedTx(tx, topUp); err != nil {
 				return err
 			}
 

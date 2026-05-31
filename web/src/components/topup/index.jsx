@@ -48,9 +48,14 @@ const emptyTopupQuote = {
   base_payable_amount: 0,
   platform_discount_amount: 0,
   coupon_discount_amount: 0,
+  promotion_discount_amount: 0,
   final_payable_amount: 0,
   min_payable_threshold: 0,
   selected_coupon_id: 0,
+  promotion_campaign_id: 0,
+  promotion_code_id: 0,
+  promotion_code: '',
+  promotion_rule: '',
   ineligible_reason: '',
 };
 
@@ -101,6 +106,7 @@ const TopUp = () => {
   const [topupQuote, setTopupQuote] = useState(emptyTopupQuote);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [selectedCouponId, setSelectedCouponId] = useState(0);
+  const [promotionCode, setPromotionCode] = useState('');
   const [selectedStripeCurrencyCode, setSelectedStripeCurrencyCode] =
     useState('');
 
@@ -187,12 +193,14 @@ const TopUp = () => {
   const resetTopupQuote = () => {
     setTopupQuote({ ...emptyTopupQuote });
     setSelectedCouponId(0);
+    setPromotionCode('');
   };
 
   const loadTopupQuote = async ({
     paymentMethod,
     amountValue,
     couponId = 0,
+    promotionCodeValue = '',
     product = null,
     currencyCode = '',
   }) => {
@@ -212,6 +220,12 @@ const TopUp = () => {
 
     if (couponId) {
       payload.coupon_id = couponId;
+    }
+    const normalizedPromotionCode = String(promotionCodeValue || '')
+      .trim()
+      .toUpperCase();
+    if (normalizedPromotionCode) {
+      payload.promotion_code = normalizedPromotionCode;
     }
 
     if (paymentMethod === 'stripe') {
@@ -318,11 +332,16 @@ const TopUp = () => {
     }
     setConfirmLoading(true);
     try {
-      if (!topupQuote.final_payable_amount) {
+      if (
+        !topupQuote.final_payable_amount ||
+        (promotionCode &&
+          topupQuote.promotion_code !== promotionCode.trim().toUpperCase())
+      ) {
         const quote = await loadTopupQuote({
           paymentMethod: payWay,
           amountValue: topUpCount,
           couponId: selectedCouponId,
+          promotionCodeValue: promotionCode,
         });
         if (!quote) {
           return;
@@ -344,6 +363,9 @@ const TopUp = () => {
           amount: parseInt(topUpCount),
           payment_method: payWay,
           coupon_id: selectedCouponId || undefined,
+          promotion_code: promotionCode
+            ? promotionCode.trim().toUpperCase()
+            : undefined,
         });
       }
 
@@ -731,11 +753,60 @@ const TopUp = () => {
   const handleCouponChange = async (couponId) => {
     const nextCouponId = Number(couponId) || 0;
     setSelectedCouponId(nextCouponId);
+    if (nextCouponId) {
+      setPromotionCode('');
+    }
     await loadTopupQuote({
       paymentMethod: payWay,
       amountValue: topUpCount,
       product: selectedCreemProduct,
       couponId: nextCouponId,
+      currencyCode:
+        payWay === 'stripe'
+          ? selectedStripeCurrencyCode || topupQuote.currency_code
+          : '',
+    });
+  };
+
+  const handlePromotionCodeChange = (value) => {
+    setPromotionCode(String(value || '').toUpperCase());
+  };
+
+  const applyPromotionCode = async () => {
+    const normalizedPromotionCode = promotionCode.trim().toUpperCase();
+    if (!normalizedPromotionCode) {
+      await loadTopupQuote({
+        paymentMethod: payWay,
+        amountValue: topUpCount,
+        product: selectedCreemProduct,
+        couponId: selectedCouponId,
+        currencyCode:
+          payWay === 'stripe'
+            ? selectedStripeCurrencyCode || topupQuote.currency_code
+            : '',
+      });
+      return;
+    }
+    setSelectedCouponId(0);
+    await loadTopupQuote({
+      paymentMethod: payWay,
+      amountValue: topUpCount,
+      product: selectedCreemProduct,
+      promotionCodeValue: normalizedPromotionCode,
+      currencyCode:
+        payWay === 'stripe'
+          ? selectedStripeCurrencyCode || topupQuote.currency_code
+          : '',
+    });
+  };
+
+  const clearPromotionCode = async () => {
+    setPromotionCode('');
+    await loadTopupQuote({
+      paymentMethod: payWay,
+      amountValue: topUpCount,
+      product: selectedCreemProduct,
+      couponId: selectedCouponId,
       currencyCode:
         payWay === 'stripe'
           ? selectedStripeCurrencyCode || topupQuote.currency_code
@@ -817,6 +888,7 @@ const TopUp = () => {
             paymentMethod: 'stripe',
             amountValue: topUpCount,
             couponId: selectedCouponId,
+            promotionCodeValue: promotionCode,
             currencyCode: nextCurrencyCode,
           });
           if (!quote) {
@@ -826,10 +898,16 @@ const TopUp = () => {
         originalAmount={topupQuote.original_amount || amount}
         platformDiscountAmount={topupQuote.platform_discount_amount || 0}
         couponDiscountAmount={topupQuote.coupon_discount_amount || 0}
+        promotionDiscountAmount={topupQuote.promotion_discount_amount || 0}
+        promotionRule={topupQuote.promotion_rule || ''}
         finalPayableAmount={topupQuote.final_payable_amount || amount}
         availableCoupons={topupQuote.available_coupons || []}
         selectedCouponId={selectedCouponId}
         onCouponChange={handleCouponChange}
+        promotionCode={promotionCode}
+        onPromotionCodeChange={handlePromotionCodeChange}
+        onApplyPromotionCode={applyPromotionCode}
+        onClearPromotionCode={clearPromotionCode}
         ineligibleReason={topupQuote.ineligible_reason || ''}
       />
 

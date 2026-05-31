@@ -218,3 +218,22 @@ const (
 	TopUpCouponStatusExpired   = "expired"
 	TopUpCouponStatusRevoked   = "revoked"
 )
+
+const (
+	TopUpPromotionStatusActive    = "active"
+	TopUpPromotionStatusPaused    = "paused"
+	TopUpPromotionStatusRevoked   = "revoked"
+	TopUpPromotionStatusExpired   = "expired"
+	TopUpPromotionStatusScheduled = "scheduled"
+)
+
+const (
+	TopUpPromotionDiscountTypeFixed   = "fixed"
+	TopUpPromotionDiscountTypePercent = "percent"
+)
+
+const (
+	TopUpPromotionRedemptionStatusReserved = "reserved"
+	TopUpPromotionRedemptionStatusUsed     = "used"
+	TopUpPromotionRedemptionStatusExpired  = "expired"
+)

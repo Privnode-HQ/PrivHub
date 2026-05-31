@@ -267,6 +267,22 @@ func SetApiRouter(router *gin.Engine) {
 			topUpCouponRoute.POST("/", controller.AddTopUpCoupon)
 			topUpCouponRoute.PUT("/", controller.UpdateTopUpCoupon)
 		}
+		topUpPromotionReadRoute := apiRouter.Group("/topup-promotion")
+		topUpPromotionReadRoute.Use(middleware.SupportAuth(), middleware.AdminAudit())
+		{
+			topUpPromotionReadRoute.GET("/", controller.GetAllTopUpPromotions)
+			topUpPromotionReadRoute.GET("/codes", controller.GetTopUpPromotionCodes)
+			topUpPromotionReadRoute.GET("/redemptions", controller.GetTopUpPromotionRedemptions)
+			topUpPromotionReadRoute.GET("/:id", controller.GetTopUpPromotion)
+		}
+		topUpPromotionRoute := apiRouter.Group("/topup-promotion")
+		topUpPromotionRoute.Use(middleware.AdminAuth(), middleware.AdminAudit())
+		{
+			topUpPromotionRoute.POST("/", controller.AddTopUpPromotion)
+			topUpPromotionRoute.PUT("/", controller.UpdateTopUpPromotion)
+			topUpPromotionRoute.POST("/codes", controller.AddTopUpPromotionCodes)
+			topUpPromotionRoute.PUT("/codes", controller.UpdateTopUpPromotionCode)
+		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.SupportAuth(), middleware.AdminAudit(), controller.GetAllLogs)
 		logRoute.DELETE("/", middleware.AdminAuth(), middleware.AdminAudit(), controller.DeleteHistoryLogs)

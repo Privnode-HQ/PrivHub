@@ -51,3 +51,49 @@ export const TOPUP_COUPON_STATUS_MAP = {
 export const TOPUP_COUPON_ACTIONS = {
   REVOKE: 'revoke',
 };
+
+export const TOPUP_PROMOTION_STATUS = {
+  ACTIVE: 'active',
+  PAUSED: 'paused',
+  REVOKED: 'revoked',
+  EXPIRED: 'expired',
+  SCHEDULED: 'scheduled',
+};
+
+export const TOPUP_PROMOTION_STATUS_MAP = {
+  [TOPUP_PROMOTION_STATUS.ACTIVE]: {
+    color: 'green',
+    text: '生效中',
+  },
+  [TOPUP_PROMOTION_STATUS.PAUSED]: {
+    color: 'grey',
+    text: '已暂停',
+  },
+  [TOPUP_PROMOTION_STATUS.REVOKED]: {
+    color: 'red',
+    text: '已撤销',
+  },
+  [TOPUP_PROMOTION_STATUS.EXPIRED]: {
+    color: 'orange',
+    text: '已过期',
+  },
+  [TOPUP_PROMOTION_STATUS.SCHEDULED]: {
+    color: 'blue',
+    text: '未开始',
+  },
+};
+
+export const TOPUP_PROMOTION_REDEMPTION_STATUS_MAP = {
+  reserved: {
+    color: 'blue',
+    text: '占用中',
+  },
+  used: {
+    color: 'green',
+    text: '已核销',
+  },
+  expired: {
+    color: 'orange',
+    text: '已释放',
+  },
+};

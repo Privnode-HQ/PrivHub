@@ -18,7 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Modal, Typography, Card, Select, Skeleton } from '@douyinfe/semi-ui';
+import {
+  Modal,
+  Typography,
+  Card,
+  Select,
+  Skeleton,
+  Input,
+  Button,
+} from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
 import { formatCurrencyAmountByCode } from '../../../helpers';
@@ -43,10 +51,16 @@ const PaymentConfirmModal = ({
   originalAmount,
   platformDiscountAmount,
   couponDiscountAmount,
+  promotionDiscountAmount,
+  promotionRule,
   finalPayableAmount,
   availableCoupons,
   selectedCouponId,
   onCouponChange,
+  promotionCode,
+  onPromotionCodeChange,
+  onApplyPromotionCode,
+  onClearPromotionCode,
   ineligibleReason,
 }) => {
   const normalizedOriginalAmount =
@@ -57,12 +71,19 @@ const PaymentConfirmModal = ({
       : 0;
   const normalizedCouponDiscount =
     couponDiscountAmount && couponDiscountAmount > 0 ? couponDiscountAmount : 0;
+  const normalizedPromotionDiscount =
+    promotionDiscountAmount && promotionDiscountAmount > 0
+      ? promotionDiscountAmount
+      : 0;
   const normalizedFinalAmount =
     finalPayableAmount && finalPayableAmount > 0 ? finalPayableAmount : 0;
   const hasAnyDiscount =
-    normalizedPlatformDiscount > 0 || normalizedCouponDiscount > 0;
+    normalizedPlatformDiscount > 0 ||
+    normalizedCouponDiscount > 0 ||
+    normalizedPromotionDiscount > 0;
   const showStripeCurrencySelector =
     payWay === 'stripe' && (supportedCurrencyCodes?.length || 0) > 1;
+  const canUsePromotionCode = payWay !== 'stripe' && payWay !== 'creem';
   return (
     <Modal
       title={
@@ -156,6 +177,46 @@ const PaymentConfirmModal = ({
                 </Select>
               </div>
             )}
+            {canUsePromotionCode && (
+              <div className='space-y-2'>
+                <Text strong className='text-slate-700 dark:text-slate-200'>
+                  {t('促销码')}：
+                </Text>
+                <Input
+                  value={promotionCode || ''}
+                  onChange={onPromotionCodeChange}
+                  placeholder={t('输入促销码（仅易支付）')}
+                  suffix={
+                    promotionCode ? (
+                      <Button
+                        theme='borderless'
+                        type='tertiary'
+                        size='small'
+                        onClick={onClearPromotionCode}
+                      >
+                        {t('清除')}
+                      </Button>
+                    ) : null
+                  }
+                  addonAfter={
+                    <Button
+                      theme='solid'
+                      type='primary'
+                      size='small'
+                      onClick={onApplyPromotionCode}
+                    >
+                      {t('应用')}
+                    </Button>
+                  }
+                  disabled={amountLoading || selectedCouponId > 0}
+                />
+                {selectedCouponId > 0 && (
+                  <Text type='tertiary' size='small'>
+                    {t('优惠券和促销码不能同时使用')}
+                  </Text>
+                )}
+              </div>
+            )}
             {ineligibleReason && (
               <Text type='danger'>{t(ineligibleReason)}</Text>
             )}
@@ -197,6 +258,21 @@ const PaymentConfirmModal = ({
                         normalizedCouponDiscount,
                         currencyCode,
                       )}
+                    </Text>
+                  </div>
+                )}
+                {normalizedPromotionDiscount > 0 && (
+                  <div className='flex justify-between items-center'>
+                    <Text className='text-slate-500 dark:text-slate-400'>
+                      {t('促销码抵扣')}：
+                    </Text>
+                    <Text className='text-emerald-600 dark:text-emerald-400'>
+                      -{' '}
+                      {formatCurrencyAmountByCode(
+                        normalizedPromotionDiscount,
+                        currencyCode,
+                      )}
+                      {promotionRule ? ` (${promotionRule})` : ''}
                     </Text>
                   </div>
                 )}

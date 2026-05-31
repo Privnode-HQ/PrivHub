@@ -37,6 +37,7 @@ type TopUpQuoteRequest struct {
 	ProductId     string `json:"product_id"`
 	CurrencyCode  string `json:"currency_code"`
 	CouponId      int    `json:"coupon_id"`
+	PromotionCode string `json:"promotion_code"`
 }
 
 type TopUpQuoteCoupon struct {
@@ -49,22 +50,27 @@ type TopUpQuoteCoupon struct {
 }
 
 type TopUpQuoteData struct {
-	PaymentMethod          string             `json:"payment_method"`
-	Amount                 int64              `json:"amount,omitempty"`
-	ProductId              string             `json:"product_id,omitempty"`
-	ProductName            string             `json:"product_name,omitempty"`
-	ProductQuota           int64              `json:"product_quota,omitempty"`
-	CurrencyCode           string             `json:"currency_code,omitempty"`
-	SupportedCurrencyCodes []string           `json:"supported_currency_codes,omitempty"`
-	OriginalAmount         float64            `json:"original_amount"`
-	BasePayableAmount      float64            `json:"base_payable_amount"`
-	PlatformDiscountAmount float64            `json:"platform_discount_amount"`
-	CouponDiscountAmount   float64            `json:"coupon_discount_amount"`
-	FinalPayableAmount     float64            `json:"final_payable_amount"`
-	MinPayableThreshold    float64            `json:"min_payable_threshold"`
-	SelectedCouponId       int                `json:"selected_coupon_id,omitempty"`
-	IneligibleReason       string             `json:"ineligible_reason,omitempty"`
-	AvailableCoupons       []TopUpQuoteCoupon `json:"available_coupons"`
+	PaymentMethod           string             `json:"payment_method"`
+	Amount                  int64              `json:"amount,omitempty"`
+	ProductId               string             `json:"product_id,omitempty"`
+	ProductName             string             `json:"product_name,omitempty"`
+	ProductQuota            int64              `json:"product_quota,omitempty"`
+	CurrencyCode            string             `json:"currency_code,omitempty"`
+	SupportedCurrencyCodes  []string           `json:"supported_currency_codes,omitempty"`
+	OriginalAmount          float64            `json:"original_amount"`
+	BasePayableAmount       float64            `json:"base_payable_amount"`
+	PlatformDiscountAmount  float64            `json:"platform_discount_amount"`
+	CouponDiscountAmount    float64            `json:"coupon_discount_amount"`
+	PromotionDiscountAmount float64            `json:"promotion_discount_amount"`
+	FinalPayableAmount      float64            `json:"final_payable_amount"`
+	MinPayableThreshold     float64            `json:"min_payable_threshold"`
+	SelectedCouponId        int                `json:"selected_coupon_id,omitempty"`
+	PromotionCampaignId     int                `json:"promotion_campaign_id,omitempty"`
+	PromotionCodeId         int                `json:"promotion_code_id,omitempty"`
+	PromotionCode           string             `json:"promotion_code,omitempty"`
+	PromotionRule           string             `json:"promotion_rule,omitempty"`
+	IneligibleReason        string             `json:"ineligible_reason,omitempty"`
+	AvailableCoupons        []TopUpQuoteCoupon `json:"available_coupons"`
 }
 
 func GetAllTopUpCoupons(c *gin.Context) {
@@ -270,6 +276,10 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	if strings.TrimSpace(req.PaymentMethod) == "" {
 		return nil, errors.New("请选择支付方式")
 	}
+	req.PromotionCode = model.NormalizeTopUpPromotionCode(req.PromotionCode)
+	if req.CouponId != 0 && req.PromotionCode != "" {
+		return nil, errors.New("优惠券和促销码不能同时使用")
+	}
 
 	quote := &TopUpQuoteData{
 		PaymentMethod: req.PaymentMethod,
@@ -285,6 +295,7 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		resolvedPlatformDiscount decimal.Decimal
 		minThreshold             decimal.Decimal
 		allCoupons               []*model.TopUpCoupon
+		promotionPreview         *model.TopUpPromotionPreview
 		err                      error
 	)
 
@@ -325,6 +336,9 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		if req.CouponId != 0 {
 			quote.IneligibleReason = "当前支付方式暂不支持优惠券"
 		}
+		if req.PromotionCode != "" {
+			quote.IneligibleReason = "当前支付方式暂不支持促销码"
+		}
 		allCoupons = []*model.TopUpCoupon{}
 	default:
 		if !operation_setting.ContainsPayMethod(req.PaymentMethod) {
@@ -345,11 +359,23 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	}
 
 	eligibleCoupons, selectedCoupon, ineligibleReason := buildEligibleTopUpQuoteCoupons(allCoupons, originalAmount, minThreshold, req.CouponId, quote.CurrencyCode)
+	if req.PromotionCode != "" {
+		if req.PaymentMethod == PaymentMethodStripe {
+			ineligibleReason = "当前支付方式暂不支持促销码"
+		} else if req.PaymentMethod == PaymentMethodCreem {
+			ineligibleReason = "当前支付方式暂不支持促销码"
+		} else {
+			promotionPreview, ineligibleReason, err = buildTopUpPromotionQuote(user, req, originalAmount, minThreshold, quote.CurrencyCode)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	basePayable, resolvedPlatformDiscount = resolveTopUpBasePayable(
 		originalAmount,
 		discountedBasePayable,
 		platformDiscount,
-		selectedCoupon != nil,
+		selectedCoupon != nil || promotionPreview != nil,
 	)
 
 	quote.OriginalAmount = roundMoney(originalAmount)
@@ -363,6 +389,9 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	if req.CouponId != 0 && selectedCoupon == nil && quote.IneligibleReason == "" {
 		quote.IneligibleReason = "优惠券不可用"
 	}
+	if req.PromotionCode != "" && promotionPreview == nil && quote.IneligibleReason == "" {
+		quote.IneligibleReason = "促销码不可用"
+	}
 
 	quote.AvailableCoupons = eligibleCoupons
 	finalPayable := basePayable
@@ -372,6 +401,14 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 		quote.CouponDiscountAmount = roundMoney(couponDiscount)
 		finalPayable = basePayable.Sub(couponDiscount)
 	}
+	if promotionPreview != nil {
+		quote.PromotionCampaignId = promotionPreview.CampaignId
+		quote.PromotionCodeId = promotionPreview.CodeId
+		quote.PromotionCode = promotionPreview.Code
+		quote.PromotionDiscountAmount = roundMoney(promotionPreview.DiscountAmount)
+		quote.PromotionRule = model.FormatTopUpPromotionRule(promotionPreview.MatchedRule)
+		finalPayable = basePayable.Sub(promotionPreview.DiscountAmount)
+	}
 
 	if !finalPayable.GreaterThan(decimal.Zero) {
 		return nil, errors.New("充值金额过低")
@@ -379,6 +416,17 @@ func buildTopUpQuote(user *model.User, req TopUpQuoteRequest) (*TopUpQuoteData, 
 	quote.FinalPayableAmount = roundMoney(finalPayable)
 
 	return quote, nil
+}
+
+func buildTopUpPromotionQuote(user *model.User, req TopUpQuoteRequest, originalAmount, minThreshold decimal.Decimal, currencyCode string) (*model.TopUpPromotionPreview, string, error) {
+	if strings.TrimSpace(req.PromotionCode) == "" {
+		return nil, "", nil
+	}
+	preview, err := model.GetTopUpPromotionPreview(req.PromotionCode, user, currencyCode, originalAmount, minThreshold)
+	if err != nil {
+		return nil, err.Error(), nil
+	}
+	return preview, "", nil
 }
 
 func buildEligibleTopUpQuoteCoupons(allCoupons []*model.TopUpCoupon, basePayable, minThreshold decimal.Decimal, requestedCouponId int, quoteCurrencyCode string) ([]TopUpQuoteCoupon, *model.TopUpCoupon, string) {
@@ -441,7 +489,21 @@ func validateSelectedCoupon(requestedCouponId int, quote *TopUpQuoteData) error 
 	return errors.New("优惠券不可用")
 }
 
-func createTopUpOrder(topUp *model.TopUp) error {
+func validateSelectedPromotion(requestedPromotionCode string, quote *TopUpQuoteData) error {
+	normalizedCode := model.NormalizeTopUpPromotionCode(requestedPromotionCode)
+	if normalizedCode == "" {
+		return nil
+	}
+	if quote != nil && quote.PromotionCode == normalizedCode {
+		return nil
+	}
+	if quote != nil && quote.IneligibleReason != "" {
+		return errors.New(quote.IneligibleReason)
+	}
+	return errors.New("促销码不可用")
+}
+
+func createTopUpOrder(topUp *model.TopUp, currencyCode string) error {
 	if topUp == nil {
 		return errors.New("订单不存在")
 	}
@@ -452,6 +514,11 @@ func createTopUpOrder(topUp *model.TopUp) error {
 		}
 		if topUp.CouponId != 0 {
 			if _, err := model.ReserveTopUpCouponTx(tx, topUp.CouponId, topUp.UserId, topUp); err != nil {
+				return err
+			}
+		}
+		if topUp.PromotionCodeId != 0 {
+			if _, err := model.ReserveTopUpPromotionCodeTx(tx, topUp, currencyCode); err != nil {
 				return err
 			}
 		}
@@ -476,7 +543,10 @@ func expireTopUpOrderByTradeNo(tradeNo string) error {
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
 		}
-		return model.ReleaseTopUpCouponReservationTx(tx, topUp)
+		if err := model.ReleaseTopUpCouponReservationTx(tx, topUp); err != nil {
+			return err
+		}
+		return model.ReleaseTopUpPromotionReservationTx(tx, topUp)
 	})
 }
 

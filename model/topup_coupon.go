@@ -67,7 +67,7 @@ func DefaultTopUpCouponCurrencyCode() string {
 	}
 }
 
-func isValidTopUpCouponCurrencyCode(code string) bool {
+func IsValidTopUpCouponCurrencyCode(code string) bool {
 	if len(code) < 2 || len(code) > 16 {
 		return false
 	}
@@ -660,7 +660,7 @@ func (coupon *TopUpCoupon) Validate() error {
 		return errors.New("优惠金额必须大于 0")
 	}
 	coupon.CurrencyCode = NormalizeTopUpCouponCurrencyCode(coupon.CurrencyCode)
-	if coupon.CurrencyCode != "" && !isValidTopUpCouponCurrencyCode(coupon.CurrencyCode) {
+	if coupon.CurrencyCode != "" && !IsValidTopUpCouponCurrencyCode(coupon.CurrencyCode) {
 		return errors.New("优惠货币格式不正确")
 	}
 	if coupon.ExpiresAt != 0 && coupon.ValidFrom != 0 && coupon.ExpiresAt <= coupon.ValidFrom {

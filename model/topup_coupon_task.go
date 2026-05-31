@@ -18,9 +18,15 @@ func StartTopUpCouponCleanupLoop() {
 			if err := CleanupTopUpCouponStates(); err != nil {
 				common.SysLog("failed to cleanup topup coupon states: " + err.Error())
 			}
+			if err := CleanupTopUpPromotionStates(); err != nil {
+				common.SysLog("failed to cleanup topup promotion states: " + err.Error())
+			}
 			for range ticker.C {
 				if err := CleanupTopUpCouponStates(); err != nil {
 					common.SysLog("failed to cleanup topup coupon states: " + err.Error())
+				}
+				if err := CleanupTopUpPromotionStates(); err != nil {
+					common.SysLog("failed to cleanup topup promotion states: " + err.Error())
 				}
 			}
 		}()

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Avatar, Typography } from '@douyinfe/semi-ui';
+import { Avatar, TabPane, Tabs, Typography } from '@douyinfe/semi-ui';
 import { TicketPercent } from 'lucide-react';
 import CardPro from '../../common/ui/CardPro';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
@@ -27,6 +27,7 @@ import TopupCouponsActions from './TopupCouponsActions';
 import TopupCouponsFilters from './TopupCouponsFilters';
 import EditTopupCouponModal from './modals/EditTopupCouponModal';
 import RevokeTopupCouponModal from './modals/RevokeTopupCouponModal';
+import TopupPromotionsPanel from './TopupPromotionsPanel';
 import { useTopupCouponsData } from '../../../hooks/topupCoupons/useTopupCouponsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -38,6 +39,7 @@ const TopupCouponsPage = () => {
   const topupCouponsData = useTopupCouponsData();
   const isMobile = useIsMobile();
   const readOnlyAdmin = isSupport();
+  const [activeTab, setActiveTab] = React.useState('coupons');
 
   return (
     <>
@@ -57,61 +59,78 @@ const TopupCouponsPage = () => {
         t={topupCouponsData.t}
       />
 
-      <CardPro
-        type='type1'
-        descriptionArea={
-          <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
-            <div className='flex items-center text-emerald-500'>
-              <Avatar size='small' color='green' className='mr-2 shadow-md'>
-                <TicketPercent size={14} />
-              </Avatar>
-              <Text>{topupCouponsData.t('折扣中心')}</Text>
-            </div>
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        type='card'
+        className='mb-3'
+      >
+        <TabPane tab={topupCouponsData.t('优惠券')} itemKey='coupons' />
+        <TabPane tab={topupCouponsData.t('促销活动')} itemKey='promotions' />
+      </Tabs>
 
-            <CompactModeToggle
-              compactMode={topupCouponsData.compactMode}
-              setCompactMode={topupCouponsData.setCompactMode}
-              t={topupCouponsData.t}
-            />
-          </div>
-        }
-        actionsArea={
-          <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
-            <TopupCouponsActions
-              openCreate={topupCouponsData.openCreate}
-              refresh={topupCouponsData.refresh}
-              readOnlyAdmin={readOnlyAdmin}
-              t={topupCouponsData.t}
-            />
+      {activeTab === 'coupons' ? (
+        <CardPro
+          type='type1'
+          descriptionArea={
+            <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
+              <div className='flex items-center text-emerald-500'>
+                <Avatar size='small' color='green' className='mr-2 shadow-md'>
+                  <TicketPercent size={14} />
+                </Avatar>
+                <Text>{topupCouponsData.t('优惠券')}</Text>
+              </div>
 
-            <div className='w-full md:w-full lg:w-auto order-1 md:order-2'>
-              <TopupCouponsFilters
-                formInitValues={topupCouponsData.formInitValues}
-                setFormApi={topupCouponsData.setFormApi}
-                searchTopupCoupons={topupCouponsData.searchTopupCoupons}
-                loading={topupCouponsData.loading}
-                searching={topupCouponsData.searching}
+              <CompactModeToggle
+                compactMode={topupCouponsData.compactMode}
+                setCompactMode={topupCouponsData.setCompactMode}
                 t={topupCouponsData.t}
               />
             </div>
-          </div>
-        }
-        paginationArea={createCardProPagination({
-          currentPage: topupCouponsData.activePage,
-          pageSize: topupCouponsData.pageSize,
-          total: topupCouponsData.tokenCount,
-          onPageChange: topupCouponsData.handlePageChange,
-          onPageSizeChange: topupCouponsData.handlePageSizeChange,
-          isMobile: isMobile,
-          t: topupCouponsData.t,
-        })}
-        t={topupCouponsData.t}
-      >
-        <TopupCouponsTable
-          {...topupCouponsData}
+          }
+          actionsArea={
+            <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
+              <TopupCouponsActions
+                openCreate={topupCouponsData.openCreate}
+                refresh={topupCouponsData.refresh}
+                readOnlyAdmin={readOnlyAdmin}
+                t={topupCouponsData.t}
+              />
+
+              <div className='w-full md:w-full lg:w-auto order-1 md:order-2'>
+                <TopupCouponsFilters
+                  formInitValues={topupCouponsData.formInitValues}
+                  setFormApi={topupCouponsData.setFormApi}
+                  searchTopupCoupons={topupCouponsData.searchTopupCoupons}
+                  loading={topupCouponsData.loading}
+                  searching={topupCouponsData.searching}
+                  t={topupCouponsData.t}
+                />
+              </div>
+            </div>
+          }
+          paginationArea={createCardProPagination({
+            currentPage: topupCouponsData.activePage,
+            pageSize: topupCouponsData.pageSize,
+            total: topupCouponsData.tokenCount,
+            onPageChange: topupCouponsData.handlePageChange,
+            onPageSizeChange: topupCouponsData.handlePageSizeChange,
+            isMobile: isMobile,
+            t: topupCouponsData.t,
+          })}
+          t={topupCouponsData.t}
+        >
+          <TopupCouponsTable
+            {...topupCouponsData}
+            readOnlyAdmin={readOnlyAdmin}
+          />
+        </CardPro>
+      ) : (
+        <TopupPromotionsPanel
           readOnlyAdmin={readOnlyAdmin}
+          t={topupCouponsData.t}
         />
-      </CardPro>
+      )}
     </>
   );
 };
