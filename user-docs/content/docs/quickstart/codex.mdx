@@ -1,0 +1,186 @@
+---
+title: Codex
+description: 使用 51API 接入 Codex CLI。
+---
+
+本页帮助你把 Codex CLI 接入 51API。完成后，你可以在项目目录中运行 `codex`，并通过 51API 调用 OpenAI 兼容模型。
+
+Codex 使用 OpenAI 兼容端点：
+
+```text
+https://51-api.com/v1
+```
+
+## 开始前
+
+准备以下内容：
+
+- 一个可用的 51API 账号
+- 一个 51API API Key
+- 已安装的 Codex CLI
+- 可调用 OpenAI 兼容模型的账号权限
+
+确认 Codex 已安装：
+
+```bash
+codex --version
+```
+
+如果命令不存在，先安装 Codex CLI，再重新打开终端。
+
+## 接入步骤
+
+<View title="CLI">
+
+使用 CLI 配置时，把模型供应商写入 `config.toml`，把 API Key 写入 `auth.json`。
+
+### 创建配置目录
+
+```bash
+mkdir -p ~/.codex
+```
+
+Windows 用户使用 `%USERPROFILE%\.codex`。
+
+### 配置供应商
+
+创建或编辑 `~/.codex/config.toml`：
+
+```toml title="~/.codex/config.toml"
+model_provider = "51api"
+model = "<MODEL_NAME>"
+model_reasoning_effort = "high"
+model_verbosity = "high"
+disable_response_storage = true
+
+[features]
+web_search_request = true
+
+[model_providers.51api]
+name = "51API"
+base_url = "https://51-api.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+```
+
+将 `<MODEL_NAME>` 替换为 51API 控制台中的模型名称。
+
+### 配置 API Key
+
+创建或编辑 `~/.codex/auth.json`：
+
+```json title="~/.codex/auth.json"
+{
+  "OPENAI_API_KEY": "<51API_API_KEY>"
+}
+```
+
+将 `<51API_API_KEY>` 替换为你的 51API API Key。
+
+### 启动 Codex
+
+进入项目目录：
+
+```bash
+cd /path/to/your/project
+codex
+```
+
+发送一个只读请求：
+
+```text
+请解释这个项目的目录结构。
+```
+
+如果 Codex 返回项目说明，配置已生效。
+
+</View>
+
+<View title="CCH">
+
+使用 CCH 时，先把 51API 配置为 CCH 的上游供应商，再让 Codex 连接 CCH。
+
+### 在 CCH 中添加 51API
+
+1. 打开 CCH 控制台。
+2. 新增 OpenAI compatible 供应商。
+3. 将 Base URL 设置为 `https://51-api.com/v1`。
+4. 填入 51API API Key。
+5. 配置模型、用户权限、限流和故障转移规则。
+6. 为用户创建 CCH API Key。
+
+### 配置 Codex
+
+创建或编辑 `~/.codex/config.toml`：
+
+```toml title="~/.codex/config.toml"
+model_provider = "cch"
+model = "<MODEL_NAME>"
+model_reasoning_effort = "high"
+model_verbosity = "high"
+disable_response_storage = true
+
+[features]
+web_search_request = true
+
+[model_providers.cch]
+name = "CCH"
+base_url = "<CCH_OPENAI_BASE_URL>"
+wire_api = "responses"
+requires_openai_auth = true
+```
+
+创建或编辑 `~/.codex/auth.json`：
+
+```json title="~/.codex/auth.json"
+{
+  "OPENAI_API_KEY": "<CCH_API_KEY>"
+}
+```
+
+将 `<CCH_OPENAI_BASE_URL>` 设置为 CCH 的 OpenAI 兼容地址。通常它以 `/v1` 结尾。
+
+### 验证
+
+```bash
+codex
+```
+
+如果 CCH 控制台出现对应请求记录，并且 Codex 收到回复，配置已生效。
+
+</View>
+
+<View title="CC Switch">
+
+使用 CC Switch 时，不需要手动编辑 `config.toml` 和 `auth.json`。在图形界面中选择 Codex 配置，然后填入 51API 信息。
+
+### 配置 51API
+
+1. 打开 CC Switch。
+2. 切换到 Codex 分组。
+3. 选择 51API 模板。如果没有模板，新增 OpenAI compatible 供应商。
+4. 将 Base URL 设置为 `https://51-api.com/v1`。
+5. 填入 51API API Key。
+6. 选择模型。
+7. 保存配置。
+8. 启用该配置。
+
+### 验证
+
+```bash
+codex
+```
+
+如果 Codex 能正常回复，配置已生效。
+
+</View>
+
+## 检查结果
+
+配置成功后，你应看到以下结果：
+
+- `codex` 能打开对话界面
+- 只读问题能收到回复
+- 51API 控制台出现请求记录
+
+如果请求失败，先检查 `base_url` 是否为 `https://51-api.com/v1`，再检查 `OPENAI_API_KEY`、模型名称和模型权限。

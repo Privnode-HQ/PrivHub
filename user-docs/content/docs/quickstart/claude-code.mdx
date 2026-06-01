@@ -1,0 +1,148 @@
+---
+title: Claude Code
+description: 使用 51API 接入 Claude Code。
+---
+
+本页帮助你把 Claude Code 接入 51API。完成后，你可以在项目目录中运行 `claude`，并通过 51API 调用 Claude 兼容模型。
+
+Claude Code 使用 Anthropic 兼容端点：
+
+```text
+https://51-api.com
+```
+
+## 开始前
+
+准备以下内容：
+
+- 一个可用的 51API 账号
+- 一个 51API API Key
+- 已安装的 Claude Code
+- 可调用 Claude 兼容模型的账号权限
+
+确认 Claude Code 已安装：
+
+```bash
+claude --version
+```
+
+如果命令不存在，先安装 Claude Code，再重新打开终端。
+
+## 接入步骤
+
+<View title="CLI">
+
+使用 CLI 配置时，把 51API 地址和 API Key 写入 Claude Code 的用户级配置文件。
+
+### 配置 Claude Code
+
+打开或创建配置文件：
+
+- macOS / Linux：`~/.claude/settings.json`
+- Windows：`%USERPROFILE%\.claude\settings.json`
+
+写入以下内容：
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://51-api.com",
+    "ANTHROPIC_AUTH_TOKEN": "<51API_API_KEY>",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+```
+
+将 `<51API_API_KEY>` 替换为你的 51API API Key。
+
+### 启动 Claude Code
+
+进入项目目录：
+
+```bash
+cd /path/to/your/project
+claude
+```
+
+发送一个只读请求：
+
+```text
+请解释这个项目的目录结构。
+```
+
+如果 Claude Code 返回项目说明，配置已生效。
+
+</View>
+
+<View title="CCH">
+
+使用 CCH 时，先把 51API 配置为 CCH 的上游供应商，再让 Claude Code 连接 CCH。
+
+### 在 CCH 中添加 51API
+
+1. 打开 CCH 控制台。
+2. 新增 Claude / Anthropic 兼容供应商。
+3. 将 Base URL 设置为 `https://51-api.com`。
+4. 填入 51API API Key。
+5. 配置模型、用户权限、限流和故障转移规则。
+6. 为用户创建 CCH API Key。
+
+### 配置 Claude Code
+
+打开或创建 `~/.claude/settings.json`：
+
+```json title="~/.claude/settings.json"
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "<CCH_BASE_URL>",
+    "ANTHROPIC_AUTH_TOKEN": "<CCH_API_KEY>",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+```
+
+将 `<CCH_BASE_URL>` 和 `<CCH_API_KEY>` 替换为 CCH 发放给你的值。
+
+### 验证
+
+```bash
+claude
+```
+
+如果 CCH 控制台出现对应请求记录，并且 Claude Code 收到回复，配置已生效。
+
+</View>
+
+<View title="CC Switch">
+
+使用 CC Switch 时，不需要手动编辑 `settings.json`。在图形界面中选择 Claude Code 配置，然后填入 51API 信息。
+
+### 配置 51API
+
+1. 打开 CC Switch。
+2. 切换到 Claude Code 或 Claude 分组。
+3. 选择 51API 模板。如果没有模板，新增 Claude / Anthropic compatible 供应商。
+4. 将 Base URL 设置为 `https://51-api.com`。
+5. 填入 51API API Key。
+6. 保存配置。
+7. 启用该配置。
+
+### 验证
+
+```bash
+claude
+```
+
+如果 Claude Code 能正常回复，配置已生效。
+
+</View>
+
+## 检查结果
+
+配置成功后，你应看到以下结果：
+
+- `claude` 能打开对话界面
+- 只读问题能收到回复
+- 51API 控制台出现请求记录
+
+如果请求失败，先检查 `ANTHROPIC_BASE_URL` 是否为 `https://51-api.com`，再检查 API Key 和模型权限。

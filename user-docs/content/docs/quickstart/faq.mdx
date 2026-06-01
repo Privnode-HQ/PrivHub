@@ -1,0 +1,140 @@
+---
+title: 常见问题
+description: 51API 快速接入过程中的常见问题。
+icon: CircleQuestionMark
+---
+
+## 应该使用哪个 Base URL？
+
+使用以下地址：
+
+| 客户端协议 | Base URL |
+| --- | --- |
+| Anthropic / Claude | `https://51-api.com` |
+| OpenAI | `https://51-api.com/v1` |
+
+Claude Code 使用 Anthropic / Claude 地址。Codex 使用 OpenAI 地址。
+
+## 什么时候需要 `/v1`？
+
+OpenAI 兼容客户端需要 `/v1`。Codex 属于这一类。
+
+Claude Code 不需要 `/v1`。它使用：
+
+```text
+https://51-api.com
+```
+
+## API Key 应该放在哪里？
+
+把 API Key 放在用户级配置或系统密钥环境中。
+
+常见位置：
+
+| 工具 | 配置目录 |
+| --- | --- |
+| Claude Code | `~/.claude` |
+| Codex | `~/.codex` |
+
+不要把真实 API Key 写入项目仓库、截图、日志或公开工单。
+
+## CLI、CCH 和 CC Switch 应该选哪个？
+
+| 方式 | 使用场景 |
+| --- | --- |
+| CLI | 你想直接管理配置文件，或在服务器上配置 |
+| CC Switch | 你想用图形界面管理 Claude Code 和 Codex |
+| CCH | 团队需要统一网关、限流、审计、故障转移和成本统计 |
+
+如果你是个人用户，先使用 CLI 或 CC Switch。团队使用时，优先考虑 CCH。
+
+## 如何确认配置生效？
+
+按顺序检查：
+
+1. 启动客户端。
+2. 发送只读问题，例如“请解释这个项目的目录结构”。
+3. 确认客户端收到回复。
+4. 打开 51API 控制台。
+5. 确认控制台出现对应请求记录。
+
+不要只根据模型回复内容判断链路是否正确。
+
+## Claude Code 无法连接怎么办？
+
+检查 `~/.claude/settings.json`：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://51-api.com",
+    "ANTHROPIC_AUTH_TOKEN": "<51API_API_KEY>",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+```
+
+重点检查：
+
+- `ANTHROPIC_BASE_URL` 是否为 `https://51-api.com`
+- `ANTHROPIC_AUTH_TOKEN` 是否为有效的 51API API Key
+- API Key 是否有 Claude 兼容模型权限
+- 终端是否已重新打开
+
+## Codex 返回 401 怎么办？
+
+检查 `~/.codex/auth.json`：
+
+```json
+{
+  "OPENAI_API_KEY": "<51API_API_KEY>"
+}
+```
+
+再检查 `~/.codex/config.toml`：
+
+```toml
+[model_providers.51api]
+base_url = "https://51-api.com/v1"
+```
+
+如果仍然失败，检查系统环境变量中是否存在旧值：
+
+```bash
+echo "OPENAI_API_KEY=${OPENAI_API_KEY:+SET}"
+echo "OPENAI_BASE_URL=${OPENAI_BASE_URL:+SET}"
+```
+
+如果你想完全使用 `auth.json`，关闭旧的 OpenAI 环境变量后重新打开终端。
+
+## 模型不存在或不可用怎么办？
+
+检查以下内容：
+
+- 模型名称是否和 51API 控制台一致
+- API Key 是否有目标模型权限
+- Claude Code 是否使用 Claude 兼容模型
+- Codex 是否使用 OpenAI 兼容模型
+
+## Codex 不能联网或拉取依赖怎么办？
+
+先确认普通终端可以联网。然后检查代理、DNS、防火墙、容器网络和 Codex 沙箱权限。
+
+如果问题只发生在 Codex 沙箱或容器中，检查代理软件的 TUN / MTU 设置。
+
+## Codex 如何开启内置网络搜索？
+
+在 `~/.codex/config.toml` 中加入：
+
+```toml
+[features]
+web_search_request = true
+```
+
+保存后重启 Codex。
+
+## Codex 如何设置全局提示词？
+
+在 `~/.codex/AGENTS.md` 中写入全局说明。文件不存在时，手动创建。
+
+修改后重启 Codex 或 VS Code Codex 插件。

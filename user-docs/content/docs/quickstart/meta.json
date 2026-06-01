@@ -1,0 +1,6 @@
+{
+  "title": "快速开始",
+  "defaultOpen": true,
+  "pages": ["claude-code", "codex", "faq"],
+  "icon": "Bot"
+}
