@@ -1,0 +1,82 @@
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
+import {
+  DocsBody,
+  DocsDescription,
+  DocsPage,
+  DocsTitle,
+  MarkdownCopyButton,
+  ViewOptionsPopover,
+} from "fumadocs-ui/layouts/docs/page";
+import { createRelativeLink } from "fumadocs-ui/mdx";
+import type { PageProps } from "waku/router";
+import { unstable_notFound } from "waku/router/server";
+import {
+  DocViewProvider,
+  DocViewSwitcher,
+} from "@/components/docs-view-switch";
+import { getMDXComponents } from "@/components/mdx";
+import { baseOptions } from "@/lib/layout.shared";
+import { gitConfig } from "@/lib/shared";
+import { getPageImage, getPageMarkdownUrl, source } from "@/lib/source";
+
+function hasDocViewSwitch(slugs: string[]) {
+  const path = slugs.join("/");
+
+  return path === "quickstart/claude-code" || path === "quickstart/codex";
+}
+
+export default function Page({ slugs }: PageProps<"/[...slugs]">) {
+  const page = source.getPage(slugs);
+  if (!page) unstable_notFound();
+
+  const MDX = page.data.body;
+  const markdownUrl = getPageMarkdownUrl(page).url;
+  const showDocViewSwitch = hasDocViewSwitch(slugs);
+
+  return (
+    <DocViewProvider>
+      <DocsLayout {...baseOptions()} tree={source.getPageTree()}>
+        <DocsPage
+          toc={page.data.toc}
+          tableOfContent={{
+            header: <DocViewSwitcher enabled={showDocViewSwitch} />,
+          }}
+          tableOfContentPopover={{
+            header: <DocViewSwitcher enabled={showDocViewSwitch} />,
+          }}
+        >
+          <meta property="og:image" content={getPageImage(slugs).url} />
+          <DocsTitle>{page.data.title}</DocsTitle>
+          <DocsDescription className="mb-0">
+            {page.data.description}
+          </DocsDescription>
+          <div className="flex flex-row gap-2 items-center border-b pt-2 pb-6">
+            <MarkdownCopyButton markdownUrl={markdownUrl} />
+            <ViewOptionsPopover
+              markdownUrl={markdownUrl}
+              githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/user-docs/content/docs/${page.path}`}
+            />
+          </div>
+          <DocsBody>
+            <MDX
+              components={getMDXComponents({
+                a: createRelativeLink(source, page),
+              })}
+            />
+          </DocsBody>
+        </DocsPage>
+      </DocsLayout>
+    </DocViewProvider>
+  );
+}
+
+export async function getConfig() {
+  const pages = source
+    .generateParams()
+    .map((item) => (item.lang ? [item.lang, ...item.slug] : item.slug));
+
+  return {
+    render: "static" as const,
+    staticPaths: pages,
+  } as const;
+}

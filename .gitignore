@@ -28,6 +28,7 @@ electron/node_modules
 electron/dist
 web/node_modules
 node_modules
+user-docs/.source
 dist
 coverage
 *.log

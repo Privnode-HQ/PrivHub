@@ -8,6 +8,15 @@ COPY ./web .
 COPY ./VERSION .
 RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
 
+FROM node:24-alpine AS docs-builder
+
+WORKDIR /build/user-docs
+
+COPY user-docs/package.json user-docs/pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@10.17.0 --activate && pnpm install --frozen-lockfile
+COPY ./user-docs .
+RUN pnpm run build
+
 FROM golang:alpine AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
 
@@ -32,6 +41,8 @@ RUN apk upgrade --no-cache \
     && update-ca-certificates
 
 COPY --from=builder2 /build/new-api /
+COPY --from=docs-builder /build/user-docs/dist/public /app/user-docs/dist/public
+ENV USER_DOCS_STATIC_DIR=/app/user-docs/dist/public
 EXPOSE 3000
 WORKDIR /data
 ENTRYPOINT ["/new-api"]

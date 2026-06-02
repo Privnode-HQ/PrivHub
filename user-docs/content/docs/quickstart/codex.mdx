@@ -17,22 +17,57 @@ https://51-api.com/v1
 
 - 一个可用的 51API 账号
 - 一个 51API API Key
-- 已安装的 Codex CLI
+- 可联网的终端
 - 可调用 OpenAI 兼容模型的账号权限
-
-确认 Codex 已安装：
-
-```bash
-codex --version
-```
-
-如果命令不存在，先安装 Codex CLI，再重新打开终端。
 
 ## 接入步骤
 
+<View title="51 CLI">
+
+51 CLI 是默认方式。它会按当前系统配置写入 Codex 配置；如果没有检测到 Codex CLI，会先帮你安装客户端。安装时如果需要 Node.js，也会按系统提示安装。
+
+### macOS / Linux
+
+在终端运行：
+
+```bash
+curl -fsSL https://51-api.com/install.sh | bash
+```
+
+按提示选择 `Codex`，填入 51API API Key 和要使用的模型名称。
+
+### Windows PowerShell
+
+在 PowerShell 中运行：
+
+```powershell
+irm https://51-api.com/install.ps1 | iex
+```
+
+按提示选择 `Codex`，填入 51API API Key 和要使用的模型名称。
+
+### 验证
+
+进入项目目录：
+
+```bash
+cd /path/to/your/project
+codex
+```
+
+发送一个只读请求：
+
+```text
+请解释这个项目的目录结构。
+```
+
+如果 Codex 返回项目说明，配置已生效。
+
+</View>
+
 <View title="CLI">
 
-使用 CLI 配置时，把模型供应商写入 `config.toml`，把 API Key 写入 `auth.json`。
+手动配置时，把模型供应商写入 `config.toml`，把 API Key 写入 `auth.json`。
 
 ### 创建配置目录
 

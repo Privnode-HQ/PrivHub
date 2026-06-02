@@ -18,12 +18,13 @@ import {
 import { cn } from "@/lib/cn";
 
 const storageKey = "51api-doc-view";
-const defaultView = "cli";
+const defaultView = "51-cli";
 
 const docViews = [
+  { value: "51-cli", label: "51 CLI", mark: "51" },
+  { value: "cli", label: "手动配置", mark: "CLI" },
   { value: "cch", label: "CCH", mark: "CH" },
   { value: "cc-switch", label: "CC Switch", mark: "CC" },
-  { value: "cli", label: "CLI", mark: "CLI" },
 ] as const;
 
 type DocViewValue = (typeof docViews)[number]["value"];
@@ -95,7 +96,7 @@ export function DocViewSwitcher({ enabled }: { enabled: boolean }) {
           className="group flex h-9 w-full items-center gap-2 rounded-lg border border-fd-border/70 bg-transparent px-2.5 text-left text-fd-muted-foreground outline-none hover:bg-fd-accent/30 hover:text-fd-accent-foreground focus-visible:ring-2 focus-visible:ring-fd-ring"
         >
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {selectedView?.label ?? "CLI"}
+            {selectedView?.label ?? "51 CLI"}
           </span>
           <ChevronDown className="size-4 shrink-0 text-fd-muted-foreground group-data-[state=open]:rotate-180" />
         </PopoverTrigger>

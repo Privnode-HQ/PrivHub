@@ -17,22 +17,57 @@ https://51-api.com
 
 - 一个可用的 51API 账号
 - 一个 51API API Key
-- 已安装的 Claude Code
+- 可联网的终端
 - 可调用 Claude 兼容模型的账号权限
-
-确认 Claude Code 已安装：
-
-```bash
-claude --version
-```
-
-如果命令不存在，先安装 Claude Code，再重新打开终端。
 
 ## 接入步骤
 
+<View title="51 CLI">
+
+51 CLI 是默认方式。它会按当前系统配置写入 Claude Code 配置；如果没有检测到 Claude Code，会先帮你安装客户端。
+
+### macOS / Linux
+
+在终端运行：
+
+```bash
+curl -fsSL https://51-api.com/install.sh | bash
+```
+
+按提示选择 `Claude Code`，填入 51API API Key。
+
+### Windows PowerShell
+
+在 PowerShell 中运行：
+
+```powershell
+irm https://51-api.com/install.ps1 | iex
+```
+
+按提示选择 `Claude Code`，填入 51API API Key。
+
+### 验证
+
+进入项目目录：
+
+```bash
+cd /path/to/your/project
+claude
+```
+
+发送一个只读请求：
+
+```text
+请解释这个项目的目录结构。
+```
+
+如果 Claude Code 返回项目说明，配置已生效。
+
+</View>
+
 <View title="CLI">
 
-使用 CLI 配置时，把 51API 地址和 API Key 写入 Claude Code 的用户级配置文件。
+手动配置时，把 51API 地址和 API Key 写入 Claude Code 的用户级配置文件。
 
 ### 配置 Claude Code
 
