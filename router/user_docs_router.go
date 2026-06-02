@@ -65,6 +65,15 @@ func serveInstallPowerShell(c *gin.Context) {
 }
 
 func (h *userDocsHandler) Serve(c *gin.Context) {
+	if c.Request.URL.Path == "/docs" {
+		location := "/docs/"
+		if c.Request.URL.RawQuery != "" {
+			location += "?" + c.Request.URL.RawQuery
+		}
+		c.Redirect(http.StatusTemporaryRedirect, location)
+		return
+	}
+
 	filePath, err := h.resolveFile(c.Request.URL.Path)
 	if err != nil {
 		c.String(http.StatusNotFound, "documentation file not found")

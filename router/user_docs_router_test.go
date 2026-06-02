@@ -22,6 +22,19 @@ func TestUserDocsRoutesServeRuntimeConfiguredDocs(t *testing.T) {
 
 	router := setupUserDocsTestRouter(t, staticDir)
 
+	t.Run("docs root redirects to slash base path", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/docs?from=nav", nil)
+		router.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusTemporaryRedirect {
+			t.Fatalf("status = %d, want %d", recorder.Code, http.StatusTemporaryRedirect)
+		}
+		if got := recorder.Header().Get("Location"); got != "/docs/?from=nav" {
+			t.Fatalf("Location = %q, want %q", got, "/docs/?from=nav")
+		}
+	})
+
 	tests := []struct {
 		name         string
 		path         string
@@ -30,14 +43,6 @@ func TestUserDocsRoutesServeRuntimeConfiguredDocs(t *testing.T) {
 		wantContent  string
 		wantVaryPart string
 	}{
-		{
-			name:         "docs root",
-			path:         "/docs",
-			wantBody:     "Demo Hub https://demo.example https://demo.example/v1",
-			wantCache:    userDocsDynamicCacheControl,
-			wantContent:  "text/html; charset=utf-8",
-			wantVaryPart: "X-Forwarded-Host",
-		},
 		{
 			name:         "docs root slash",
 			path:         "/docs/",
