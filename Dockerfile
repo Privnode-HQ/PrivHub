@@ -13,9 +13,9 @@ FROM node:24-alpine AS docs-builder
 WORKDIR /build/user-docs
 
 COPY user-docs/package.json user-docs/pnpm-lock.yaml ./
-RUN corepack enable && corepack prepare pnpm@10.17.0 --activate && pnpm install --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@10.17.0 --activate && pnpm install --frozen-lockfile --ignore-scripts
 COPY ./user-docs .
-RUN pnpm run build
+RUN pnpm exec fumadocs-mdx && pnpm run build
 
 FROM golang:alpine AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
