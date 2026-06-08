@@ -94,7 +94,9 @@ https://51-api.com
 再检查 `~/.codex/config.toml`：
 
 ```toml
-[model_providers.51api]
+cli_auth_credentials_store = "file"
+
+[model_providers."51api"]
 base_url = "https://51-api.com/v1"
 ```
 
@@ -106,6 +108,21 @@ echo "OPENAI_BASE_URL=${OPENAI_BASE_URL:+SET}"
 ```
 
 如果你想完全使用 `auth.json`，关闭旧的 OpenAI 环境变量后重新打开终端。
+
+## Windows PowerShell 提示无法运行 `codex.ps1` 怎么办？
+
+npm 在 Windows 上会生成 `codex.ps1` 和 `codex.cmd`。如果 PowerShell
+执行策略拦截 `codex.ps1`，可以直接运行：
+
+```powershell
+codex.cmd
+```
+
+也可以只为当前用户允许本地签名脚本：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
 
 ## 模型不存在或不可用怎么办？
 

@@ -106,9 +106,10 @@ func TestInstallScriptsUseConfiguredBaseURL(t *testing.T) {
 	router := setupUserDocsTestRouter(t, t.TempDir())
 
 	tests := []struct {
-		name string
-		path string
-		want []string
+		name   string
+		path   string
+		want   []string
+		reject []string
 	}{
 		{
 			name: "shell",
@@ -117,10 +118,16 @@ func TestInstallScriptsUseConfiguredBaseURL(t *testing.T) {
 				"SYSTEM_NAME='Demo Hub'",
 				"ANTHROPIC_BASE_URL='https://demo.example'",
 				"OPENAI_BASE_URL='https://demo.example/v1'",
+				"cli_auth_credentials_store = \"file\"",
+				"[model_providers.\"51api\"]",
 				"https://claude.ai/install.sh",
 				"https://chatgpt.com/codex/install.sh",
 				"@anthropic-ai/claude-code",
 				"@openai/codex",
+			},
+			reject: []string{
+				"model_reasoning_effort",
+				"model_verbosity",
 			},
 		},
 		{
@@ -130,11 +137,23 @@ func TestInstallScriptsUseConfiguredBaseURL(t *testing.T) {
 				"$SystemName = 'Demo Hub'",
 				"$AnthropicBaseUrl = 'https://demo.example'",
 				"$OpenAIBaseUrl = 'https://demo.example/v1'",
+				"function Write-Utf8NoBom($Path, $Content)",
+				"New-Object System.Text.UTF8Encoding $false",
+				"[System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)",
+				"cli_auth_credentials_store = \"file\"",
+				"[model_providers.\"51api\"]",
+				"codex.cmd",
 				"Anthropic.ClaudeCode",
 				"https://claude.ai/install.ps1",
 				"https://chatgpt.com/codex/install.ps1",
 				"@anthropic-ai/claude-code",
 				"@openai/codex",
+			},
+			reject: []string{
+				"model_reasoning_effort",
+				"model_verbosity",
+				"Set-Content -Path $configPath -Encoding UTF8",
+				"Set-Content -Path $authPath -Encoding UTF8",
 			},
 		},
 	}
@@ -155,6 +174,11 @@ func TestInstallScriptsUseConfiguredBaseURL(t *testing.T) {
 			for _, want := range tt.want {
 				if !strings.Contains(body, want) {
 					t.Fatalf("script body does not contain %q", want)
+				}
+			}
+			for _, reject := range tt.reject {
+				if strings.Contains(body, reject) {
+					t.Fatalf("script body unexpectedly contains %q", reject)
 				}
 			}
 		})

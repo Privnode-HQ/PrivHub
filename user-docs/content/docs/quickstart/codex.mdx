@@ -46,6 +46,18 @@ irm https://51-api.com/install.ps1 | iex
 
 按提示选择 `Codex`，填入 51API API Key 和要使用的模型名称。
 
+如果 PowerShell 拦截 npm 生成的 `codex.ps1`，可以运行：
+
+```powershell
+codex.cmd
+```
+
+也可以只为当前用户允许本地签名脚本：
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
 ### 验证
 
 进入项目目录：
@@ -84,14 +96,13 @@ Windows 用户使用 `%USERPROFILE%\.codex`。
 ```toml title="~/.codex/config.toml"
 model_provider = "51api"
 model = "<MODEL_NAME>"
-model_reasoning_effort = "high"
-model_verbosity = "high"
 disable_response_storage = true
+cli_auth_credentials_store = "file"
 
 [features]
 web_search_request = true
 
-[model_providers.51api]
+[model_providers."51api"]
 name = "51API"
 base_url = "https://51-api.com/v1"
 wire_api = "responses"
@@ -151,9 +162,8 @@ codex
 ```toml title="~/.codex/config.toml"
 model_provider = "cch"
 model = "<MODEL_NAME>"
-model_reasoning_effort = "high"
-model_verbosity = "high"
 disable_response_storage = true
+cli_auth_credentials_store = "file"
 
 [features]
 web_search_request = true

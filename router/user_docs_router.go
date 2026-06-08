@@ -419,14 +419,13 @@ configure_codex() {
   cat > "$config" <<EOF
 model_provider = "51api"
 model = "$(escape_double "$model")"
-model_reasoning_effort = "high"
-model_verbosity = "high"
 disable_response_storage = true
+cli_auth_credentials_store = "file"
 
 [features]
 web_search_request = true
 
-[model_providers.51api]
+[model_providers."51api"]
 name = "$SYSTEM_NAME"
 base_url = "$OPENAI_BASE_URL"
 wire_api = "responses"
@@ -522,6 +521,11 @@ function ConvertTo-TomlString($Value) {
   return $Value.Replace('\', '\\').Replace('"', '\"')
 }
 
+function Write-Utf8NoBom($Path, $Content) {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Install-NodeIfNeeded {
   if ((Test-Command node) -and (Test-Command npm)) {
     return
@@ -602,7 +606,8 @@ function Configure-Claude($ApiKey) {
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
     }
   }
-  $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsPath -Encoding UTF8
+  $settingsJson = $settings | ConvertTo-Json -Depth 10
+  Write-Utf8NoBom $settingsPath $settingsJson
   Write-Host "已写入 $settingsPath"
 }
 
@@ -617,24 +622,25 @@ function Configure-Codex($ApiKey, $Model) {
   $systemNameForToml = ConvertTo-TomlString $SystemName
   $baseUrlForToml = ConvertTo-TomlString $OpenAIBaseUrl
 
-  @"
+  $configToml = @"
 model_provider = "51api"
 model = "$modelForToml"
-model_reasoning_effort = "high"
-model_verbosity = "high"
 disable_response_storage = true
+cli_auth_credentials_store = "file"
 
 [features]
 web_search_request = true
 
-[model_providers.51api]
+[model_providers."51api"]
 name = "$systemNameForToml"
 base_url = "$baseUrlForToml"
 wire_api = "responses"
 requires_openai_auth = true
-"@ | Set-Content -Path $configPath -Encoding UTF8
+"@
+  Write-Utf8NoBom $configPath $configToml
 
-  [ordered]@{ OPENAI_API_KEY = $ApiKey } | ConvertTo-Json -Depth 10 | Set-Content -Path $authPath -Encoding UTF8
+  $authJson = [ordered]@{ OPENAI_API_KEY = $ApiKey } | ConvertTo-Json -Depth 10
+  Write-Utf8NoBom $authPath $authJson
   Write-Host "已写入 $configPath 和 $authPath"
 }
 
@@ -680,4 +686,5 @@ switch ($choice) {
 
 Write-Host ""
 Write-Host "配置完成。重新打开终端后可运行 claude 或 codex 验证。"
+Write-Host "如果 PowerShell 拦截 codex.ps1，可运行 codex.cmd，或为当前用户设置 RemoteSigned。"
 `
