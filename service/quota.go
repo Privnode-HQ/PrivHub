@@ -62,8 +62,11 @@ func calculateAudioQuota(info QuotaInfo) int {
 	audioCompletionRatio := decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(info.ModelName))
 
 	groupRatio := decimal.NewFromFloat(info.GroupRatio)
-	modelRatio := decimal.NewFromFloat(info.ModelRatio)
-	ratio := groupRatio.Mul(modelRatio)
+	modelTokenQuotaRatio := decimal.NewFromFloat(types.ModelRatioTokenQuotaRatio(
+		info.ModelRatio,
+		common.QuotaPerUnit,
+	))
+	ratio := groupRatio.Mul(modelTokenQuotaRatio)
 
 	inputTextTokens := decimal.NewFromInt(int64(info.InputDetails.TextTokens))
 	outputTextTokens := decimal.NewFromInt(int64(info.OutputDetails.TextTokens))
@@ -284,7 +287,8 @@ func PostClaudeConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, 
 			calculateQuota += float64(remainingCacheCreationTokens) * cacheCreationRatio
 		}
 		calculateQuota += float64(completionTokens) * completionRatio
-		calculateQuota = calculateQuota * groupRatio * modelRatio
+		calculateQuota = calculateQuota * groupRatio *
+			types.ModelRatioTokenQuotaRatio(modelRatio, common.QuotaPerUnit)
 	} else {
 		calculateQuota = modelPrice * common.QuotaPerUnit * groupRatio
 	}
@@ -374,7 +378,7 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 	if priceData.CacheCreationRatio == 1 {
 		return 0
 	}
-	quotaPrice := priceData.ModelRatio / common.QuotaPerUnit
+	quotaPrice := types.ModelRatioTokenPrice(priceData.ModelRatio)
 	promptCacheCreatePrice := quotaPrice * priceData.CacheCreationRatio
 	promptCacheReadPrice := quotaPrice * priceData.CacheRatio
 	completionPrice := quotaPrice * priceData.CompletionRatio

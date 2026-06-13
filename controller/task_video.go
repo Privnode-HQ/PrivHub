@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 )
 
 func UpdateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) error {
@@ -171,8 +172,11 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 								finalGroupRatio = groupRatio
 							}
 
-							// 计算实际应扣费额度: totalTokens * modelRatio * groupRatio
-							actualQuota := int(float64(taskResult.TotalTokens) * modelRatio * finalGroupRatio)
+							// 计算实际应扣费额度:
+							// totalTokens / 1M * inputPrice * groupRatio * QuotaPerUnit.
+							actualQuota := int(float64(taskResult.TotalTokens) *
+								types.ModelRatioTokenQuotaRatio(modelRatio, common.QuotaPerUnit) *
+								finalGroupRatio)
 
 							// 计算差额
 							preConsumedQuota := task.Quota

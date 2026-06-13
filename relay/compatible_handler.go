@@ -228,13 +228,16 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	dCompletionRatio := decimal.NewFromFloat(completionRatio)
 	dCacheRatio := decimal.NewFromFloat(cacheRatio)
 	dImageRatio := decimal.NewFromFloat(imageRatio)
-	dModelRatio := decimal.NewFromFloat(modelRatio)
+	dModelTokenQuotaRatio := decimal.NewFromFloat(types.ModelRatioTokenQuotaRatio(
+		modelRatio,
+		common.QuotaPerUnit,
+	))
 	dGroupRatio := decimal.NewFromFloat(groupRatio)
 	dModelPrice := decimal.NewFromFloat(modelPrice)
 	dCachedCreationRatio := decimal.NewFromFloat(cachedCreationRatio)
 	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 
-	ratio := dModelRatio.Mul(dGroupRatio)
+	ratio := dModelTokenQuotaRatio.Mul(dGroupRatio)
 
 	// openai web search 工具计费
 	var dWebSearchQuota decimal.Decimal

@@ -2,6 +2,29 @@ package types
 
 import "fmt"
 
+const tokensPerMillion = 1000 * 1000.0
+
+// ModelRatioInputPricePerMillionTokens converts the stored model ratio to the
+// displayed input price. The UI documents model ratio as half of the per-million
+// input-token price, and completion/cache/audio ratios are applied on top of
+// that input price.
+func ModelRatioInputPricePerMillionTokens(modelRatio float64) float64 {
+	return modelRatio * 2
+}
+
+// ModelRatioTokenQuotaRatio converts a model ratio into raw quota units charged
+// per token. It keeps quota-unit changes aligned with the per-million-token
+// price shown in billing details.
+func ModelRatioTokenQuotaRatio(modelRatio, quotaPerUnit float64) float64 {
+	return ModelRatioInputPricePerMillionTokens(modelRatio) * quotaPerUnit / tokensPerMillion
+}
+
+// ModelRatioTokenPrice converts a model ratio into the configured currency
+// amount charged per token.
+func ModelRatioTokenPrice(modelRatio float64) float64 {
+	return ModelRatioInputPricePerMillionTokens(modelRatio) / tokensPerMillion
+}
+
 type GroupRatioInfo struct {
 	GroupRatio        float64
 	GroupSpecialRatio float64
