@@ -188,6 +188,8 @@ ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `
 | POST | /api/r2s/suppliers | 创建 R2S 上游供应商 |
 | GET | /api/r2s/suppliers/:id | 获取单个 R2S 上游供应商 |
 | PUT | /api/r2s/suppliers/:id | 更新 R2S 上游供应商 |
+| POST | /api/r2s/suppliers/:id/enable | 启用 R2S 上游供应商 |
+| DELETE | /api/r2s/suppliers/:id/permanent | 删除未产生历史的 R2S 上游供应商 |
 | DELETE | /api/r2s/suppliers/:id | 停用 R2S 上游供应商 |
 | GET | /api/r2s/channel-bindings | 获取供应商渠道绑定列表 |
 | POST | /api/r2s/channel-bindings | 创建供应商渠道绑定 |

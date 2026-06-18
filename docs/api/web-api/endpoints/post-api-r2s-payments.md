@@ -3,7 +3,7 @@ method: POST
 path: /api/r2s/payments
 auth: admin
 handler: controller.CreateR2SPayment
-source: router/api-router.go:304
+source: router/api-router.go:306
 request:
   body:
     content_type: application/json

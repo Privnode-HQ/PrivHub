@@ -34,7 +34,10 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import {
+  AlertTriangle,
   BarChart3,
+  CheckCircle2,
+  ClipboardList,
   Coins,
   CreditCard,
   Layers,
@@ -142,7 +145,7 @@ const R2S = () => {
   const { t } = useTranslation();
   const formApiRef = useRef(null);
   const settingsFormRef = useRef(null);
-  const [activeTab, setActiveTab] = useState('suppliers');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modalType, setModalType] = useState(null);
@@ -157,7 +160,6 @@ const R2S = () => {
   const [promotionRows, setPromotionRows] = useState([]);
   const [channels, setChannels] = useState([]);
   const [optionSuppliers, setOptionSuppliers] = useState([]);
-  const [optionBindings, setOptionBindings] = useState([]);
   const [tablePages, setTablePages] = useState(defaultTablePages);
 
   const supplierOptions = useMemo(
@@ -178,17 +180,6 @@ const R2S = () => {
         value: channel.id,
       })),
     [channels],
-  );
-
-  const bindingOptions = useMemo(
-    () =>
-      optionBindings
-        .filter((binding) => binding.status !== 'disabled')
-        .map((binding) => ({
-          label: `${binding.channel_name_snapshot} / ${binding.supplier_name}`,
-          value: binding.id,
-        })),
-    [optionBindings],
   );
 
   const fetchPagedList = async (path, page, pageSize, extraParams = {}) => {
@@ -268,7 +259,6 @@ const R2S = () => {
         promotionData,
         channelData,
         supplierOptionData,
-        bindingOptionData,
         ...tableResults
       ] = await Promise.all([
         API.get('/api/r2s/settings'),
@@ -276,7 +266,6 @@ const R2S = () => {
         API.get('/api/r2s/promotion-profitability'),
         loadAllOptions('/api/channel/'),
         loadAllOptions('/api/r2s/suppliers', { status: 'active' }),
-        loadAllOptions('/api/r2s/channel-bindings', { status: 'active' }),
         ...tableRequests,
       ]);
 
@@ -294,7 +283,6 @@ const R2S = () => {
       }
       setChannels(channelData);
       setOptionSuppliers(supplierOptionData);
-      setOptionBindings(bindingOptionData);
       tableResults.forEach(({ key, data, page, pageSize }) => {
         applyTablePage(key, data, page, pageSize);
       });
@@ -353,14 +341,6 @@ const R2S = () => {
         return {
           currency_code: settings.default_currency_code,
           exchange_rate: 1,
-        };
-      case 'recognition':
-        return {
-          source_type: 'manual',
-          currency_code: settings.default_currency_code,
-          exchange_rate: 1,
-          revenue_amount: 0,
-          cost_amount: 0,
         };
       default:
         return {};
@@ -444,24 +424,6 @@ const R2S = () => {
           balance_reminder_days: toNumber(values.balance_reminder_days),
           note: values.note || '',
         });
-      } else if (modalType === 'recognition') {
-        res = await API.post('/api/r2s/recognition-records', {
-          source_type: values.source_type || 'manual',
-          source_reference: values.source_reference || '',
-          supplier_id: Number(values.supplier_id),
-          channel_id: toNumber(values.channel_id) || 0,
-          channel_binding_id: toNumber(values.channel_binding_id) || 0,
-          promotion_campaign_id: toNumber(values.promotion_campaign_id) || 0,
-          currency_code: values.currency_code,
-          exchange_rate: Number(values.exchange_rate || 1),
-          revenue_amount: Number(values.revenue_amount || 0),
-          cost_amount: Number(values.cost_amount || 0),
-          group_multiplier_snapshot:
-            toNumber(values.group_multiplier_snapshot) || 0,
-          period_start: toNumber(values.period_start) || 0,
-          period_end: toNumber(values.period_end) || 0,
-          note: values.note || '',
-        });
       }
 
       const { success, message } = res.data;
@@ -494,6 +456,57 @@ const R2S = () => {
           if (success) {
             showSuccess(t('操作成功'));
             await refresh();
+          } else {
+            showError(message);
+          }
+        } catch (error) {
+          showError(error.message);
+        }
+      },
+    });
+  };
+
+  const updateSupplierStatus = (record, status) => {
+    const isEnable = status === 'active';
+    Modal.confirm({
+      title: isEnable ? t('确认启用供应商') : t('确认停用供应商'),
+      content: isEnable
+        ? t('启用后该供应商会重新进入余额统计和提醒。')
+        : t('停用后历史记录仍会保留，并且不再进入余额统计和提醒。'),
+      onOk: async () => {
+        try {
+          const res = isEnable
+            ? await API.post(`/api/r2s/suppliers/${record.id}/enable`)
+            : await API.delete(`/api/r2s/suppliers/${record.id}`);
+          const { success, message } = res.data;
+          if (success) {
+            showSuccess(t('操作成功'));
+            await refresh({ resetLists: true });
+          } else {
+            showError(message);
+          }
+        } catch (error) {
+          showError(error.message);
+        }
+      },
+    });
+  };
+
+  const deleteSupplier = (record) => {
+    Modal.confirm({
+      title: t('确认删除供应商'),
+      content: t(
+        '仅未产生付款、余额更新或识别记录的供应商可以删除；关联渠道绑定会一并删除。',
+      ),
+      onOk: async () => {
+        try {
+          const res = await API.delete(
+            `/api/r2s/suppliers/${record.id}/permanent`,
+          );
+          const { success, message } = res.data;
+          if (success) {
+            showSuccess(t('删除成功'));
+            await refresh({ resetLists: true });
           } else {
             showError(message);
           }
@@ -541,19 +554,36 @@ const R2S = () => {
     {
       title: t('操作'),
       dataIndex: 'operate',
-      width: 150,
+      width: 240,
       fixed: 'right',
       render: (_, record) => (
-        <Space>
+        <Space wrap>
           <Button size='small' onClick={() => openModal('supplier', record)}>
             {t('编辑')}
           </Button>
+          {record.status === 'disabled' ? (
+            <Button
+              size='small'
+              type='primary'
+              onClick={() => updateSupplierStatus(record, 'active')}
+            >
+              {t('启用')}
+            </Button>
+          ) : (
+            <Button
+              size='small'
+              type='danger'
+              onClick={() => updateSupplierStatus(record, 'disabled')}
+            >
+              {t('停用')}
+            </Button>
+          )}
           <Button
             size='small'
             type='danger'
-            onClick={() => disableRecord('supplier', record.id)}
+            onClick={() => deleteSupplier(record)}
           >
-            {t('停用')}
+            {t('删除')}
           </Button>
         </Space>
       ),
@@ -756,8 +786,34 @@ const R2S = () => {
     binding: editingRecord ? t('编辑渠道绑定') : t('新增渠道绑定'),
     payment: t('记录付款'),
     balance: t('更新供应商余额'),
-    recognition: t('创建收入识别记录'),
   }[modalType];
+
+  const dueSuppliers = optionSuppliers.filter((supplier) => {
+    const nextReminderAt = Number(supplier.next_balance_reminder_at || 0);
+    return (
+      supplier.status !== 'disabled' &&
+      nextReminderAt > 0 &&
+      nextReminderAt <= Math.floor(Date.now() / 1000)
+    );
+  });
+
+  const openBalanceForSupplier = (supplier) => {
+    setModalType('balance');
+    setEditingRecord(null);
+    setTimeout(() => {
+      formApiRef.current?.setValues({
+        supplier_id: supplier.id,
+        balance_after: Number(supplier.balance_amount || 0),
+        currency_code:
+          supplier.balance_currency_code ||
+          supplier.default_currency_code ||
+          settings.default_currency_code,
+        exchange_rate: Number(supplier.default_exchange_rate || 1),
+        balance_reminder_days:
+          supplier.balance_reminder_days ?? settings.balance_reminder_days,
+      });
+    }, 0);
+  };
 
   return (
     <div className='mt-[60px] px-2 pb-6'>
@@ -768,7 +824,7 @@ const R2S = () => {
               R2S
             </Title>
             <Text type='secondary'>
-              {t('供应商余额、付款历史、成本快照与利润识别')}
+              {t('收入识别随看板刷新同步汇总，优先处理提醒和配置缺口')}
             </Text>
           </div>
           <Space wrap>
@@ -785,187 +841,117 @@ const R2S = () => {
           </Space>
         </div>
 
-        <Row gutter={[12, 12]} className='mb-3'>
-          <Col xs={24} md={12} xl={6}>
-            <MetricCard
-              icon={<BarChart3 size={18} />}
-              title={t('已识别利润')}
-              value={formatAmount(
-                summary.recognized_profit_amount,
-                summary.system_currency_code,
-              )}
-              extra={formatPercent(summary.profit_margin)}
-            />
-          </Col>
-          <Col xs={24} md={12} xl={6}>
-            <MetricCard
-              icon={<Coins size={18} />}
-              title={t('已识别收入')}
-              value={formatAmount(
-                summary.recognized_revenue_amount,
-                summary.system_currency_code,
-              )}
-              extra={formatAmount(
-                summary.recognized_cost_amount,
-                summary.system_currency_code,
-              )}
-            />
-          </Col>
-          <Col xs={24} md={12} xl={6}>
-            <MetricCard
-              icon={<WalletCards size={18} />}
-              title={t('供应商余额')}
-              value={formatAmount(
-                summary.supplier_balance_amount,
-                summary.system_currency_code,
-              )}
-              extra={`${summary.active_supplier_count}/${summary.supplier_count}`}
-            />
-          </Col>
-          <Col xs={24} md={12} xl={6}>
-            <MetricCard
-              icon={<ReceiptText size={18} />}
-              title={t('余额提醒')}
-              value={String(summary.reminder_due_count || 0)}
-              extra={`${summary.channel_binding_count || 0} ${t('个渠道绑定')}`}
-            />
-          </Col>
-        </Row>
-
-        <Card className='mb-3'>
-          <Form
-            layout='horizontal'
-            initValues={settings}
-            getFormApi={(api) => {
-              settingsFormRef.current = api;
-            }}
-            onSubmit={saveSettings}
-          >
-            <Row gutter={[12, 8]}>
-              <Col xs={24} md={6}>
-                <Form.Switch
-                  field='receipt_required'
-                  label={t('付款必须上传收据')}
-                />
-              </Col>
-              <Col xs={24} md={6}>
-                <Form.Input
-                  field='default_currency_code'
-                  label={t('默认货币')}
-                />
-              </Col>
-              <Col xs={24} md={6}>
-                <Form.InputNumber
-                  field='balance_reminder_days'
-                  label={t('默认提醒天数')}
-                  min={0}
-                />
-              </Col>
-              <Col xs={24} md={6}>
-                <Button
-                  type='primary'
-                  icon={<Save size={15} />}
-                  loading={saving}
-                  onClick={() => settingsFormRef.current?.submitForm()}
-                >
-                  {t('保存设置')}
-                </Button>
-              </Col>
-            </Row>
-          </Form>
-        </Card>
-
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
           type='card'
           className='mb-3'
         >
+          <TabPane tab={t('仪表板')} itemKey='dashboard' />
           <TabPane tab={t('供应商')} itemKey='suppliers' />
           <TabPane tab={t('渠道绑定')} itemKey='bindings' />
           <TabPane tab={t('付款历史')} itemKey='payments' />
           <TabPane tab={t('余额更新')} itemKey='balances' />
-          <TabPane tab={t('收入识别')} itemKey='recognition' />
+          <TabPane tab={t('识别明细')} itemKey='recognition' />
           <TabPane tab={t('促销盈利性')} itemKey='promotions' />
         </Tabs>
 
-        <Card
-          title={renderTabTitle(activeTab, t)}
-          headerExtraContent={renderTabAction(activeTab, openModal, t)}
-        >
-          {activeTab === 'suppliers' && (
-            <R2STable
-              columns={supplierColumns}
-              data={suppliers}
-              pageInfo={tablePages.suppliers}
-              onPageChange={(page) =>
-                loadTablePage('suppliers', page, tablePages.suppliers.pageSize)
-              }
-              onPageSizeChange={(pageSize) =>
-                loadTablePage('suppliers', 1, pageSize)
-              }
-            />
-          )}
-          {activeTab === 'bindings' && (
-            <R2STable
-              columns={bindingColumns}
-              data={bindings}
-              pageInfo={tablePages.bindings}
-              onPageChange={(page) =>
-                loadTablePage('bindings', page, tablePages.bindings.pageSize)
-              }
-              onPageSizeChange={(pageSize) =>
-                loadTablePage('bindings', 1, pageSize)
-              }
-            />
-          )}
-          {activeTab === 'payments' && (
-            <R2STable
-              columns={paymentColumns}
-              data={payments}
-              pageInfo={tablePages.payments}
-              onPageChange={(page) =>
-                loadTablePage('payments', page, tablePages.payments.pageSize)
-              }
-              onPageSizeChange={(pageSize) =>
-                loadTablePage('payments', 1, pageSize)
-              }
-            />
-          )}
-          {activeTab === 'balances' && (
-            <R2STable
-              columns={balanceColumns}
-              data={balanceUpdates}
-              pageInfo={tablePages.balances}
-              onPageChange={(page) =>
-                loadTablePage('balances', page, tablePages.balances.pageSize)
-              }
-              onPageSizeChange={(pageSize) =>
-                loadTablePage('balances', 1, pageSize)
-              }
-            />
-          )}
-          {activeTab === 'recognition' && (
-            <R2STable
-              columns={recognitionColumns}
-              data={recognitions}
-              pageInfo={tablePages.recognition}
-              onPageChange={(page) =>
-                loadTablePage(
-                  'recognition',
-                  page,
-                  tablePages.recognition.pageSize,
-                )
-              }
-              onPageSizeChange={(pageSize) =>
-                loadTablePage('recognition', 1, pageSize)
-              }
-            />
-          )}
-          {activeTab === 'promotions' && (
-            <R2STable columns={promotionColumns} data={promotionRows} />
-          )}
-        </Card>
+        {activeTab === 'dashboard' ? (
+          <R2SDashboard
+            t={t}
+            summary={summary}
+            settings={settings}
+            settingsFormRef={settingsFormRef}
+            saving={saving}
+            dueSuppliers={dueSuppliers}
+            onSaveSettings={saveSettings}
+            onOpenModal={openModal}
+            onOpenBalanceForSupplier={openBalanceForSupplier}
+            onOpenTab={setActiveTab}
+          />
+        ) : (
+          <Card
+            title={renderTabTitle(activeTab, t)}
+            headerExtraContent={renderTabAction(activeTab, openModal, t)}
+          >
+            {activeTab === 'suppliers' && (
+              <R2STable
+                columns={supplierColumns}
+                data={suppliers}
+                pageInfo={tablePages.suppliers}
+                onPageChange={(page) =>
+                  loadTablePage(
+                    'suppliers',
+                    page,
+                    tablePages.suppliers.pageSize,
+                  )
+                }
+                onPageSizeChange={(pageSize) =>
+                  loadTablePage('suppliers', 1, pageSize)
+                }
+              />
+            )}
+            {activeTab === 'bindings' && (
+              <R2STable
+                columns={bindingColumns}
+                data={bindings}
+                pageInfo={tablePages.bindings}
+                onPageChange={(page) =>
+                  loadTablePage('bindings', page, tablePages.bindings.pageSize)
+                }
+                onPageSizeChange={(pageSize) =>
+                  loadTablePage('bindings', 1, pageSize)
+                }
+              />
+            )}
+            {activeTab === 'payments' && (
+              <R2STable
+                columns={paymentColumns}
+                data={payments}
+                pageInfo={tablePages.payments}
+                onPageChange={(page) =>
+                  loadTablePage('payments', page, tablePages.payments.pageSize)
+                }
+                onPageSizeChange={(pageSize) =>
+                  loadTablePage('payments', 1, pageSize)
+                }
+              />
+            )}
+            {activeTab === 'balances' && (
+              <R2STable
+                columns={balanceColumns}
+                data={balanceUpdates}
+                pageInfo={tablePages.balances}
+                onPageChange={(page) =>
+                  loadTablePage('balances', page, tablePages.balances.pageSize)
+                }
+                onPageSizeChange={(pageSize) =>
+                  loadTablePage('balances', 1, pageSize)
+                }
+              />
+            )}
+            {activeTab === 'recognition' && (
+              <R2STable
+                columns={recognitionColumns}
+                data={recognitions}
+                pageInfo={tablePages.recognition}
+                onPageChange={(page) =>
+                  loadTablePage(
+                    'recognition',
+                    page,
+                    tablePages.recognition.pageSize,
+                  )
+                }
+                onPageSizeChange={(pageSize) =>
+                  loadTablePage('recognition', 1, pageSize)
+                }
+              />
+            )}
+            {activeTab === 'promotions' && (
+              <R2STable columns={promotionColumns} data={promotionRows} />
+            )}
+          </Card>
+        )}
 
         <Modal
           title={modalTitle}
@@ -987,7 +973,6 @@ const R2S = () => {
               t,
               supplierOptions,
               channelOptions,
-              bindingOptions,
               settings,
               isEdit: Boolean(editingRecord?.id),
             })}
@@ -1007,6 +992,323 @@ const MetricCard = ({ icon, title, value, extra }) => {
           <Text type='secondary'>{title}</Text>
           <div className='text-xl font-semibold leading-7'>{value}</div>
           <Text type='tertiary'>{extra}</Text>
+        </div>
+      </Space>
+    </Card>
+  );
+};
+
+const R2SDashboard = ({
+  t,
+  summary,
+  settings,
+  settingsFormRef,
+  saving,
+  dueSuppliers,
+  onSaveSettings,
+  onOpenModal,
+  onOpenBalanceForSupplier,
+  onOpenTab,
+}) => {
+  const reminderCount = Number(summary.reminder_due_count || 0);
+  const activeSupplierCount = Number(summary.active_supplier_count || 0);
+  const supplierCount = Number(summary.supplier_count || 0);
+  const bindingCount = Number(summary.channel_binding_count || 0);
+  const hasSuppliers = activeSupplierCount > 0;
+  const hasBindings = bindingCount > 0;
+  const hasRecognizedData =
+    Number(summary.recognized_revenue_amount || 0) > 0 ||
+    Number(summary.recognized_cost_amount || 0) > 0;
+  const visibleDueSuppliers = dueSuppliers.slice(0, 5);
+  const dueSupplierColumns = [
+    { title: t('供应商'), dataIndex: 'name', width: 180 },
+    {
+      title: t('当前余额'),
+      dataIndex: 'balance_amount',
+      width: 160,
+      render: (_, record) =>
+        formatAmount(record.balance_amount, record.balance_currency_code),
+    },
+    {
+      title: t('系统折算'),
+      dataIndex: 'system_balance_amount',
+      width: 160,
+      render: (_, record) =>
+        formatAmount(
+          record.system_balance_amount,
+          summary.system_currency_code,
+        ),
+    },
+    {
+      title: t('提醒时间'),
+      dataIndex: 'next_balance_reminder_at',
+      width: 180,
+      render: (value) => renderTime(value, t),
+    },
+    {
+      title: t('操作'),
+      dataIndex: 'operate',
+      width: 120,
+      render: (_, record) => (
+        <Button
+          size='small'
+          type='primary'
+          onClick={() => onOpenBalanceForSupplier(record)}
+        >
+          {t('更新余额')}
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <Row gutter={[12, 12]} className='mb-3'>
+        <Col xs={24} md={12} xl={6}>
+          <MetricCard
+            icon={<BarChart3 size={18} />}
+            title={t('已识别利润')}
+            value={formatAmount(
+              summary.recognized_profit_amount,
+              summary.system_currency_code,
+            )}
+            extra={formatPercent(summary.profit_margin)}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <MetricCard
+            icon={<Coins size={18} />}
+            title={t('已识别收入')}
+            value={formatAmount(
+              summary.recognized_revenue_amount,
+              summary.system_currency_code,
+            )}
+            extra={formatAmount(
+              summary.recognized_cost_amount,
+              summary.system_currency_code,
+            )}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <MetricCard
+            icon={<WalletCards size={18} />}
+            title={t('供应商余额')}
+            value={formatAmount(
+              summary.supplier_balance_amount,
+              summary.system_currency_code,
+            )}
+            extra={`${activeSupplierCount}/${supplierCount}`}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <MetricCard
+            icon={<ReceiptText size={18} />}
+            title={t('余额提醒')}
+            value={String(reminderCount)}
+            extra={`${bindingCount} ${t('个渠道绑定')}`}
+          />
+        </Col>
+      </Row>
+
+      <Row gutter={[12, 12]} className='mb-3'>
+        <Col xs={24} md={12} xl={6}>
+          <DashboardActionCard
+            icon={
+              reminderCount > 0 ? (
+                <AlertTriangle size={18} />
+              ) : (
+                <CheckCircle2 size={18} />
+              )
+            }
+            status={reminderCount > 0 ? 'warning' : 'ok'}
+            tagText={reminderCount > 0 ? t('待处理') : t('正常')}
+            title={t('余额提醒')}
+            description={
+              reminderCount > 0
+                ? t('有供应商余额需要更新，避免利润识别继续使用旧余额。')
+                : t('当前没有到期的供应商余额提醒。')
+            }
+            buttonText={reminderCount > 0 ? t('处理提醒') : t('查看供应商')}
+            onClick={() => onOpenTab('suppliers')}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <DashboardActionCard
+            icon={
+              hasSuppliers ? (
+                <CheckCircle2 size={18} />
+              ) : (
+                <AlertTriangle size={18} />
+              )
+            }
+            status={hasSuppliers ? 'ok' : 'warning'}
+            tagText={hasSuppliers ? t('已配置') : t('缺失')}
+            title={t('供应商配置')}
+            description={
+              hasSuppliers
+                ? t('已有启用供应商，可以继续维护付款和余额。')
+                : t('先新增供应商，后续付款、余额和识别才能归属。')
+            }
+            buttonText={hasSuppliers ? t('管理供应商') : t('新增供应商')}
+            onClick={() =>
+              hasSuppliers ? onOpenTab('suppliers') : onOpenModal('supplier')
+            }
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <DashboardActionCard
+            icon={
+              hasBindings ? (
+                <CheckCircle2 size={18} />
+              ) : (
+                <AlertTriangle size={18} />
+              )
+            }
+            status={hasBindings ? 'ok' : 'warning'}
+            tagText={hasBindings ? t('已绑定') : t('缺失')}
+            title={t('渠道绑定')}
+            description={
+              hasBindings
+                ? t('渠道已关联供应商，收入识别会按绑定快照归集。')
+                : t('绑定渠道和供应商后，后续收入才能自动进入识别明细。')
+            }
+            buttonText={
+              hasBindings
+                ? t('查看绑定')
+                : hasSuppliers
+                  ? t('新增绑定')
+                  : t('新增供应商')
+            }
+            onClick={() => {
+              if (hasBindings) {
+                onOpenTab('bindings');
+                return;
+              }
+              onOpenModal(hasSuppliers ? 'binding' : 'supplier');
+            }}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <DashboardActionCard
+            icon={<ClipboardList size={18} />}
+            status={hasRecognizedData ? 'ok' : 'neutral'}
+            tagText={t('看板汇总')}
+            title={t('收入识别')}
+            description={t('识别数据随刷新汇总，不需要手动创建报告。')}
+            buttonText={t('查看明细')}
+            onClick={() => onOpenTab('recognition')}
+          />
+        </Col>
+      </Row>
+
+      <Card
+        className='mb-3'
+        title={
+          <Space>
+            <AlertTriangle size={16} />
+            <span>{t('待处理余额提醒')}</span>
+          </Space>
+        }
+        headerExtraContent={
+          dueSuppliers.length > 5 ? (
+            <Text type='tertiary'>{t('仅显示最早需要处理的 5 个供应商')}</Text>
+          ) : null
+        }
+      >
+        {visibleDueSuppliers.length > 0 ? (
+          <Table
+            columns={dueSupplierColumns}
+            dataSource={visibleDueSuppliers}
+            rowKey='id'
+            size='small'
+            scroll={{ x: 'max-content' }}
+            pagination={false}
+          />
+        ) : (
+          <div className='py-6 text-center'>
+            <CheckCircle2
+              size={22}
+              className='mx-auto mb-2 text-[var(--semi-color-success)]'
+            />
+            <Text type='secondary'>{t('暂无到期余额提醒')}</Text>
+          </div>
+        )}
+      </Card>
+
+      <Card className='mb-3' title={t('看板设置')}>
+        <Form
+          layout='horizontal'
+          initValues={settings}
+          getFormApi={(api) => {
+            settingsFormRef.current = api;
+          }}
+          onSubmit={onSaveSettings}
+        >
+          <Row gutter={[12, 8]}>
+            <Col xs={24} md={6}>
+              <Form.Switch
+                field='receipt_required'
+                label={t('付款必须上传收据')}
+              />
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Input field='default_currency_code' label={t('默认货币')} />
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.InputNumber
+                field='balance_reminder_days'
+                label={t('默认提醒天数')}
+                min={0}
+              />
+            </Col>
+            <Col xs={24} md={6}>
+              <Button
+                type='primary'
+                icon={<Save size={15} />}
+                loading={saving}
+                onClick={() => settingsFormRef.current?.submitForm()}
+              >
+                {t('保存设置')}
+              </Button>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
+    </>
+  );
+};
+
+const DashboardActionCard = ({
+  icon,
+  status,
+  tagText,
+  title,
+  description,
+  buttonText,
+  onClick,
+}) => {
+  const iconClassName =
+    status === 'warning'
+      ? 'text-[var(--semi-color-warning)]'
+      : 'text-[var(--semi-color-primary)]';
+  const tagColor =
+    status === 'warning' ? 'orange' : status === 'neutral' ? 'blue' : 'green';
+
+  return (
+    <Card bodyStyle={{ padding: 16 }}>
+      <Space align='start' className='w-full'>
+        <div className={`${iconClassName} mt-1`}>{icon}</div>
+        <div className='min-w-0 flex-1'>
+          <div className='mb-1 flex items-start justify-between gap-2'>
+            <Text strong>{title}</Text>
+            <Tag color={tagColor}>{tagText}</Tag>
+          </div>
+          <Text type='secondary'>{description}</Text>
+          <div className='mt-3'>
+            <Button size='small' onClick={onClick}>
+              {buttonText}
+            </Button>
+          </div>
         </div>
       </Space>
     </Card>
@@ -1050,7 +1352,7 @@ const renderTabTitle = (activeTab, t) => {
     bindings: [<Layers size={16} />, t('渠道绑定')],
     payments: [<CreditCard size={16} />, t('付款历史')],
     balances: [<ReceiptText size={16} />, t('余额更新')],
-    recognition: [<BarChart3 size={16} />, t('收入识别')],
+    recognition: [<BarChart3 size={16} />, t('识别明细')],
     promotions: [<Coins size={16} />, t('促销盈利性')],
   };
   const [icon, label] = map[activeTab] || map.suppliers;
@@ -1068,7 +1370,6 @@ const renderTabAction = (activeTab, openModal, t) => {
     bindings: ['binding', t('新增绑定')],
     payments: ['payment', t('记录付款')],
     balances: ['balance', t('更新余额')],
-    recognition: ['recognition', t('创建识别记录')],
   };
   const action = actionMap[activeTab];
   if (!action) return null;
@@ -1088,7 +1389,6 @@ const renderModalFields = ({
   t,
   supplierOptions,
   channelOptions,
-  bindingOptions,
   settings,
   isEdit,
 }) => {
@@ -1288,83 +1588,6 @@ const renderModalFields = ({
             min={0}
             placeholder={t('留空不变')}
           />
-        </Col>
-        <Col span={24}>
-          <Form.TextArea field='note' label={t('备注')} rows={2} />
-        </Col>
-      </Row>
-    );
-  }
-
-  if (type === 'recognition') {
-    return (
-      <Row gutter={12}>
-        <Col span={12}>
-          <Form.Select
-            field='supplier_id'
-            label={t('供应商')}
-            optionList={supplierOptions}
-            rules={[{ required: true, message: t('请选择供应商') }]}
-            filter
-          />
-        </Col>
-        <Col span={12}>
-          <Form.Select
-            field='channel_binding_id'
-            label={t('渠道绑定')}
-            optionList={bindingOptions}
-            filter
-          />
-        </Col>
-        <Col span={12}>
-          <Form.Select
-            field='channel_id'
-            label={t('渠道')}
-            optionList={channelOptions}
-            filter
-          />
-        </Col>
-        <Col span={12}>
-          <Form.Input field='source_reference' label={t('来源引用')} />
-        </Col>
-        <Col span={8}>
-          <Form.InputNumber field='revenue_amount' label={t('收入')} min={0} />
-        </Col>
-        <Col span={8}>
-          <Form.InputNumber field='cost_amount' label={t('成本')} min={0} />
-        </Col>
-        <Col span={8}>
-          <Form.Input field='currency_code' label={t('货币')} />
-        </Col>
-        <Col span={8}>
-          <Form.InputNumber
-            field='exchange_rate'
-            label={t('汇率')}
-            min={0.000001}
-          />
-        </Col>
-        <Col span={8}>
-          <Form.InputNumber
-            field='promotion_campaign_id'
-            label={t('促销活动 ID')}
-            min={0}
-          />
-        </Col>
-        <Col span={8}>
-          <Form.InputNumber
-            field='group_multiplier_snapshot'
-            label={t('手动倍率快照')}
-            min={0}
-          />
-        </Col>
-        <Col span={12}>
-          <Form.InputNumber
-            field='period_start'
-            label={t('周期开始 Unix 秒')}
-          />
-        </Col>
-        <Col span={12}>
-          <Form.InputNumber field='period_end' label={t('周期结束 Unix 秒')} />
         </Col>
         <Col span={24}>
           <Form.TextArea field='note' label={t('备注')} rows={2} />

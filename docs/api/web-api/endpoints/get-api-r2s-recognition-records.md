@@ -3,7 +3,7 @@ method: GET
 path: /api/r2s/recognition-records
 auth: admin
 handler: controller.GetR2SRecognitionRecords
-source: router/api-router.go:307
+source: router/api-router.go:309
 request:
   query_params:
     - p

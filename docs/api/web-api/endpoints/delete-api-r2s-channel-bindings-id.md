@@ -3,7 +3,7 @@ method: DELETE
 path: /api/r2s/channel-bindings/:id
 auth: admin
 handler: controller.DisableR2SChannelBinding
-source: router/api-router.go:302
+source: router/api-router.go:304
 request:
   path_params:
     - id

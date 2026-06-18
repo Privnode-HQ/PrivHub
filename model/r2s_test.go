@@ -233,6 +233,137 @@ func TestR2SSupplierUpdateCanDisableBalanceReminder(t *testing.T) {
 	}
 }
 
+func TestR2SSummaryExcludesDisabledSupplierBalanceAndReminder(t *testing.T) {
+	setupR2STestDB(t)
+
+	now := common.GetTimestamp()
+	activeSupplier := &R2SSupplier{
+		Name:                "Active Supplier",
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 2,
+		BalanceAmount:       10,
+		BalanceCurrencyCode: "USD",
+		BalanceUpdatedTime:  now - 2*86400,
+		BalanceReminderDays: 1,
+	}
+	if err := activeSupplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	disabledSupplier := &R2SSupplier{
+		Name:                "Disabled Supplier",
+		Status:              R2SStatusDisabled,
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 3,
+		BalanceAmount:       100,
+		BalanceCurrencyCode: "USD",
+		BalanceUpdatedTime:  now - 2*86400,
+		BalanceReminderDays: 1,
+	}
+	if err := disabledSupplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := GetR2SSummary(0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireR2SFloat(t, summary.SupplierBalanceAmount, 20)
+	if summary.SupplierCount != 2 {
+		t.Fatalf("expected total supplier count 2, got %d", summary.SupplierCount)
+	}
+	if summary.ActiveSupplierCount != 1 {
+		t.Fatalf("expected active supplier count 1, got %d", summary.ActiveSupplierCount)
+	}
+	if summary.ReminderDueCount != 1 {
+		t.Fatalf("expected only active supplier reminder due, got %d", summary.ReminderDueCount)
+	}
+}
+
+func TestDeleteR2SSupplierRemovesUnusedSupplierAndBindings(t *testing.T) {
+	setupR2STestDB(t)
+
+	supplier := &R2SSupplier{
+		Name:                "Unused Supplier",
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 1,
+	}
+	if err := supplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	channel := &Channel{
+		Key:    "unused-key",
+		Name:   "unused-channel",
+		Group:  "default",
+		Status: common.ChannelStatusEnabled,
+	}
+	if err := DB.Create(channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	binding := &R2SChannelBinding{
+		SupplierId:      supplier.Id,
+		ChannelId:       channel.Id,
+		GroupMultiplier: 1,
+	}
+	if err := binding.Insert(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteR2SSupplier(supplier.Id); err != nil {
+		t.Fatal(err)
+	}
+
+	var supplierCount int64
+	if err := DB.Model(&R2SSupplier{}).Where("id = ?", supplier.Id).Count(&supplierCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if supplierCount != 0 {
+		t.Fatalf("expected supplier to be deleted, got count %d", supplierCount)
+	}
+	var bindingCount int64
+	if err := DB.Model(&R2SChannelBinding{}).Where("supplier_id = ?", supplier.Id).Count(&bindingCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if bindingCount != 0 {
+		t.Fatalf("expected supplier bindings to be deleted, got count %d", bindingCount)
+	}
+}
+
+func TestDeleteR2SSupplierRefusesSupplierWithHistory(t *testing.T) {
+	setupR2STestDB(t)
+
+	supplier := &R2SSupplier{
+		Name:                "Historical Supplier",
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 1,
+		BalanceAmount:       10,
+		BalanceCurrencyCode: "USD",
+	}
+	if err := supplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := CreateR2SPaymentWithBalance(&R2SPayment{
+		SupplierId:   supplier.Id,
+		PaymentType:  R2SPaymentTypePostpaid,
+		Amount:       25,
+		CurrencyCode: "USD",
+		ExchangeRate: 1,
+	}, nil, 100); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := DeleteR2SSupplier(supplier.Id); err == nil {
+		t.Fatal("expected delete to fail for supplier with payment history")
+	}
+
+	var supplierCount int64
+	if err := DB.Model(&R2SSupplier{}).Where("id = ?", supplier.Id).Count(&supplierCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if supplierCount != 1 {
+		t.Fatalf("expected supplier to remain, got count %d", supplierCount)
+	}
+}
+
 func TestR2SRecognitionRecordSnapshotsBindingMultiplier(t *testing.T) {
 	setupR2STestDB(t)
 

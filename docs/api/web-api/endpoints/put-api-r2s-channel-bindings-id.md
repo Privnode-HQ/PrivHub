@@ -3,7 +3,7 @@ method: PUT
 path: /api/r2s/channel-bindings/:id
 auth: admin
 handler: controller.UpdateR2SChannelBinding
-source: router/api-router.go:301
+source: router/api-router.go:303
 request:
   path_params:
     - id

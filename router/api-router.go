@@ -295,6 +295,8 @@ func SetApiRouter(router *gin.Engine) {
 			r2sRoute.POST("/suppliers", controller.CreateR2SSupplier)
 			r2sRoute.GET("/suppliers/:id", controller.GetR2SSupplier)
 			r2sRoute.PUT("/suppliers/:id", controller.UpdateR2SSupplier)
+			r2sRoute.POST("/suppliers/:id/enable", controller.EnableR2SSupplier)
+			r2sRoute.DELETE("/suppliers/:id/permanent", controller.DeleteR2SSupplier)
 			r2sRoute.DELETE("/suppliers/:id", controller.DisableR2SSupplier)
 			r2sRoute.GET("/channel-bindings", controller.GetR2SChannelBindings)
 			r2sRoute.POST("/channel-bindings", controller.CreateR2SChannelBinding)

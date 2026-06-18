@@ -3,7 +3,7 @@ method: POST
 path: /api/r2s/balance-updates
 auth: admin
 handler: controller.CreateR2SBalanceUpdate
-source: router/api-router.go:306
+source: router/api-router.go:308
 request:
   body:
     content_type: application/json

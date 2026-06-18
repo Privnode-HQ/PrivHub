@@ -3,7 +3,7 @@ method: POST
 path: /api/r2s/recognition-records
 auth: admin
 handler: controller.CreateR2SRecognitionRecord
-source: router/api-router.go:308
+source: router/api-router.go:310
 request:
   body:
     content_type: application/json

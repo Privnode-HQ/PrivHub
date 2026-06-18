@@ -316,6 +316,39 @@ func (supplier *R2SSupplier) Update() error {
 	return DB.Save(supplier).Error
 }
 
+func DeleteR2SSupplier(id int) error {
+	if id <= 0 {
+		return errors.New("缺少供应商 ID")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		supplier := &R2SSupplier{}
+		if err := tx.Where("id = ?", id).First(supplier).Error; err != nil {
+			return err
+		}
+		historyChecks := []struct {
+			name  string
+			model any
+		}{
+			{name: "付款历史", model: &R2SPayment{}},
+			{name: "余额更新历史", model: &R2SBalanceUpdate{}},
+			{name: "收入识别记录", model: &R2SRecognitionRecord{}},
+		}
+		for _, check := range historyChecks {
+			var count int64
+			if err := tx.Model(check.model).Where("supplier_id = ?", id).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return fmt.Errorf("供应商已有%s，不能删除，请停用供应商保留历史", check.name)
+			}
+		}
+		if err := tx.Where("supplier_id = ?", id).Delete(&R2SChannelBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(supplier).Error
+	})
+}
+
 func (supplier *R2SSupplier) Validate() error {
 	if supplier == nil {
 		return errors.New("供应商不存在")
@@ -744,7 +777,10 @@ func GetR2SSummary(startTime int64, endTime int64) (*R2SSummary, error) {
 	if err := paymentQuery.Select("COALESCE(SUM(system_amount), 0)").Scan(&summary.PaymentSystemAmount).Error; err != nil {
 		return nil, err
 	}
-	if err := DB.Model(&R2SSupplier{}).Select("COALESCE(SUM(system_balance_amount), 0)").Scan(&summary.SupplierBalanceAmount).Error; err != nil {
+	if err := DB.Model(&R2SSupplier{}).
+		Where("status = ?", R2SStatusActive).
+		Select("COALESCE(SUM(system_balance_amount), 0)").
+		Scan(&summary.SupplierBalanceAmount).Error; err != nil {
 		return nil, err
 	}
 	if err := DB.Model(&R2SSupplier{}).Count(&summary.SupplierCount).Error; err != nil {
@@ -757,7 +793,10 @@ func GetR2SSummary(startTime int64, endTime int64) (*R2SSummary, error) {
 		return nil, err
 	}
 	now := common.GetTimestamp()
-	if err := DB.Model(&R2SSupplier{}).Where("next_balance_reminder_at > 0 AND next_balance_reminder_at <= ?", now).Count(&summary.ReminderDueCount).Error; err != nil {
+	if err := DB.Model(&R2SSupplier{}).
+		Where("status = ?", R2SStatusActive).
+		Where("next_balance_reminder_at > 0 AND next_balance_reminder_at <= ?", now).
+		Count(&summary.ReminderDueCount).Error; err != nil {
 		return nil, err
 	}
 	return summary, nil

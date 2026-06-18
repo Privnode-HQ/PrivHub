@@ -195,6 +195,40 @@ func DisableR2SSupplier(c *gin.Context) {
 	common.ApiSuccess(c, supplier)
 }
 
+func EnableR2SSupplier(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	supplier, err := model.GetR2SSupplierByID(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	supplier.Status = model.R2SStatusActive
+	if err := supplier.Update(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("管理员启用 R2S 供应商 #%d %s", supplier.Id, supplier.Name))
+	common.ApiSuccess(c, supplier)
+}
+
+func DeleteR2SSupplier(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.DeleteR2SSupplier(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLog(c.GetInt("id"), model.LogTypeSystem, fmt.Sprintf("管理员删除 R2S 供应商 #%d", id))
+	common.ApiSuccess(c, nil)
+}
+
 func GetR2SChannelBindings(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	supplierId, _ := strconv.Atoi(c.Query("supplier_id"))

@@ -33,11 +33,12 @@ response:
 - `data.recognized_profit_amount`: 已识别利润，等于收入减成本。
 - `data.profit_margin`: 利润率百分比。
 - `data.payment_system_amount`: 周期内向供应商付款的系统货币金额。
-- `data.supplier_balance_amount`: 当前供应商余额的系统货币合计。
+- `data.supplier_balance_amount`: 当前启用中供应商余额的系统货币合计；
+  停用供应商不会进入余额统计。
 - `data.supplier_count`: R2S 供应商总数。
 - `data.active_supplier_count`: 启用中的 R2S 供应商数。
 - `data.channel_binding_count`: 启用中的供应商渠道绑定数。
-- `data.reminder_due_count`: 已到达余额提醒时间的供应商数。
+- `data.reminder_due_count`: 已到达余额提醒时间的启用中供应商数。
 
 ## 失败响应
 

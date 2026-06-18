@@ -3,7 +3,7 @@ method: GET
 path: /api/r2s/balance-updates
 auth: admin
 handler: controller.GetR2SBalanceUpdates
-source: router/api-router.go:305
+source: router/api-router.go:307
 request:
   query_params:
     - p

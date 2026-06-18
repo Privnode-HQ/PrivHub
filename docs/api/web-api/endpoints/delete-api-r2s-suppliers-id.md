@@ -3,7 +3,7 @@ method: DELETE
 path: /api/r2s/suppliers/:id
 auth: admin
 handler: controller.DisableR2SSupplier
-source: router/api-router.go:298
+source: router/api-router.go:300
 request:
   path_params:
     - id

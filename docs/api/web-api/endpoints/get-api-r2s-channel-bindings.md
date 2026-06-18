@@ -3,7 +3,7 @@ method: GET
 path: /api/r2s/channel-bindings
 auth: admin
 handler: controller.GetR2SChannelBindings
-source: router/api-router.go:299
+source: router/api-router.go:301
 request:
   query_params:
     - p

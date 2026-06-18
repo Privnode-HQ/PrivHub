@@ -3,7 +3,7 @@ method: GET
 path: /api/r2s/payments
 auth: admin
 handler: controller.GetR2SPayments
-source: router/api-router.go:303
+source: router/api-router.go:305
 request:
   query_params:
     - p

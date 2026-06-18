@@ -3,7 +3,7 @@ method: POST
 path: /api/r2s/channel-bindings
 auth: admin
 handler: controller.CreateR2SChannelBinding
-source: router/api-router.go:300
+source: router/api-router.go:302
 request:
   body:
     content_type: application/json
