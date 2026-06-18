@@ -177,6 +177,29 @@ ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `
 | DELETE | /api/redemption/invalid | 删除无效兑换码 |
 | DELETE | /api/redemption/:id | 删除兑换码 |
 
+## 10.1 R2S 收入识别 (管理员)
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/r2s/settings | 获取 R2S 系统级设置 |
+| PUT | /api/r2s/settings | 更新 R2S 系统级设置 |
+| GET | /api/r2s/summary | 查看 R2S 收入、成本、利润和提醒概览 |
+| GET | /api/r2s/promotion-profitability | 查看促销活动盈利性 |
+| GET | /api/r2s/suppliers | 获取 R2S 上游供应商列表 |
+| POST | /api/r2s/suppliers | 创建 R2S 上游供应商 |
+| GET | /api/r2s/suppliers/:id | 获取单个 R2S 上游供应商 |
+| PUT | /api/r2s/suppliers/:id | 更新 R2S 上游供应商 |
+| DELETE | /api/r2s/suppliers/:id | 停用 R2S 上游供应商 |
+| GET | /api/r2s/channel-bindings | 获取供应商渠道绑定列表 |
+| POST | /api/r2s/channel-bindings | 创建供应商渠道绑定 |
+| PUT | /api/r2s/channel-bindings/:id | 更新供应商渠道绑定 |
+| DELETE | /api/r2s/channel-bindings/:id | 停用供应商渠道绑定 |
+| GET | /api/r2s/payments | 获取向供应商付款历史 |
+| POST | /api/r2s/payments | 新增向供应商付款历史 |
+| GET | /api/r2s/balance-updates | 获取供应商余额更新历史 |
+| POST | /api/r2s/balance-updates | 手动更新供应商余额 |
+| GET | /api/r2s/recognition-records | 获取收入识别记录 |
+| POST | /api/r2s/recognition-records | 创建收入识别记录 |
+
 ## 11. 日志
 | 方法 | 路径 | 鉴权 | 说明 |
 |------|------|------|------|

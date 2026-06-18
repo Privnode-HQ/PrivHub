@@ -71,6 +71,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       user: true,
       user_api_key: true,
       service_account: true,
+      r2s: true,
       setting: true,
     },
   });
@@ -110,6 +111,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       user: true,
       user_api_key: true,
       service_account: true,
+      r2s: true,
       setting: true,
       ...(config?.admin || {}),
     },
@@ -177,6 +179,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         user: true,
         user_api_key: true,
         service_account: true,
+        r2s: true,
         setting: true,
       },
     };
@@ -323,6 +326,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           key: 'service_account',
           title: t('Service Account'),
           description: t('管理员自动化 JWT 凭据'),
+        },
+        {
+          key: 'r2s',
+          title: 'R2S',
+          description: t('供应商收入与利润识别'),
         },
         {
           key: 'setting',

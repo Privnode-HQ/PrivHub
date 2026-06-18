@@ -42,6 +42,7 @@ const routerMap = {
   user: '/console/user',
   user_api_key: '/console/user-api-key',
   service_account: '/console/admin-service-accounts',
+  r2s: '/console/r2s',
   message_manage: '/console/message-management',
   log: '/console/log',
   midjourney: '/console/midjourney',
@@ -214,6 +215,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('Service Account'),
         itemKey: 'service_account',
         to: '/admin-service-accounts',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: 'R2S',
+        itemKey: 'r2s',
+        to: '/r2s',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

@@ -613,6 +613,7 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 				"user":            true,
 				"user_api_key":    true,
 				"service_account": false,
+				"r2s":             false,
 				"setting":         false,
 			},
 		}
@@ -623,6 +624,7 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 			"admin": map[string]interface{}{
 				"user_api_key":    true,
 				"service_account": true,
+				"r2s":             true,
 				"setting":         false, // 管理员不能访问系统设置
 			},
 		}
@@ -680,6 +682,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": false,
+			"r2s":             false,
 			"setting":         false,
 		}
 	} else if userRole == common.RoleAdminUser {
@@ -694,6 +697,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": true,
+			"r2s":             true,
 			"setting":         false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
@@ -708,6 +712,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": true,
+			"r2s":             true,
 			"setting":         true,
 		}
 	}

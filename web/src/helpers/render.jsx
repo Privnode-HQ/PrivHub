@@ -77,6 +77,7 @@ import {
   Package,
   Headphones,
   Inbox,
+  Landmark,
 } from 'lucide-react';
 
 // 获取侧边栏Lucide图标组件
@@ -131,6 +132,8 @@ export function getLucideIcon(key, selected = false) {
       return <Settings {...commonProps} color={iconColor} />;
     case 'support':
       return <Headphones {...commonProps} color={iconColor} />;
+    case 'r2s':
+      return <Landmark {...commonProps} color={iconColor} />;
     default:
       return <CircleUser {...commonProps} color={iconColor} />;
   }

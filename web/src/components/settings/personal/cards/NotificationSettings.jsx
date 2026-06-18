@@ -68,6 +68,7 @@ const buildDefaultSidebarModules = () => ({
     topup_coupon: true,
     user: true,
     service_account: true,
+    r2s: true,
     setting: true,
   },
 });
@@ -206,6 +207,7 @@ const NotificationSettings = ({
         { key: 'user', label: t('用户管理') },
         { key: 'user_api_key', label: t('API Key 查用户') },
         { key: 'service_account', label: t('Service Account') },
+        { key: 'r2s', label: 'R2S' },
         { key: 'setting', label: t('系统设置') },
       ],
     },

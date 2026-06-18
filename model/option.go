@@ -161,6 +161,9 @@ func InitOptionMap() {
 	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
 	common.OptionMap["AudioCompletionRatio"] = ratio_setting.AudioCompletionRatio2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
+	common.OptionMap[R2SReceiptRequiredOptionKey] = "false"
+	common.OptionMap[R2SDefaultCurrencyCodeOptionKey] = ""
+	common.OptionMap[R2SBalanceReminderDaysOptionKey] = "30"
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
 	common.OptionMap["QuotaPerUnit"] = strconv.FormatFloat(common.QuotaPerUnit, 'f', -1, 64)

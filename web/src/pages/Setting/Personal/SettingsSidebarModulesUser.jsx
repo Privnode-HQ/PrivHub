@@ -110,6 +110,7 @@ export default function SettingsSidebarModulesUser() {
         user: isSidebarModuleAllowed('admin', 'user'),
         user_api_key: isSidebarModuleAllowed('admin', 'user_api_key'),
         service_account: isSidebarModuleAllowed('admin', 'service_account'),
+        r2s: isSidebarModuleAllowed('admin', 'r2s'),
         setting: isSidebarModuleAllowed('admin', 'setting'),
       };
     }
@@ -370,6 +371,11 @@ export default function SettingsSidebarModulesUser() {
           key: 'service_account',
           title: t('Service Account'),
           description: t('管理员自动化 JWT 凭据'),
+        },
+        {
+          key: 'r2s',
+          title: 'R2S',
+          description: t('供应商收入与利润识别'),
         },
         {
           key: 'setting',

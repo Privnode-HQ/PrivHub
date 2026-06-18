@@ -62,6 +62,7 @@ import Messages from './pages/Messages';
 import AdminMessages from './pages/AdminMessages';
 import UserApiKeySearch from './pages/UserApiKeySearch';
 import AdminServiceAccount from './pages/AdminServiceAccount';
+import R2S from './pages/R2S';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -208,6 +209,14 @@ function App() {
           element={
             <AdminRoute>
               <AdminServiceAccount />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/r2s'
+          element={
+            <AdminRoute>
+              <R2S />
             </AdminRoute>
           }
         />

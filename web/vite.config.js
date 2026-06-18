@@ -22,12 +22,23 @@ import { defineConfig, transformWithEsbuild } from 'vite';
 import pkg from '@douyinfe/vite-plugin-semi';
 import path from 'path';
 const { vitePluginSemi } = pkg;
+const semiCssPath = path.resolve(
+  __dirname,
+  './node_modules/@douyinfe/semi-ui/dist/css/semi.css',
+);
+const semiThemePath = path.resolve(
+  __dirname,
+  './node_modules/@douyinfe/semi-theme-default',
+);
 
 // https://vitejs.dev/config/
 export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Semi 2.99 ships this file but does not expose it through package
+      // exports, so Vite needs an exact alias for the legacy global import.
+      '@douyinfe/semi-ui/dist/css/semi.css': semiCssPath,
     },
   },
   plugins: [
@@ -48,6 +59,9 @@ export default defineConfig({
     },
     react(),
     vitePluginSemi({
+      // pnpm keeps Semi's theme outside the foundation package's nested
+      // node_modules, so pass an absolute theme path to the plugin importer.
+      theme: semiThemePath,
       cssLayer: true,
     }),
   ],

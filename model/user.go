@@ -282,6 +282,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": false,
+			"r2s":             false,
 			"setting":         false,
 		}
 	} else if userRole == common.RoleAdminUser {
@@ -296,6 +297,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": true,
+			"r2s":             true,
 			"setting":         false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
@@ -310,6 +312,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 			"user":            true,
 			"user_api_key":    true,
 			"service_account": true,
+			"r2s":             true,
 			"setting":         true,
 		}
 	}

@@ -70,6 +70,7 @@ export const useSidebar = () => {
       user: true,
       user_api_key: true,
       service_account: true,
+      r2s: true,
       setting: true,
     },
   };
