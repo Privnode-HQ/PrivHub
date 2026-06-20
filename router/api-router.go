@@ -290,6 +290,7 @@ func SetApiRouter(router *gin.Engine) {
 			r2sRoute.GET("/settings", controller.GetR2SSettings)
 			r2sRoute.PUT("/settings", controller.UpdateR2SSettings)
 			r2sRoute.GET("/summary", controller.GetR2SSummary)
+			r2sRoute.GET("/trend", controller.GetR2STrend)
 			r2sRoute.GET("/promotion-profitability", controller.GetR2SPromotionProfitability)
 			r2sRoute.GET("/suppliers", controller.GetR2SSuppliers)
 			r2sRoute.POST("/suppliers", controller.CreateR2SSupplier)
@@ -307,6 +308,7 @@ func SetApiRouter(router *gin.Engine) {
 			r2sRoute.GET("/balance-updates", controller.GetR2SBalanceUpdates)
 			r2sRoute.POST("/balance-updates", controller.CreateR2SBalanceUpdate)
 			r2sRoute.GET("/recognition-records", controller.GetR2SRecognitionRecords)
+			r2sRoute.POST("/recognition-records/sync", controller.SyncR2SRecognitionRecords)
 			r2sRoute.POST("/recognition-records", controller.CreateR2SRecognitionRecord)
 		}
 		logRoute := apiRouter.Group("/log")

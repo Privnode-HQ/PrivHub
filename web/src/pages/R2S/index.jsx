@@ -37,16 +37,20 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  Clock3,
   ClipboardList,
   Coins,
   CreditCard,
   Layers,
+  LineChart,
+  Percent,
   Plus,
   ReceiptText,
   RefreshCw,
   Save,
   WalletCards,
 } from 'lucide-react';
+import { VChart } from '@visactor/react-vchart';
 import {
   API,
   formatCurrencyAmountByCode,
@@ -54,6 +58,7 @@ import {
   showSuccess,
   timestamp2string,
 } from '../../helpers';
+import { CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Text, Title } = Typography;
 const { TabPane } = Tabs;
@@ -90,6 +95,10 @@ const emptySummary = {
   active_supplier_count: 0,
   channel_binding_count: 0,
   reminder_due_count: 0,
+  last_recognition_time: 0,
+  last_payment_time: 0,
+  last_balance_update_time: 0,
+  updated_at: 0,
 };
 
 const statusTag = (status, t) => {
@@ -108,6 +117,15 @@ const formatPercent = (value) => `${Number(value || 0).toFixed(2)}%`;
 const renderTime = (value, t) => {
   if (!value) return t('未设置');
   return timestamp2string(value);
+};
+
+const sourceTypeLabel = (sourceType, t) => {
+  const labels = {
+    manual: t('手动'),
+    promotion: t('促销'),
+    usage: t('消费日志'),
+  };
+  return labels[sourceType] || sourceType || '-';
 };
 
 const toNumber = (value) => {
@@ -148,6 +166,7 @@ const R2S = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingRecognition, setSyncingRecognition] = useState(false);
   const [modalType, setModalType] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
   const [settings, setSettings] = useState(emptySettings);
@@ -157,10 +176,12 @@ const R2S = () => {
   const [payments, setPayments] = useState([]);
   const [balanceUpdates, setBalanceUpdates] = useState([]);
   const [recognitions, setRecognitions] = useState([]);
+  const [trendRows, setTrendRows] = useState([]);
   const [promotionRows, setPromotionRows] = useState([]);
   const [channels, setChannels] = useState([]);
   const [optionSuppliers, setOptionSuppliers] = useState([]);
   const [tablePages, setTablePages] = useState(defaultTablePages);
+  const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState(0);
 
   const supplierOptions = useMemo(
     () =>
@@ -210,6 +231,18 @@ const R2S = () => {
     return rows;
   };
 
+  const syncRecentRecognitionRecords = async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const res = await API.post('/api/r2s/recognition-records/sync', {
+      start_time: now - 30 * 24 * 60 * 60,
+      end_time: now,
+    });
+    const { success, message } = res.data;
+    if (!success) {
+      throw new Error(message || t('同步收入识别失败'));
+    }
+  };
+
   const setTableRows = (key, rows) => {
     if (key === 'suppliers') setSuppliers(rows);
     if (key === 'bindings') setBindings(rows);
@@ -245,6 +278,7 @@ const R2S = () => {
   const refresh = async ({ resetLists = false } = {}) => {
     setLoading(true);
     try {
+      await syncRecentRecognitionRecords();
       const pageConfig = resetLists ? defaultTablePages : tablePages;
       const tableRequests = Object.entries(tableEndpoints).map(
         async ([key, path]) => {
@@ -256,6 +290,7 @@ const R2S = () => {
       const [
         settingsRes,
         summaryRes,
+        trendData,
         promotionData,
         channelData,
         supplierOptionData,
@@ -263,6 +298,7 @@ const R2S = () => {
       ] = await Promise.all([
         API.get('/api/r2s/settings'),
         API.get('/api/r2s/summary'),
+        API.get('/api/r2s/trend'),
         API.get('/api/r2s/promotion-profitability'),
         loadAllOptions('/api/channel/'),
         loadAllOptions('/api/r2s/suppliers', { status: 'active' }),
@@ -278,6 +314,9 @@ const R2S = () => {
       if (summaryRes.data.success) {
         setSummary(summaryRes.data.data || emptySummary);
       }
+      if (trendData.data.success) {
+        setTrendRows(trendData.data.data || []);
+      }
       if (promotionData.data.success) {
         setPromotionRows(promotionData.data.data || []);
       }
@@ -286,6 +325,7 @@ const R2S = () => {
       tableResults.forEach(({ key, data, page, pageSize }) => {
         applyTablePage(key, data, page, pageSize);
       });
+      setDashboardUpdatedAt(Math.floor(Date.now() / 1000));
     } catch (error) {
       showError(error.message);
     } finally {
@@ -367,6 +407,30 @@ const R2S = () => {
       showError(error.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const syncRecognitionRecords = async () => {
+    setSyncingRecognition(true);
+    try {
+      const res = await API.post('/api/r2s/recognition-records/sync', {});
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+      showSuccess(
+        `${t('同步完成')}：${t('新增')} ${data?.created_count || 0}，${t(
+          '更新',
+        )} ${data?.updated_count || 0}，${t('跳过')} ${
+          data?.skipped_count || 0
+        }`,
+      );
+      await refresh({ resetLists: true });
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      setSyncingRecognition(false);
     }
   };
 
@@ -699,7 +763,12 @@ const R2S = () => {
     { title: t('ID'), dataIndex: 'id', width: 80 },
     { title: t('供应商'), dataIndex: 'supplier_name_snapshot', width: 180 },
     { title: t('渠道'), dataIndex: 'channel_name_snapshot', width: 180 },
-    { title: t('来源'), dataIndex: 'source_type', width: 110 },
+    {
+      title: t('来源'),
+      dataIndex: 'source_type',
+      width: 120,
+      render: (value) => <Tag color='blue'>{sourceTypeLabel(value, t)}</Tag>,
+    },
     {
       title: t('收入'),
       dataIndex: 'system_revenue_amount',
@@ -734,6 +803,12 @@ const R2S = () => {
       width: 260,
       render: (_, record) =>
         `${renderTime(record.period_start, t)} - ${renderTime(record.period_end, t)}`,
+    },
+    {
+      title: t('更新时间'),
+      dataIndex: 'updated_time',
+      width: 180,
+      render: (value, record) => renderTime(value || record.created_time, t),
     },
   ];
 
@@ -861,10 +936,15 @@ const R2S = () => {
             t={t}
             summary={summary}
             settings={settings}
+            recognitions={recognitions}
+            trendRows={trendRows}
+            dashboardUpdatedAt={dashboardUpdatedAt}
             settingsFormRef={settingsFormRef}
             saving={saving}
+            syncingRecognition={syncingRecognition}
             dueSuppliers={dueSuppliers}
             onSaveSettings={saveSettings}
+            onSyncRecognitionRecords={syncRecognitionRecords}
             onOpenModal={openModal}
             onOpenBalanceForSupplier={openBalanceForSupplier}
             onOpenTab={setActiveTab}
@@ -1002,10 +1082,15 @@ const R2SDashboard = ({
   t,
   summary,
   settings,
+  recognitions,
+  trendRows,
+  dashboardUpdatedAt,
   settingsFormRef,
   saving,
+  syncingRecognition,
   dueSuppliers,
   onSaveSettings,
+  onSyncRecognitionRecords,
   onOpenModal,
   onOpenBalanceForSupplier,
   onOpenTab,
@@ -1020,6 +1105,14 @@ const R2SDashboard = ({
     Number(summary.recognized_revenue_amount || 0) > 0 ||
     Number(summary.recognized_cost_amount || 0) > 0;
   const visibleDueSuppliers = dueSuppliers.slice(0, 5);
+  const latestRecognitions = recognitions.slice(0, 5);
+  const updateTimes = [
+    [t('数据更新时间'), summary.updated_at],
+    [t('看板刷新时间'), dashboardUpdatedAt],
+    [t('最近识别更新'), summary.last_recognition_time],
+    [t('最近付款记录'), summary.last_payment_time],
+    [t('最近余额更新'), summary.last_balance_update_time],
+  ];
   const dueSupplierColumns = [
     { title: t('供应商'), dataIndex: 'name', width: 180 },
     {
@@ -1060,6 +1153,35 @@ const R2SDashboard = ({
       ),
     },
   ];
+  const recognitionSnapshotColumns = [
+    {
+      title: t('来源'),
+      dataIndex: 'source_type',
+      width: 110,
+      render: (value) => <Tag color='blue'>{sourceTypeLabel(value, t)}</Tag>,
+    },
+    { title: t('供应商'), dataIndex: 'supplier_name_snapshot', width: 160 },
+    { title: t('渠道'), dataIndex: 'channel_name_snapshot', width: 160 },
+    {
+      title: t('利润'),
+      dataIndex: 'system_profit_amount',
+      width: 140,
+      render: (_, record) =>
+        formatAmount(record.system_profit_amount, summary.system_currency_code),
+    },
+    {
+      title: t('利润率'),
+      dataIndex: 'profit_margin',
+      width: 100,
+      render: (value) => formatPercent(value),
+    },
+    {
+      title: t('更新时间'),
+      dataIndex: 'updated_time',
+      width: 170,
+      render: (value, record) => renderTime(value || record.created_time, t),
+    },
+  ];
 
   return (
     <>
@@ -1091,6 +1213,14 @@ const R2SDashboard = ({
         </Col>
         <Col xs={24} md={12} xl={6}>
           <MetricCard
+            icon={<Percent size={18} />}
+            title={t('利润率')}
+            value={formatPercent(summary.profit_margin)}
+            extra={t('收入识别口径')}
+          />
+        </Col>
+        <Col xs={24} md={12} xl={6}>
+          <MetricCard
             icon={<WalletCards size={18} />}
             title={t('供应商余额')}
             value={formatAmount(
@@ -1098,14 +1228,6 @@ const R2SDashboard = ({
               summary.system_currency_code,
             )}
             extra={`${activeSupplierCount}/${supplierCount}`}
-          />
-        </Col>
-        <Col xs={24} md={12} xl={6}>
-          <MetricCard
-            icon={<ReceiptText size={18} />}
-            title={t('余额提醒')}
-            value={String(reminderCount)}
-            extra={`${bindingCount} ${t('个渠道绑定')}`}
           />
         </Col>
       </Row>
@@ -1194,10 +1316,99 @@ const R2SDashboard = ({
             status={hasRecognizedData ? 'ok' : 'neutral'}
             tagText={t('看板汇总')}
             title={t('收入识别')}
-            description={t('识别数据随刷新汇总，不需要手动创建报告。')}
+            description={t(
+              '消费日志可同步为识别明细，看板刷新后自动汇总利润。',
+            )}
             buttonText={t('查看明细')}
             onClick={() => onOpenTab('recognition')}
           />
+        </Col>
+      </Row>
+
+      <Card
+        className='mb-3'
+        title={
+          <Space>
+            <Clock3 size={16} />
+            <span>{t('看板更新时间')}</span>
+          </Space>
+        }
+      >
+        <Row gutter={[12, 8]}>
+          {updateTimes.map(([label, value]) => (
+            <Col xs={24} md={8} xl={4} key={label}>
+              <div className='rounded border border-[var(--semi-color-border)] p-3'>
+                <Text type='tertiary'>{label}</Text>
+                <div className='mt-1 font-medium'>{renderTime(value, t)}</div>
+              </div>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+
+      <Row gutter={[12, 12]} className='mb-3'>
+        <Col xs={24} xl={14}>
+          <Card
+            title={
+              <Space>
+                <LineChart size={16} />
+                <span>{t('利润趋势')}</span>
+              </Space>
+            }
+            headerExtraContent={
+              <Text type='tertiary'>{t('默认展示最近 30 天')}</Text>
+            }
+          >
+            <R2STrendChart
+              rows={trendRows}
+              currencyCode={summary.system_currency_code}
+              t={t}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} xl={10}>
+          <Card
+            title={
+              <Space>
+                <ClipboardList size={16} />
+                <span>{t('识别明细')}</span>
+              </Space>
+            }
+            headerExtraContent={
+              <Space wrap>
+                <Button
+                  size='small'
+                  icon={<RefreshCw size={14} />}
+                  loading={syncingRecognition}
+                  onClick={onSyncRecognitionRecords}
+                >
+                  {t('同步全部历史利润')}
+                </Button>
+                <Button size='small' onClick={() => onOpenTab('recognition')}>
+                  {t('全部明细')}
+                </Button>
+              </Space>
+            }
+          >
+            {latestRecognitions.length > 0 ? (
+              <Table
+                columns={recognitionSnapshotColumns}
+                dataSource={latestRecognitions}
+                rowKey='id'
+                size='small'
+                scroll={{ x: 'max-content' }}
+                pagination={false}
+              />
+            ) : (
+              <div className='py-6 text-center'>
+                <ClipboardList
+                  size={22}
+                  className='mx-auto mb-2 text-[var(--semi-color-text-2)]'
+                />
+                <Text type='secondary'>{t('暂无识别明细')}</Text>
+              </div>
+            )}
+          </Card>
         </Col>
       </Row>
 
@@ -1312,6 +1523,81 @@ const DashboardActionCard = ({
         </div>
       </Space>
     </Card>
+  );
+};
+
+const R2STrendChart = ({ rows, currencyCode, t }) => {
+  const values = useMemo(
+    () =>
+      rows.flatMap((row) => [
+        {
+          date: row.label,
+          metric: t('收入'),
+          amount: Number(row.recognized_revenue_amount || 0),
+        },
+        {
+          date: row.label,
+          metric: t('成本'),
+          amount: Number(row.recognized_cost_amount || 0),
+        },
+        {
+          date: row.label,
+          metric: t('利润'),
+          amount: Number(row.recognized_profit_amount || 0),
+        },
+      ]),
+    [rows, t],
+  );
+  const hasData = values.some((item) => item.amount !== 0);
+  const spec = useMemo(
+    () => ({
+      type: 'line',
+      data: [{ id: 'r2sTrend', values }],
+      xField: 'date',
+      yField: 'amount',
+      seriesField: 'metric',
+      legends: {
+        visible: true,
+        orient: 'bottom',
+      },
+      axes: [
+        { orient: 'bottom' },
+        {
+          orient: 'left',
+          label: {
+            formatter: (value) => formatAmount(value, currencyCode),
+          },
+        },
+      ],
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: (datum) => datum.metric,
+              value: (datum) => formatAmount(datum.amount, currencyCode),
+            },
+          ],
+        },
+      },
+      point: {
+        visible: true,
+      },
+    }),
+    [currencyCode, values],
+  );
+
+  if (!hasData) {
+    return (
+      <div className='flex h-72 items-center justify-center'>
+        <Text type='secondary'>{t('暂无可展示的识别趋势')}</Text>
+      </div>
+    );
+  }
+
+  return (
+    <div className='h-72'>
+      <VChart spec={spec} option={CHART_CONFIG} />
+    </div>
   );
 };
 

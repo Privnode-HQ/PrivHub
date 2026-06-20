@@ -3,7 +3,7 @@ method: GET
 path: /api/r2s/recognition-records
 auth: admin
 handler: controller.GetR2SRecognitionRecords
-source: router/api-router.go:309
+source: router/api-router.go:310
 request:
   query_params:
     - p
@@ -42,7 +42,8 @@ response:
 - `data.total`: 总数。
 - `data.items[]`: 收入识别记录数组。
 - `data.items[].id`: 收入识别记录 ID。
-- `data.items[].source_type`: 来源类型，枚举为 `manual`、`promotion`。
+- `data.items[].source_type`: 来源类型，枚举为 `manual`、`promotion`、
+  `usage`。`usage` 表示由历史或新消费日志同步生成。
 - `data.items[].source_reference`: 外部或内部来源引用。
 - `data.items[].supplier_id`: R2S 供应商 ID。
 - `data.items[].supplier_name_snapshot`: 识别时的供应商名称快照。
@@ -66,6 +67,8 @@ response:
 - `data.items[].note`: 备注。
 - `data.items[].created_by_admin_id`: 创建管理员用户 ID。
 - `data.items[].created_time`: 创建时间 Unix 秒。
+- `data.items[].updated_time`: 更新时间 Unix 秒；消费日志同步重复运行时会更新
+  原记录而不是重复创建。
 
 ## 失败响应
 

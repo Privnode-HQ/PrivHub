@@ -74,6 +74,11 @@ type r2sRecognitionRecordRequest struct {
 	Note                    string  `json:"note"`
 }
 
+type r2sRecognitionSyncRequest struct {
+	StartTime int64 `json:"start_time"`
+	EndTime   int64 `json:"end_time"`
+}
+
 func GetR2SSettings(c *gin.Context) {
 	common.ApiSuccess(c, model.GetR2SSettings())
 }
@@ -466,6 +471,36 @@ func CreateR2SRecognitionRecord(c *gin.Context) {
 	common.ApiSuccess(c, record)
 }
 
+func SyncR2SRecognitionRecords(c *gin.Context) {
+	req := r2sRecognitionSyncRequest{}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			common.ApiErrorMsg(c, "参数错误")
+			return
+		}
+	}
+	result, err := model.SyncR2SRecognitionFromUsageLogs(
+		req.StartTime,
+		req.EndTime,
+		c.GetInt("id"),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RecordLog(
+		c.GetInt("id"),
+		model.LogTypeSystem,
+		fmt.Sprintf(
+			"管理员同步 R2S 历史收入识别，新增 %d，更新 %d，跳过 %d",
+			result.CreatedCount,
+			result.UpdatedCount,
+			result.SkippedCount,
+		),
+	)
+	common.ApiSuccess(c, result)
+}
+
 func GetR2SSummary(c *gin.Context) {
 	startTime, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
 	endTime, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
@@ -475,6 +510,17 @@ func GetR2SSummary(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, summary)
+}
+
+func GetR2STrend(c *gin.Context) {
+	startTime, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
+	rows, err := model.GetR2STrend(startTime, endTime)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, rows)
 }
 
 func GetR2SPromotionProfitability(c *gin.Context) {

@@ -3,7 +3,7 @@ method: POST
 path: /api/r2s/recognition-records
 auth: admin
 handler: controller.CreateR2SRecognitionRecord
-source: router/api-router.go:310
+source: router/api-router.go:312
 request:
   body:
     content_type: application/json
@@ -20,8 +20,10 @@ response:
 
 ## 请求体字段
 
-- `source_type`: 可选。`manual` 或 `promotion`；为空且传入
-  `promotion_campaign_id` 时使用 `promotion`，否则使用 `manual`。
+- `source_type`: 可选。`manual`、`promotion` 或 `usage`；为空且传入
+  `promotion_campaign_id` 时使用 `promotion`，否则使用 `manual`。管理员手动
+  创建普通识别记录时通常不需要传 `usage`，历史消费日志同步会自动使用
+  `usage` 来源。
 - `source_reference`: 可选。外部或内部来源引用。
 - `supplier_id`: R2S 供应商 ID，必填。
 - `channel_id`: 可选。PrivHub 渠道 ID。未传 `channel_binding_id` 时，

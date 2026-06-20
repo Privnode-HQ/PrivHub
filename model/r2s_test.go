@@ -22,8 +22,10 @@ func setupR2STestDB(t *testing.T) {
 
 	oldDB := DB
 	oldLogDB := LOG_DB
+	oldQuotaPerUnit := common.QuotaPerUnit
 	DB = db
 	LOG_DB = db
+	common.QuotaPerUnit = common.DefaultQuotaPerUnit
 
 	common.OptionMapRWMutex.Lock()
 	oldOptionMap := common.OptionMap
@@ -41,6 +43,7 @@ func setupR2STestDB(t *testing.T) {
 		&R2SPayment{},
 		&R2SBalanceUpdate{},
 		&R2SRecognitionRecord{},
+		&Log{},
 		&Channel{},
 		&TopUpPromotionCampaign{},
 		&TopUpPromotionRedemption{},
@@ -55,6 +58,7 @@ func setupR2STestDB(t *testing.T) {
 		}
 		DB = oldDB
 		LOG_DB = oldLogDB
+		common.QuotaPerUnit = oldQuotaPerUnit
 		common.OptionMapRWMutex.Lock()
 		common.OptionMap = oldOptionMap
 		common.OptionMapRWMutex.Unlock()
@@ -422,6 +426,144 @@ func TestR2SRecognitionRecordSnapshotsBindingMultiplier(t *testing.T) {
 	if stored.UpstreamGroupNameSnapshot != "vip" {
 		t.Fatalf("expected upstream group snapshot vip, got %q", stored.UpstreamGroupNameSnapshot)
 	}
+}
+
+func TestSyncR2SRecognitionFromUsageLogsCreatesAndUpdatesHistoricalProfit(t *testing.T) {
+	setupR2STestDB(t)
+
+	supplier := &R2SSupplier{
+		Name:                "Historical Upstream",
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 1,
+	}
+	if err := supplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	channel := &Channel{
+		Key:    "history-key",
+		Name:   "history-channel",
+		Group:  "vip",
+		Status: common.ChannelStatusEnabled,
+	}
+	if err := DB.Create(channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	binding := &R2SChannelBinding{
+		SupplierId:        supplier.Id,
+		ChannelId:         channel.Id,
+		UpstreamGroupName: "vip",
+		GroupMultiplier:   0.4,
+	}
+	if err := binding.Insert(); err != nil {
+		t.Fatal(err)
+	}
+
+	usageLog := &Log{
+		UserId:    1,
+		CreatedAt: 1700000000,
+		Type:      LogTypeConsume,
+		Quota:     int(100 * common.QuotaPerUnit),
+		ChannelId: channel.Id,
+		Group:     "vip",
+	}
+	if err := LOG_DB.Create(usageLog).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := SyncR2SRecognitionFromUsageLogs(0, 0, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CreatedCount != 1 || result.UpdatedCount != 0 || result.SyncedCount != 1 {
+		t.Fatalf("unexpected first sync result: %#v", result)
+	}
+
+	var record R2SRecognitionRecord
+	if err := DB.Where("source_type = ? AND source_reference = ?", R2SRecognitionSourceUsage, "usage_log:1").First(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	if record.SupplierId != supplier.Id {
+		t.Fatalf("expected supplier id %d, got %d", supplier.Id, record.SupplierId)
+	}
+	if record.ChannelBindingId != binding.Id {
+		t.Fatalf("expected binding id %d, got %d", binding.Id, record.ChannelBindingId)
+	}
+	requireR2SFloat(t, record.RevenueAmount, 100)
+	requireR2SFloat(t, record.CostAmount, 40)
+	requireR2SFloat(t, record.SystemProfitAmount, 60)
+	requireR2SFloat(t, record.ProfitMargin, 60)
+	if record.PeriodStart != usageLog.CreatedAt || record.PeriodEnd != usageLog.CreatedAt {
+		t.Fatalf("expected period to match usage log time, got %d-%d", record.PeriodStart, record.PeriodEnd)
+	}
+
+	binding.GroupMultiplier = 0.55
+	if err := binding.Update(); err != nil {
+		t.Fatal(err)
+	}
+	result, err = SyncR2SRecognitionFromUsageLogs(0, 0, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.CreatedCount != 0 || result.UpdatedCount != 1 || result.SyncedCount != 1 {
+		t.Fatalf("unexpected second sync result: %#v", result)
+	}
+
+	var count int64
+	if err := DB.Model(&R2SRecognitionRecord{}).Where("source_type = ?", R2SRecognitionSourceUsage).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected sync to be idempotent, got %d records", count)
+	}
+	if err := DB.First(&record, record.Id).Error; err != nil {
+		t.Fatal(err)
+	}
+	requireR2SFloat(t, record.CostAmount, 55)
+	requireR2SFloat(t, record.SystemProfitAmount, 45)
+	requireR2SFloat(t, record.ProfitMargin, 45)
+}
+
+func TestGetR2STrendAggregatesDailyProfitMargin(t *testing.T) {
+	setupR2STestDB(t)
+
+	supplier := &R2SSupplier{
+		Name:                "Trend Upstream",
+		DefaultCurrencyCode: "USD",
+		DefaultExchangeRate: 1,
+	}
+	if err := supplier.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	record := &R2SRecognitionRecord{
+		SupplierId:              supplier.Id,
+		RevenueAmount:           200,
+		CostAmount:              50,
+		PeriodStart:             1700000000,
+		PeriodEnd:               1700000000,
+		GroupMultiplierSnapshot: 1,
+	}
+	if err := record.Insert(); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := GetR2STrend(1699920000, 1700006400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *R2STrendPoint
+	for i := range rows {
+		if rows[i].RecognizedRevenueAmount > 0 {
+			found = &rows[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected trend to include recognized revenue")
+	}
+	requireR2SFloat(t, found.RecognizedRevenueAmount, 200)
+	requireR2SFloat(t, found.RecognizedCostAmount, 50)
+	requireR2SFloat(t, found.RecognizedProfitAmount, 150)
+	requireR2SFloat(t, found.ProfitMargin, 75)
 }
 
 func TestR2SPromotionProfitabilityUsesRedemptionsAndRecognizedCosts(t *testing.T) {

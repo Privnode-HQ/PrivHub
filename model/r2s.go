@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
@@ -29,6 +31,7 @@ const (
 
 	R2SRecognitionSourceManual    = "manual"
 	R2SRecognitionSourcePromotion = "promotion"
+	R2SRecognitionSourceUsage     = "usage"
 
 	R2SReceiptRequiredOptionKey     = "R2SReceiptRequired"
 	R2SDefaultCurrencyCodeOptionKey = "R2SDefaultCurrencyCode"
@@ -138,6 +141,7 @@ type R2SRecognitionRecord struct {
 	Note                      string  `json:"note" gorm:"type:varchar(500)"`
 	CreatedByAdminId          int     `json:"created_by_admin_id" gorm:"index"`
 	CreatedTime               int64   `json:"created_time" gorm:"index"`
+	UpdatedTime               int64   `json:"updated_time" gorm:"index"`
 }
 
 type R2SListFilter struct {
@@ -161,6 +165,28 @@ type R2SSummary struct {
 	ActiveSupplierCount     int64   `json:"active_supplier_count"`
 	ChannelBindingCount     int64   `json:"channel_binding_count"`
 	ReminderDueCount        int64   `json:"reminder_due_count"`
+	LastRecognitionTime     int64   `json:"last_recognition_time"`
+	LastPaymentTime         int64   `json:"last_payment_time"`
+	LastBalanceUpdateTime   int64   `json:"last_balance_update_time"`
+	UpdatedAt               int64   `json:"updated_at"`
+}
+
+type R2STrendPoint struct {
+	Time                    int64   `json:"time"`
+	Label                   string  `json:"label"`
+	RecognizedRevenueAmount float64 `json:"recognized_revenue_amount"`
+	RecognizedCostAmount    float64 `json:"recognized_cost_amount"`
+	RecognizedProfitAmount  float64 `json:"recognized_profit_amount"`
+	ProfitMargin            float64 `json:"profit_margin"`
+}
+
+type R2SRecognitionSyncResult struct {
+	StartedAt    int64 `json:"started_at"`
+	FinishedAt   int64 `json:"finished_at"`
+	CreatedCount int   `json:"created_count"`
+	UpdatedCount int   `json:"updated_count"`
+	SkippedCount int   `json:"skipped_count"`
+	SyncedCount  int   `json:"synced_count"`
 }
 
 type R2SPromotionProfitability struct {
@@ -687,7 +713,7 @@ func (record *R2SRecognitionRecord) ValidateAndSnapshot() error {
 			record.SourceType = R2SRecognitionSourceManual
 		}
 	}
-	if record.SourceType != R2SRecognitionSourceManual && record.SourceType != R2SRecognitionSourcePromotion {
+	if !isValidR2SRecognitionSource(record.SourceType) {
 		return errors.New("收入识别来源不正确")
 	}
 	supplier, err := GetR2SSupplierByID(record.SupplierId)
@@ -733,11 +759,165 @@ func (record *R2SRecognitionRecord) ValidateAndSnapshot() error {
 }
 
 func (record *R2SRecognitionRecord) Insert() error {
-	record.CreatedTime = common.GetTimestamp()
+	now := common.GetTimestamp()
+	record.CreatedTime = now
+	record.UpdatedTime = now
 	if err := record.ValidateAndSnapshot(); err != nil {
 		return err
 	}
 	return DB.Create(record).Error
+}
+
+func SyncR2SRecognitionFromUsageLogs(startTime int64, endTime int64, adminId int) (*R2SRecognitionSyncResult, error) {
+	if startTime > 0 && endTime > 0 && endTime < startTime {
+		return nil, errors.New("结束时间不能早于开始时间")
+	}
+	result := &R2SRecognitionSyncResult{StartedAt: common.GetTimestamp()}
+
+	var activeSupplierIds []int
+	if err := DB.Model(&R2SSupplier{}).
+		Where("status = ?", R2SStatusActive).
+		Pluck("id", &activeSupplierIds).Error; err != nil {
+		return nil, err
+	}
+	var bindings []R2SChannelBinding
+	if len(activeSupplierIds) > 0 {
+		if err := DB.Where("status = ? AND supplier_id IN ?", R2SStatusActive, activeSupplierIds).
+			Find(&bindings).Error; err != nil {
+			return nil, err
+		}
+	}
+	bindingByChannelId := make(map[int]R2SChannelBinding, len(bindings))
+	for _, binding := range bindings {
+		if binding.ChannelId > 0 {
+			bindingByChannelId[binding.ChannelId] = binding
+		}
+	}
+
+	const batchSize = 500
+	lastId := 0
+	for {
+		var logs []Log
+		query := LOG_DB.Model(&Log{}).
+			Where("id > ? AND type = ? AND quota > 0 AND channel_id > 0", lastId, LogTypeConsume)
+		if startTime > 0 {
+			query = query.Where("created_at >= ?", startTime)
+		}
+		if endTime > 0 {
+			query = query.Where("created_at <= ?", endTime)
+		}
+		if err := query.Order("id asc").Limit(batchSize).Find(&logs).Error; err != nil {
+			return nil, err
+		}
+		if len(logs) == 0 {
+			break
+		}
+
+		if err := DB.Transaction(func(tx *gorm.DB) error {
+			for _, usageLog := range logs {
+				binding, ok := bindingByChannelId[usageLog.ChannelId]
+				if !ok {
+					result.SkippedCount++
+					continue
+				}
+				if err := syncR2SRecognitionFromUsageLogTx(tx, usageLog, binding, adminId, result); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		lastId = logs[len(logs)-1].Id
+		if len(logs) < batchSize {
+			break
+		}
+	}
+
+	result.FinishedAt = common.GetTimestamp()
+	return result, nil
+}
+
+func GetR2STrend(startTime int64, endTime int64) ([]R2STrendPoint, error) {
+	now := common.GetTimestamp()
+	if endTime == 0 {
+		endTime = now
+	}
+	if startTime == 0 {
+		startTime = r2sDayStart(endTime) - 29*24*60*60
+	}
+	if endTime < startTime {
+		return nil, errors.New("结束时间不能早于开始时间")
+	}
+	startDay := r2sDayStart(startTime)
+	endDay := r2sDayStart(endTime)
+	if endDay-startDay > 366*24*60*60 {
+		return nil, errors.New("趋势查询最多支持 366 天")
+	}
+
+	pointsByDay := make(map[int64]*R2STrendPoint)
+	for day := startDay; day <= endDay; day += 24 * 60 * 60 {
+		pointsByDay[day] = &R2STrendPoint{
+			Time:  day,
+			Label: time.Unix(day, 0).Local().Format("01-02"),
+		}
+	}
+
+	var records []R2SRecognitionRecord
+	if err := DB.Model(&R2SRecognitionRecord{}).
+		Where(
+			"(period_end >= ? AND period_start <= ?) OR "+
+				"(period_start = 0 AND period_end = 0 AND created_time >= ? AND created_time <= ?)",
+			startTime,
+			endTime,
+			startTime,
+			endTime,
+		).
+		Find(&records).Error; err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		bucketTime := record.PeriodEnd
+		if bucketTime == 0 {
+			bucketTime = record.CreatedTime
+		}
+		day := r2sDayStart(bucketTime)
+		point, ok := pointsByDay[day]
+		if !ok {
+			continue
+		}
+		point.RecognizedRevenueAmount = roundR2SDecimal(
+			decimal.NewFromFloat(point.RecognizedRevenueAmount).
+				Add(decimal.NewFromFloat(record.SystemRevenueAmount)),
+		)
+		point.RecognizedCostAmount = roundR2SDecimal(
+			decimal.NewFromFloat(point.RecognizedCostAmount).
+				Add(decimal.NewFromFloat(record.SystemCostAmount)),
+		)
+		point.RecognizedProfitAmount = roundR2SDecimal(
+			decimal.NewFromFloat(point.RecognizedProfitAmount).
+				Add(decimal.NewFromFloat(record.SystemProfitAmount)),
+		)
+	}
+
+	days := make([]int64, 0, len(pointsByDay))
+	for day := range pointsByDay {
+		days = append(days, day)
+	}
+	sort.Slice(days, func(i int, j int) bool {
+		return days[i] < days[j]
+	})
+	points := make([]R2STrendPoint, 0, len(days))
+	for _, day := range days {
+		point := pointsByDay[day]
+		point.ProfitMargin = CalculateR2SProfitMargin(
+			point.RecognizedRevenueAmount,
+			point.RecognizedProfitAmount,
+		)
+		points = append(points, *point)
+	}
+	return points, nil
 }
 
 func GetR2SSummary(startTime int64, endTime int64) (*R2SSummary, error) {
@@ -797,6 +977,9 @@ func GetR2SSummary(startTime int64, endTime int64) (*R2SSummary, error) {
 		Where("status = ?", R2SStatusActive).
 		Where("next_balance_reminder_at > 0 AND next_balance_reminder_at <= ?", now).
 		Count(&summary.ReminderDueCount).Error; err != nil {
+		return nil, err
+	}
+	if err := fillR2SSummaryUpdateTimes(summary, startTime, endTime); err != nil {
 		return nil, err
 	}
 	return summary, nil
@@ -987,6 +1170,157 @@ func r2sPaymentBalanceDelta(paymentType string, amount float64) float64 {
 	default:
 		return 0
 	}
+}
+
+func syncR2SRecognitionFromUsageLogTx(tx *gorm.DB, usageLog Log, binding R2SChannelBinding, adminId int, result *R2SRecognitionSyncResult) error {
+	if common.QuotaPerUnit <= 0 {
+		return errors.New("QuotaPerUnit 配置不正确")
+	}
+	revenueAmount := roundR2SDecimal(
+		decimal.NewFromInt(int64(usageLog.Quota)).
+			Div(decimal.NewFromFloat(common.QuotaPerUnit)),
+	)
+	costAmount := roundR2SDecimal(
+		decimal.NewFromFloat(revenueAmount).
+			Mul(decimal.NewFromFloat(binding.GroupMultiplier)),
+	)
+	now := common.GetTimestamp()
+	sourceReference := fmt.Sprintf("usage_log:%d", usageLog.Id)
+	record := R2SRecognitionRecord{}
+	err := tx.Where(
+		"source_type = ? AND source_reference = ?",
+		R2SRecognitionSourceUsage,
+		sourceReference,
+	).First(&record).Error
+	isNew := false
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		isNew = true
+		record.CreatedTime = now
+		record.CreatedByAdminId = adminId
+	} else if err != nil {
+		return err
+	}
+
+	record.SourceType = R2SRecognitionSourceUsage
+	record.SourceReference = sourceReference
+	record.SupplierId = binding.SupplierId
+	record.ChannelId = usageLog.ChannelId
+	record.ChannelBindingId = binding.Id
+	record.CurrencyCode = operation_setting.GetQuotaDisplayType()
+	record.ExchangeRate = 1
+	record.RevenueAmount = revenueAmount
+	record.CostAmount = costAmount
+	record.GroupMultiplierSnapshot = binding.GroupMultiplier
+	record.PromotionCampaignId = 0
+	record.PromotionCampaignName = ""
+	record.PeriodStart = usageLog.CreatedAt
+	record.PeriodEnd = usageLog.CreatedAt
+	record.Note = "由消费日志同步生成"
+	record.UpdatedTime = now
+	if record.CreatedTime == 0 {
+		record.CreatedTime = now
+	}
+	if record.CreatedByAdminId == 0 {
+		record.CreatedByAdminId = adminId
+	}
+	if err := record.ValidateAndSnapshot(); err != nil {
+		return err
+	}
+	if isNew {
+		if err := tx.Create(&record).Error; err != nil {
+			return err
+		}
+		result.CreatedCount++
+	} else {
+		if err := tx.Save(&record).Error; err != nil {
+			return err
+		}
+		result.UpdatedCount++
+	}
+	result.SyncedCount++
+	return nil
+}
+
+func fillR2SSummaryUpdateTimes(summary *R2SSummary, startTime int64, endTime int64) error {
+	recognitionQuery := DB.Model(&R2SRecognitionRecord{})
+	if startTime > 0 {
+		recognitionQuery = recognitionQuery.Where("period_end >= ?", startTime)
+	}
+	if endTime > 0 {
+		recognitionQuery = recognitionQuery.Where("period_start <= ?", endTime)
+	}
+	type recognitionTimes struct {
+		Created int64
+		Updated int64
+	}
+	var recordTimes recognitionTimes
+	if err := recognitionQuery.Select(
+		"COALESCE(MAX(created_time), 0) AS created, " +
+			"COALESCE(MAX(updated_time), 0) AS updated",
+	).Scan(&recordTimes).Error; err != nil {
+		return err
+	}
+	summary.LastRecognitionTime = maxR2STimestamp(
+		recordTimes.Created,
+		recordTimes.Updated,
+	)
+
+	paymentQuery := DB.Model(&R2SPayment{})
+	if startTime > 0 {
+		paymentQuery = paymentQuery.Where("paid_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		paymentQuery = paymentQuery.Where("paid_at <= ?", endTime)
+	}
+	if err := paymentQuery.Select(
+		"COALESCE(MAX(created_time), 0)",
+	).Scan(&summary.LastPaymentTime).Error; err != nil {
+		return err
+	}
+	if err := DB.Model(&R2SBalanceUpdate{}).Select(
+		"COALESCE(MAX(created_time), 0)",
+	).Scan(&summary.LastBalanceUpdateTime).Error; err != nil {
+		return err
+	}
+	summary.UpdatedAt = maxR2STimestamp(
+		summary.LastRecognitionTime,
+		summary.LastPaymentTime,
+		summary.LastBalanceUpdateTime,
+	)
+	return nil
+}
+
+func isValidR2SRecognitionSource(sourceType string) bool {
+	switch sourceType {
+	case R2SRecognitionSourceManual, R2SRecognitionSourcePromotion, R2SRecognitionSourceUsage:
+		return true
+	default:
+		return false
+	}
+}
+
+func maxR2STimestamp(values ...int64) int64 {
+	var maxValue int64
+	for _, value := range values {
+		if value > maxValue {
+			maxValue = value
+		}
+	}
+	return maxValue
+}
+
+func r2sDayStart(timestamp int64) int64 {
+	value := time.Unix(timestamp, 0).Local()
+	return time.Date(
+		value.Year(),
+		value.Month(),
+		value.Day(),
+		0,
+		0,
+		0,
+		0,
+		value.Location(),
+	).Unix()
 }
 
 func (record *R2SRecognitionRecord) fillBindingSnapshot() error {

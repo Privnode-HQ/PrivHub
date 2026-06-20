@@ -183,6 +183,7 @@ ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `
 | GET | /api/r2s/settings | 获取 R2S 系统级设置 |
 | PUT | /api/r2s/settings | 更新 R2S 系统级设置 |
 | GET | /api/r2s/summary | 查看 R2S 收入、成本、利润和提醒概览 |
+| GET | /api/r2s/trend | 查看 R2S 收入、成本、利润趋势 |
 | GET | /api/r2s/promotion-profitability | 查看促销活动盈利性 |
 | GET | /api/r2s/suppliers | 获取 R2S 上游供应商列表 |
 | POST | /api/r2s/suppliers | 创建 R2S 上游供应商 |
@@ -200,6 +201,7 @@ ASA JWT 调用 Web API 时使用 `Authorization: Bearer <asa_jwt>`，不需要 `
 | GET | /api/r2s/balance-updates | 获取供应商余额更新历史 |
 | POST | /api/r2s/balance-updates | 手动更新供应商余额 |
 | GET | /api/r2s/recognition-records | 获取收入识别记录 |
+| POST | /api/r2s/recognition-records/sync | 从历史消费日志同步收入识别 |
 | POST | /api/r2s/recognition-records | 创建收入识别记录 |
 
 ## 11. 日志

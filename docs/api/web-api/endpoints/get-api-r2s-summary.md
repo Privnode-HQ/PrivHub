@@ -39,6 +39,11 @@ response:
 - `data.active_supplier_count`: 启用中的 R2S 供应商数。
 - `data.channel_binding_count`: 启用中的供应商渠道绑定数。
 - `data.reminder_due_count`: 已到达余额提醒时间的启用中供应商数。
+- `data.last_recognition_time`: 最近一次识别记录创建或更新时间 Unix 秒。
+- `data.last_payment_time`: 最近一次付款记录创建时间 Unix 秒。
+- `data.last_balance_update_time`: 最近一次余额更新记录创建时间 Unix 秒。
+- `data.updated_at`: 看板数据最近更新时间 Unix 秒，取识别、付款和余额更新
+  时间中的最大值。
 
 ## 失败响应
 
